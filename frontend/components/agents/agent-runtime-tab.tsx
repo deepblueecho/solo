@@ -1,0 +1,160 @@
+// ============================================================================
+// AgentRuntimeTab — display Agent runtime configuration (v1.5)
+// - Shows: Runtime type, model name
+// - Environment variables key-value list
+// - Read-only display (editing is handled via Profile tab or future enhancements)
+// ============================================================================
+
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import { AlertCircle, RefreshCw, Terminal, Layers, Cpu } from 'lucide-react';
+import { apiClient, ApiError } from '@/lib/api-client';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { t } from '@/lib/i18n';
+import type { Agent } from '@/lib/types';
+
+interface AgentRuntimeTabProps {
+  agentId: string;
+}
+
+export function AgentRuntimeTab({ agentId }: AgentRuntimeTabProps) {
+  const [agent, setAgent] = useState<Agent | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadAgent = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await apiClient.get<Record<string, unknown>>(`/api/v1/agents/${agentId}`);
+      setAgent({
+        id: res.id as string,
+        name: res.name as string,
+        description: (res.description as string) || '',
+        owner_id: res.owner_id as string,
+        model_provider: (res.model_provider as string) || '',
+        model_name: (res.model_name as string) || '',
+        system_prompt: (res.system_prompt as string) || '',
+        is_active: (res.is_active as boolean) ?? false,
+        avatar_url: (res.avatar_url as string) || null,
+        custom_env: (res.custom_env as Record<string, string>) ?? {},
+        custom_args: (res.custom_args as string[]) ?? [],
+        created_at: res.created_at as string,
+        updated_at: res.updated_at as string,
+      } as Agent);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.status === 404 ? t('agentProfileAgentNotFound') : err.message);
+      } else {
+        setError(t('agentRuntimeError'));
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    loadAgent();
+  }, [loadAgent]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full rounded-none" />
+        <Skeleton className="h-10 w-full rounded-none" />
+        <Skeleton className="h-10 w-full rounded-none" />
+        <Skeleton className="h-16 w-full rounded-none" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="mb-3 flex h-12 w-12 items-center justify-center border-2 border-black bg-brutal-danger-light shadow-brutal-sm">
+          <AlertCircle className="h-6 w-6 text-brutal-danger" />
+        </div>
+        <p className="font-body text-sm text-brutal-danger">{error}</p>
+        <Button type="button" onClick={loadAgent} size="sm" className="mt-4">
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+          {t('retry')}
+        </Button>
+      </div>
+    );
+  }
+
+  if (!agent) return null;
+
+  const envKeys = Object.keys(agent.custom_env ?? {});
+
+  return (
+    <div className="space-y-5">
+      {/* Runtime type */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Cpu className="h-4 w-4 flex-shrink-0" />
+          <h3 className="font-heading text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            {t('agentRuntimeType')}
+          </h3>
+        </div>
+        <div className="card-brutal bg-brutal-cream p-3">
+          <p className="font-mono text-sm text-foreground">
+            {agent.model_provider || t('agentRuntimeNotConfigured')}
+          </p>
+        </div>
+      </div>
+
+      {/* Model configuration */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Layers className="h-4 w-4 flex-shrink-0" />
+          <h3 className="font-heading text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            {t('agentRuntimeModelConfig')}
+          </h3>
+        </div>
+        <div className="card-brutal bg-brutal-cream divide-y-2 divide-black">
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="font-mono text-[11px] text-muted-foreground">Model</span>
+            <span className="font-mono text-sm text-foreground">
+              {agent.model_name || t('agentRuntimeDefault')}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Environment variables */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Terminal className="h-4 w-4 flex-shrink-0" />
+          <h3 className="font-heading text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            {t('agentRuntimeEnvVars')}
+          </h3>
+          <span className="badge-brutal text-[10px]">
+            {envKeys.length}
+          </span>
+        </div>
+        {envKeys.length > 0 ? (
+          <div className="card-brutal bg-brutal-cream divide-y-2 divide-black">
+            {envKeys.map((key) => (
+              <div key={key} className="flex items-center justify-between px-3 py-2">
+                <span className="font-mono text-xs font-bold text-foreground">{key}</span>
+                <span className="font-mono text-[11px] text-muted-foreground max-w-[160px] truncate">
+                  {agent.custom_env?.[key] || ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="card-brutal bg-brutal-cream p-3 text-center">
+            <p className="font-mono text-xs italic text-muted-foreground">
+              {t('agentRuntimeNoEnvVars')}
+            </p>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}

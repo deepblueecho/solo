@@ -1,0 +1,67 @@
+# Claude Code
+.claude/
+.worktrees/
+CLAUDE.md
+
+# Open Code
+.opencode
+
+# Environment
+.env
+# .env.production is tracked — it's a template with placeholders, no real secrets
+
+# Frontend
+frontend/.next/
+frontend/node_modules/
+node_modules/
+
+# Go
+*.exe
+*.test
+*.out
+bin/
+/solo
+/server
+/daemon
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+*.log
+
+# Runtime
+.pids/
+test-results/
+monitoring/
+
+# Binary artifacts
+solo-server
+
+# Logs
+*.log
+*.log.bak
+
+# Agent runtime
+pkg/agent/.solo/
+
+# Screenshots
+*.png
+frontend/e2e/screenshots/
+frontend/.audit-shots/
+
+# Docs — design/research/version docs are working documents, not production artifacts
+docs/
+*.bak
+*.bak2
+.playwright-cli/
+.superpowers/
+
+# Working artifacts (untracked intentionally)
+openspec/
+e2e/
+frontend/e2e/

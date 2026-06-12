@@ -1,0 +1,494 @@
+// ============================================================================
+// DM View — DM conversation view with neubrutalist styling
+// - Header: card-brutal style + online status dot
+// - MessageList (already brutalist)
+// - System message: "这是你与 {name} 的私信"
+// - Messages/Tasks dual tab (v1.2 Phase 2+3)
+// - Input: MessageInput (already brutalist)
+// - States: loading, error with retry, normal
+// ============================================================================
+
+'use client';
+
+import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import { AlertCircle, RefreshCw, MessageSquare, Circle, ClipboardList } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useStreamingMessages } from '@/lib/hooks/use-streaming-messages';
+import { MessageList } from './message-list';
+import { MessageInput } from './message-input';
+import { TaskBoard } from '@/components/tasks/task-board';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PixelAvatar } from '@/components/ui/pixel-avatar';
+const ThreadPanel = lazy(() =>
+  import('./thread-panel').then((m) => ({ default: m.ThreadPanel })),
+);
+import { t } from '@/lib/i18n';
+import type { DMChannel, ChannelMember, Message, Task, TaskStatus } from '@/lib/types';
+
+interface DMViewProps {
+  dm: DMChannel;
+  messages: Message[];
+  isLoading: boolean;
+  error: string | null;
+  sendMessage: (content: string, mentionedAgentIds?: string[], asTask?: boolean, attachmentIds?: string[]) => Promise<{ id: string; task_number?: number } | null>;
+  retryMessage: (messageId: string, content: string) => Promise<void>;
+  cancelMessage?: (messageId: string) => void;
+  editMessage?: (messageId: string, content: string) => Promise<void>;
+  deleteMessage?: (messageId: string) => Promise<void>;
+  onAsTask?: (message: Message) => void;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  loadMoreError: string | null;
+  loadMore: () => Promise<void>;
+  refetch: () => void;
+  // ---- DM Tasks (v1.2 Phase 2+3) ----
+  tasks?: Task[];
+  tasksLoading?: boolean;
+  tasksError?: string | null;
+  refetchTasks?: () => void;
+  onTaskStatusChange?: (task: Task, newStatus: TaskStatus) => Promise<Task | void>;
+  onClaimTask?: (task: Task) => void;
+  onUnclaimTask?: (task: Task) => void;
+  onConvertToTask?: (channelId: string, messageId: string, title?: string) => Promise<Task>;
+  onTaskCreated?: () => void;
+  /** v1.5: Called when thread opens/closes so the parent can sync to URL */
+  onThreadChange?: (threadId: string | null) => void;
+  /** v1.5: Initial thread message ID from URL — opens ThreadPanel on mount or on change */
+  initialThreadMessageId?: string;
+  /** Optional message ID to scroll to on mount or URL change */
+  initialScrollToMessageId?: string;
+}
+
+// ---- Helpers ----
+
+function getDisplayName(dm: DMChannel): string {
+  if (dm.other_user) return dm.other_user.display_name;
+  if (dm.other_agent) return dm.other_agent.name;
+  return t('unknown');
+}
+
+function isAgentDM(dm: DMChannel): boolean {
+  return !!dm.other_agent;
+}
+
+function isAgentDeleted(dm: DMChannel): boolean {
+  return isAgentDM(dm) && dm.other_agent?.is_active === false;
+}
+
+export function DMView({
+  dm,
+  messages,
+  isLoading,
+  error,
+  sendMessage,
+  retryMessage,
+  cancelMessage,
+  editMessage,
+  deleteMessage,
+  onAsTask,
+  hasMore,
+  isLoadingMore,
+  loadMoreError,
+  loadMore,
+  refetch,
+  tasks,
+  tasksLoading,
+  tasksError,
+  refetchTasks,
+  onTaskStatusChange,
+  onClaimTask,
+  onUnclaimTask,
+  onConvertToTask,
+  onTaskCreated,
+  onThreadChange,
+  initialThreadMessageId,
+  initialScrollToMessageId,
+}: DMViewProps) {
+  const name = getDisplayName(dm);
+  const isAgent = isAgentDM(dm);
+  const deleted = isAgentDeleted(dm);
+  const [viewTab, setViewTab] = useState<'messages' | 'tasks'>('messages');
+  const [threadMessage, setThreadMessage] = useState<Message | null>(null);
+  const [threadTask, setThreadTask] = useState<Task | null>(null);
+  const [threadPanelWidth, setThreadPanelWidth] = useState(400);
+  const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
+  const [scrollMsgKey, setScrollMsgKey] = useState(0);
+
+  // Handle initialScrollToMessageId: scroll to a specific message on mount or URL change.
+  // Waits for isLoading to become false so the message DOM exists.
+  const lastScrollTarget = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!initialScrollToMessageId || !dm || isLoading) return;
+    if (lastScrollTarget.current === initialScrollToMessageId) return;
+    lastScrollTarget.current = initialScrollToMessageId;
+    setScrollToMessageId(initialScrollToMessageId);
+    setScrollMsgKey((k) => k + 1);
+  }, [initialScrollToMessageId, dm, isLoading]);
+
+  // Refetch tasks when switching to tasks tab
+  useEffect(() => {
+    if (viewTab === 'tasks') refetchTasks?.();
+  }, [viewTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // v1.5: Handle initialThreadMessageId — open thread panel when URL param changes
+  useEffect(() => {
+    if (!initialThreadMessageId || !dm) return;
+    const found = messages.find((m) => m.id === initialThreadMessageId);
+    if (found) {
+      setThreadMessage(found);
+      const task = tasks?.find((t) => t.message_id === initialThreadMessageId || t.id === initialThreadMessageId);
+      if (task) setThreadTask(task);
+    }
+  }, [initialThreadMessageId, dm, messages, tasks]);
+
+  // Sync threadTask when tasks list changes (align with channel-view pattern)
+  useEffect(() => {
+    if (!threadMessage) return;
+    const task = tasks?.find((t) => t.message_id === threadMessage.id || t.id === threadMessage.id);
+    if (task) {
+      setThreadTask((prev) => {
+        if (!prev || prev.status !== task.status || prev.claimer_id !== task.claimer_id) {
+          return task;
+        }
+        return prev;
+      });
+    }
+  }, [tasks, threadMessage]);
+
+  const { activeStreamingAgentIds } = useStreamingMessages(dm.id);
+
+  const members = useMemo<ChannelMember[]>(() => {
+    const result: ChannelMember[] = [
+      {
+        channel_id: dm.id,
+        member_type: 'user',
+        member_id: 'user-1',
+        role: 'member',
+        display_name: t('selfRef'),
+        status: 'online',
+      },
+    ];
+    if (isAgent && dm.other_agent) {
+      result.push({
+        channel_id: dm.id,
+        member_type: 'agent',
+        member_id: dm.other_agent.id,
+        role: 'member',
+        display_name: dm.other_agent.name,
+        status: 'online',
+      });
+    } else if (dm.other_user) {
+      result.push({
+        channel_id: dm.id,
+        member_type: 'user',
+        member_id: dm.other_user.id,
+        role: 'member',
+        display_name: dm.other_user.display_name,
+        status: 'online',
+      });
+    }
+    return result;
+  }, [dm, isAgent]);
+
+  const agentActivities = useMemo(() => {
+    if (!isAgent) return [];
+    return activeStreamingAgentIds.map((id) => {
+      const agentName = dm.other_agent?.name ?? id;
+      return { agentId: id, name: agentName, state: 'streaming' as const };
+    });
+  }, [isAgent, activeStreamingAgentIds, dm.other_agent?.name]);
+
+  const handleRetry = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const handleStatusChange = useCallback(
+    async (task: Task, newStatus: TaskStatus) => {
+      const updated = await onTaskStatusChange?.(task, newStatus);
+      if (updated) {
+        setThreadTask((prev) => (prev?.id === task.id ? updated : prev));
+      }
+    },
+    [onTaskStatusChange],
+  );
+
+  // ---- ThreadPanel handlers ----
+
+  const handleThreadClose = useCallback(() => {
+    setThreadMessage(null);
+    setThreadTask(null);
+    onThreadChange?.(null);
+  }, [onThreadChange]);
+
+  const handleMessageClick = useCallback(
+    (message: Message) => {
+      refetchTasks?.();
+      const task = tasks?.find((t) => t.message_id === message.id || t.id === message.id);
+      setThreadMessage({
+        ...message,
+        display_name: task?.creator_name || message.display_name,
+      });
+      setThreadTask(task ?? null);
+      onThreadChange?.(message.id);
+    },
+    [tasks, refetchTasks, onThreadChange],
+  );
+
+  const handleTaskClickFromBoard = useCallback(
+    (task: Task) => {
+      if (!task.message_id) return;
+      // Use task.message_id to find the original message
+      const existingMsg = messages.find((m) => m.id === task.message_id);
+      if (existingMsg) {
+        setThreadMessage({
+          ...existingMsg,
+          display_name: task.creator_name || existingMsg.display_name,
+        });
+      } else {
+        // Construct a minimal message for ThreadPanel
+        setThreadMessage({
+          id: task.message_id,
+          channel_id: task.channel_id,
+          user_id: task.creator_id,
+          display_name: task.creator_name || task.creator_id.slice(0, 8),
+          content: task.description || task.title,
+          created_at: task.created_at,
+          status: 'sent',
+          sender_type: 'user',
+          task_number: task.task_number,
+          task_status: task.status,
+          task_claimer_name: task.claimer_name || task.assignee_name,
+        });
+      }
+      setThreadTask(task);
+      onThreadChange?.(task.message_id);
+    },
+    [messages, refetchTasks, onThreadChange],
+  );
+
+  const handleAsTask = useCallback(
+    async (message: Message) => {
+      if (!onConvertToTask) return;
+      try {
+        const task = await onConvertToTask(dm.id, message.id);
+        setThreadMessage({
+          ...message,
+          display_name: task?.creator_name || message.display_name,
+        });
+        setThreadTask(task);
+        onThreadChange?.(message.id);
+      } catch {
+        // handled silently
+      }
+    },
+    [dm.id, onConvertToTask, onThreadChange],
+  );
+
+  return (
+    <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Header — full-width attached bar, same skeleton as Channel */}
+        <div className="flex h-14 flex-shrink-0 items-center border-b-2 border-black px-4">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {/* Avatar */}
+            <PixelAvatar
+              agentId={dm.other_agent?.id ?? dm.other_user?.id ?? dm.id}
+              size="md"
+            />
+            {/* Name + status */}
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="font-bold text-foreground truncate">
+                {name}
+              </h2>
+              {/* Online status dot */}
+              <Circle className="h-2 w-2 fill-brutal-success text-brutal-success flex-shrink-0" />
+            </div>
+            <div className="mx-2 h-4 w-px bg-border flex-shrink-0" />
+            {/* Tab bar (v1.2 Phase 2+3) */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setViewTab('messages')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-heading font-bold border-2 transition-all',
+                  'active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
+                  viewTab === 'messages'
+                    ? 'bg-brutal-primary text-black border-black shadow-brutal-sm -translate-y-px'
+                    : 'text-muted-foreground hover:text-foreground border-transparent hover:border-black hover:bg-white hover:shadow-brutal-sm hover:-translate-y-px',
+                )}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                {t('messages')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewTab('tasks')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-heading font-bold border-2 transition-all',
+                  'active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
+                  viewTab === 'tasks'
+                    ? 'bg-brutal-primary text-black border-black shadow-brutal-sm -translate-y-px'
+                    : 'text-muted-foreground hover:text-foreground border-transparent hover:border-black hover:bg-white hover:shadow-brutal-sm hover:-translate-y-px',
+                )}
+              >
+                <ClipboardList className="h-3.5 w-3.5" />
+                {t('tasks')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Messages tab */}
+        {viewTab === 'messages' && (
+          <div className="flex flex-1 flex-col overflow-hidden bg-brutal-cream">
+            {/* System message banner */}
+            <div className="flex-shrink-0 border-b-2 border-black bg-brutal-cream px-6 py-3">
+              <div className="flex items-center gap-2 font-body text-sm text-muted-foreground">
+                <MessageSquare className="h-4 w-4" />
+                <span>
+                  {t('systemMessageDM', { name })}
+                </span>
+              </div>
+            </div>
+
+            {/* Error state */}
+            {error && !isLoading && (
+              <div className="flex flex-1 items-center justify-center">
+                <div className="text-center space-y-3">
+                  <AlertCircle className="mx-auto h-8 w-8 text-brutal-danger" />
+                  <p className="font-mono text-sm text-brutal-danger">{error}</p>
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="btn-brutal btn-brutal-sm gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    {t('retry')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Messages */}
+            {(!error || isLoading) && (
+              <MessageList
+                messages={messages}
+                isLoading={isLoading}
+                error={error}
+                onRetry={(id, content) => retryMessage(id, content)}
+                onCancel={cancelMessage}
+                onEdit={editMessage}
+                onDelete={deleteMessage}
+                onAsTask={handleAsTask}
+                onReply={handleMessageClick}
+                hasMore={hasMore}
+                isLoadingMore={isLoadingMore}
+                loadMoreError={loadMoreError}
+                onLoadMore={loadMore}
+                scrollToMessageId={scrollToMessageId}
+                scrollKey={scrollMsgKey}
+                members={members}
+              />
+            )}
+
+            {/* Input — hidden for deleted agents */}
+            {!deleted && (
+              <MessageInput
+                onSend={async (content, mentionedAgentIds, asTask, _taskTitle, attachmentIds) => {
+                  const result = await sendMessage(content, mentionedAgentIds, asTask, attachmentIds);
+                  if (asTask && result?.task_number) onTaskCreated?.();
+                  return result;
+                }}
+                members={members}
+                placeholder={t('sendMessageTo', { name })}
+                showAsTaskToggle
+              />
+            )}
+            {deleted && (
+              <div className="border-t-2 border-black bg-brutal-muted/20 px-4 py-3 text-center">
+                <span className="badge-brutal bg-brutal-muted text-black">
+                  DELETED
+                </span>
+                <p className="mt-2 font-body text-xs text-muted-foreground">
+                  {t('agentDeletedDM')}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tasks tab (v1.2 Phase 2+3) */}
+        {viewTab === 'tasks' && (
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <div className="flex-shrink-0 border-b-2 border-black bg-brutal-cream px-6 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-body text-sm text-muted-foreground">
+                  <ClipboardList className="h-4 w-4" />
+                  <span>
+                    {t('dmTasks', { name })}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <TaskBoard
+                tasks={tasks ?? []}
+                isLoading={tasksLoading ?? false}
+                error={tasksError ?? null}
+                onTaskClick={handleTaskClickFromBoard}
+                onStatusChange={handleStatusChange}
+                onRefetch={refetchTasks ?? (() => {})}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ThreadPanel — always mounted for smooth width transition */}
+      <div
+        className="flex-shrink-0 bg-brutal-cream overflow-hidden relative transition-[width] duration-100 ease-linear border-l-2 border-transparent"
+        style={{ width: threadMessage ? threadPanelWidth : 0, borderLeftColor: threadMessage ? '#000' : 'transparent' }}
+      >
+        {/* Resize handle — only interactive when panel is open */}
+        {threadMessage && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startWidth = threadPanelWidth;
+              const onMove = (ev: MouseEvent) => {
+                const newWidth = Math.max(280, Math.min(800, startWidth + startX - ev.clientX));
+                setThreadPanelWidth(newWidth);
+              };
+              const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+          />
+        )}
+        {threadMessage && (
+          <Suspense
+            fallback={
+              <div className="flex h-full w-[400px] items-center justify-center">
+                <Skeleton className="h-8 w-32" />
+              </div>
+            }
+          >
+            <ThreadPanel
+              parentMessage={threadMessage}
+              task={threadTask ?? undefined}
+              onClose={handleThreadClose}
+              onClaimTask={onClaimTask}
+              onUnclaimTask={onUnclaimTask}
+              replyCount={threadMessage.reply_count ?? 0}
+            />
+          </Suspense>
+        )}
+      </div>
+    </div>
+  );
+}

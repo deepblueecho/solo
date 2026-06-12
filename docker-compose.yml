@@ -1,0 +1,24 @@
+# Solo — local development stack
+# Only PostgreSQL runs in Docker. Server and Daemon run natively (they need
+# access to the local `claude` binary for LLM_PROVIDER=local mode).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: solo-postgres
+    environment:
+      POSTGRES_DB: solo
+      POSTGRES_USER: solo
+      POSTGRES_PASSWORD: solo-dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solo -d solo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
