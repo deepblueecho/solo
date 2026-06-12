@@ -177,6 +177,10 @@ const en = {
   passwordMinLength: 'Password must be at least 8 characters',
   confirmPasswordRequired: 'Please confirm your password',
   passwordsMismatch: 'Passwords do not match',
+  displayName: 'Display name',
+  displayNamePlaceholder: 'Your name',
+  displayNameRequired: 'Display name is required',
+  displayNameMaxLength: 'Display name cannot exceed 50 characters',
 
   // ── Dashboard ──
   dashboardLoadError: 'Dashboard failed to load',
