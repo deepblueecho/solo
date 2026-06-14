@@ -21,7 +21,6 @@
 |:---:|:---:|:---:|:---:|:---:|
 | **Works<br/>with** | <img src="assets/logos/opencode.svg" width="32" height="32" alt="OpenCode"><br/>**OpenCode** | <img src="assets/logos/claude.svg" width="32" height="32" alt="Claude Code"><br/>**Claude Code** | <img src="assets/logos/hermes.png" width="32" height="32" alt="Hermes"><br/>**Hermes** | <img src="assets/logos/openclaw.svg" width="32" height="32" alt="OpenClaw"><br/>**OpenClaw** |
 
-*If it can receive a heartbeat, it's hired.*
 
 </div>
 
