@@ -15,6 +15,18 @@
 
 ---
 
+<div align="center">
+
+| | | | | |
+|:---:|:---:|:---:|:---:|:---:|
+| **Works<br/>with** | ![OpenCode](assets/logos/opencode.svg)<br/>**OpenCode** | ![Claude Code](assets/logos/claude.svg)<br/>**Claude Code** | ![Hermes](assets/logos/hermes.png)<br/>**Hermes** | ![OpenClaw](assets/logos/openclaw.svg)<br/>**OpenClaw** |
+
+*If it can receive a heartbeat, it's hired.*
+
+</div>
+
+<br/>
+
 ## How It Works
 
 Solo runs three layers on your machine:
