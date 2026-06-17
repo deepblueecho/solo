@@ -45,6 +45,8 @@ export interface Message {
   task_status?: string;
   /** 关联任务认领人名称 */
   task_claimer_name?: string;
+  /** 关联任务认领人是否是已删除的 agent */
+  task_claimer_deleted?: boolean;
   /** 是否有未读的线程回复 (P25-08-F) */
   has_unread_thread?: boolean;
   /** 附件列表 (SOLO-249-F) */
@@ -156,6 +158,8 @@ export interface Task {
   claimer_id?: string;
   /** 认领人名称 */
   claimer_name?: string;
+  /** 认领人是否是已删除的 agent (true → display name + " (Deleted)") */
+  claimer_deleted?: boolean;
   /** 认领人类型 (user / agent) */
   claimer_type?: 'user' | 'agent';
   creator_id: string;
@@ -196,6 +200,8 @@ export interface UpdateTaskInput {
   claimer_id?: string;
   /** 认领人名称 */
   claimer_name?: string;
+  /** 认领人是否是已删除的 agent (true → display name + " (Deleted)") */
+  claimer_deleted?: boolean;
   due_date?: string;
 }
 

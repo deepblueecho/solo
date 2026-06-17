@@ -203,6 +203,7 @@ function TaskCard({
     task.claimer_name ||
     task.assignee_name ||
     (task.claimer_id ? task.claimer_id.slice(0, 8) : null);
+  const claimerDeletedSuffix = task.claimer_deleted ? ' (Deleted)' : '';
 
   const lastActivity = task.updated_at || task.created_at;
 
@@ -317,7 +318,7 @@ function TaskCard({
                   {(claimerDisplay || '?').charAt(0).toUpperCase()}
                 </span>
                 <span className="flex-1 truncate font-body text-[11px] text-foreground font-medium">
-                  {claimerDisplay}
+                  {claimerDisplay}{claimerDeletedSuffix}
                 </span>
                 <span className="flex-shrink-0 badge-brutal bg-brutal-success text-black text-[10px]">
                   {t('claimed')}

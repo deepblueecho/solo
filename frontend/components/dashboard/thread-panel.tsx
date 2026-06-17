@@ -509,7 +509,7 @@ function ParentMessageTaskBar({ message }: { message: Message }) {
         <span className="font-mono text-xs text-muted-foreground">&middot;</span>
         {claimerName ? (
           <span className="font-heading text-xs font-bold text-foreground">
-            @{claimerName}
+            @{claimerName}{message.task_claimer_deleted ? ' (Deleted)' : ''}
           </span>
         ) : (
           <span className="font-heading text-xs text-muted-foreground">
