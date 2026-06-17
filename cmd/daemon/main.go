@@ -153,6 +153,7 @@ func main() {
 			r.Get("/read", h.HandleWorkspaceRead)
 		})
 		r.Get("/skills", h.HandleSkillsList)
+		r.Post("/agents/{agentID}/cleanup", h.CleanupAgent) // server-initiated hard cleanup
 	})
 
 	// SSE requires long-lived connections — no write timeout.

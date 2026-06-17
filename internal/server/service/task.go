@@ -86,6 +86,7 @@ type Task struct {
 	Status         string     `json:"status"`
 	ClaimerID      string     `json:"claimer_id,omitempty"`
 	ClaimerName    string     `json:"claimer_name,omitempty"`
+	ClaimerDeleted bool       `json:"claimer_deleted"`
 	Priority       string     `json:"priority"`
 	DueDate        *time.Time `json:"due_date,omitempty"`
 	MessageID      string     `json:"message_id,omitempty"`
@@ -467,33 +468,36 @@ func (s *TaskService) GetTask(ctx context.Context, channelID, taskID, userID str
 		 t.parent_task_id,
 		 (SELECT COUNT(*) FROM tasks WHERE parent_task_id = t.id) AS subtask_count,
 		 (SELECT COUNT(*) FROM tasks WHERE parent_task_id = t.id AND status = 'done') AS done_subtask_count,
-		 t.created_at, t.updated_at
+		 t.created_at, t.updated_at,
+		 (NOT COALESCE(a_claimer.is_active, true)) AS claimer_deleted
 		 FROM tasks t LEFT JOIN users u_creator ON t.creator_id = u_creator.id LEFT JOIN agents a_creator ON t.creator_id = a_creator.id LEFT JOIN users u_claimer ON t.claimer_id = u_claimer.id LEFT JOIN agents a_claimer ON t.claimer_id = a_claimer.id WHERE t.id = $1 AND t.channel_id = $2`,
 		taskID, channelID,
 	).Scan(&task.ID, &task.TaskNumber, &task.ChannelID, &task.CreatorID, &task.CreatorName, &task.Title, &description,
 		&task.Status, &task.ClaimerID, &task.ClaimerName, &task.Priority, &dueDate, &task.MessageID,
-		&task.ParentTaskID, &task.SubtaskCount, &task.DoneSubtaskCount, &task.CreatedAt, &task.UpdatedAt)
+		&task.ParentTaskID, &task.SubtaskCount, &task.DoneSubtaskCount, &task.CreatedAt, &task.UpdatedAt, &task.ClaimerDeleted)
 
 	if err != nil {
 		// Try by task_number
 		err2 := s.pool.QueryRow(ctx,
 			`SELECT t.id, t.task_number, t.channel_id, t.creator_id, COALESCE(u_creator.display_name, a_creator.name, '') as creator_name, t.title, COALESCE(t.description, ''), t.status,
 			 COALESCE(t.claimer_id::text, ''),
-		 COALESCE(u_claimer.display_name, a_claimer.name, ''), t.priority, t.due_date, COALESCE(t.message_id::text, ''), t.created_at, t.updated_at
+		 COALESCE(u_claimer.display_name, a_claimer.name, ''), t.priority, t.due_date, COALESCE(t.message_id::text, ''), t.created_at, t.updated_at,
+		 (NOT COALESCE(a_claimer.is_active, true)) AS claimer_deleted
 			 FROM tasks t LEFT JOIN users u_creator ON t.creator_id = u_creator.id LEFT JOIN agents a_creator ON t.creator_id = a_creator.id LEFT JOIN users u_claimer ON t.claimer_id = u_claimer.id LEFT JOIN agents a_claimer ON t.claimer_id = a_claimer.id WHERE t.task_number::text = $1 AND t.channel_id = $2`,
 			taskID, channelID,
 		).Scan(&task.ID, &task.TaskNumber, &task.ChannelID, &task.CreatorID, &task.CreatorName, &task.Title, &description,
-			&task.Status, &task.ClaimerID, &task.ClaimerName, &task.Priority, &dueDate, &task.MessageID, &task.CreatedAt, &task.UpdatedAt)
+			&task.Status, &task.ClaimerID, &task.ClaimerName, &task.Priority, &dueDate, &task.MessageID, &task.CreatedAt, &task.UpdatedAt, &task.ClaimerDeleted)
 		if err2 != nil {
 			// Try by message_id( agent uses msg= header short ID)
 			err3 := s.pool.QueryRow(ctx,
 				`SELECT t.id, t.task_number, t.channel_id, t.creator_id, COALESCE(u_creator.display_name, a_creator.name, '') as creator_name, t.title, COALESCE(t.description, ''), t.status,
 				 COALESCE(t.claimer_id::text, ''),
-				COALESCE(u_claimer.display_name, a_claimer.name, ''), t.priority, t.due_date, COALESCE(t.message_id::text, ''), t.created_at, t.updated_at
+				COALESCE(u_claimer.display_name, a_claimer.name, ''), t.priority, t.due_date, COALESCE(t.message_id::text, ''), t.created_at, t.updated_at,
+				(NOT COALESCE(a_claimer.is_active, true)) AS claimer_deleted
 				 FROM tasks t LEFT JOIN users u_creator ON t.creator_id = u_creator.id LEFT JOIN agents a_creator ON t.creator_id = a_creator.id LEFT JOIN users u_claimer ON t.claimer_id = u_claimer.id LEFT JOIN agents a_claimer ON t.claimer_id = a_claimer.id WHERE t.message_id::text = $1 AND t.channel_id = $2`,
 				taskID, channelID,
 			).Scan(&task.ID, &task.TaskNumber, &task.ChannelID, &task.CreatorID, &task.CreatorName, &task.Title, &description,
-				&task.Status, &task.ClaimerID, &task.ClaimerName, &task.Priority, &dueDate, &task.MessageID, &task.CreatedAt, &task.UpdatedAt)
+				&task.Status, &task.ClaimerID, &task.ClaimerName, &task.Priority, &dueDate, &task.MessageID, &task.CreatedAt, &task.UpdatedAt, &task.ClaimerDeleted)
 			if err3 != nil {
 				if errors.Is(err3, pgx.ErrNoRows) {
 					return nil, ErrTaskNotFound
@@ -519,7 +523,8 @@ func (s *TaskService) ListTasks(ctx context.Context, channelID, userID string, f
 			                  COALESCE(t.claimer_id::text, ''), t.priority,
 			                  t.due_date, COALESCE(t.message_id::text, ''), COALESCE(t.parent_task_id::text, ''),
 			                  t.created_at, t.updated_at,
-			                  COALESCE(u_claimer.display_name, a_claimer.name, '') AS claimer_name
+			                  COALESCE(u_claimer.display_name, a_claimer.name, '') AS claimer_name,
+			                  (NOT COALESCE(a_claimer.is_active, true)) AS claimer_deleted
 		           FROM tasks t
 		           LEFT JOIN users u_creator ON t.creator_id = u_creator.id
 		           LEFT JOIN agents a_creator ON t.creator_id = a_creator.id
@@ -565,7 +570,7 @@ func (s *TaskService) ListTasks(ctx context.Context, channelID, userID string, f
 		var parentTaskID *string
 		err := rows.Scan(&t.ID, &t.TaskNumber, &t.ChannelID, &t.CreatorID, &t.CreatorName, &t.Title, &t.Description,
 			&t.Status, &t.ClaimerID, &t.Priority,
-			&dueDate, &t.MessageID, &parentTaskID, &t.CreatedAt, &t.UpdatedAt, &t.ClaimerName)
+			&dueDate, &t.MessageID, &parentTaskID, &t.CreatedAt, &t.UpdatedAt, &t.ClaimerName, &t.ClaimerDeleted)
 		if err != nil {
 			return nil, err
 		}
@@ -841,7 +846,8 @@ func (s *TaskService) GetTaskGlobal(ctx context.Context, taskID, userID string) 
 func (s *TaskService) ListAllUserTasks(ctx context.Context, userID string, channelID string, status string, claimerID string, creatorID string) ([]Task, error) {
 	query := `SELECT t.id, t.task_number, t.channel_id, t.creator_id, COALESCE(u_creator.display_name, a_creator.name, '') as creator_name, t.title, COALESCE(t.description, ''),
 		t.status, COALESCE(t.claimer_id::text, ''), t.priority, t.due_date, COALESCE(t.message_id::text, ''), t.created_at, t.updated_at,
-		COALESCE(u_claimer.display_name, a_claimer.name, '') AS claimer_name
+		COALESCE(u_claimer.display_name, a_claimer.name, '') AS claimer_name,
+		(NOT COALESCE(a_claimer.is_active, true)) AS claimer_deleted
 		FROM tasks t
 		LEFT JOIN users u_creator ON t.creator_id = u_creator.id
 		LEFT JOIN agents a_creator ON t.creator_id = a_creator.id
@@ -886,7 +892,7 @@ func (s *TaskService) ListAllUserTasks(ctx context.Context, userID string, chann
 		var t Task
 		var dueDate *time.Time
 		err := rows.Scan(&t.ID, &t.TaskNumber, &t.ChannelID, &t.CreatorID, &t.CreatorName, &t.Title, &t.Description,
-			&t.Status, &t.ClaimerID, &t.Priority, &dueDate, &t.MessageID, &t.CreatedAt, &t.UpdatedAt, &t.ClaimerName)
+			&t.Status, &t.ClaimerID, &t.Priority, &dueDate, &t.MessageID, &t.CreatedAt, &t.UpdatedAt, &t.ClaimerName, &t.ClaimerDeleted)
 		if err != nil {
 			return nil, err
 		}

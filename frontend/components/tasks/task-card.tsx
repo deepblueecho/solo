@@ -162,7 +162,7 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
           {task.assignee_name && (
             <span className="flex items-center gap-1">
               <User className="h-3 w-3" />
-              {task.assignee_name}
+              {task.assignee_name}{task.claimer_deleted ? ' (Deleted)' : ''}
             </span>
           )}
 
