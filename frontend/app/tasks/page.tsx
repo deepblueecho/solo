@@ -103,7 +103,8 @@ export default function TasksPage() {
     const seen = new Map<string, { id: string; name: string }>();
     for (const t of sourceTasks) {
       const id = t.claimer_id || t.assignee_id;
-      const name = t.claimer_name || t.assignee_name || (id ? id.slice(0, 8) : '');
+      const baseName = t.claimer_name || t.assignee_name || (id ? id.slice(0, 8) : '');
+      const name = baseName + (t.claimer_deleted ? ' (Deleted)' : '');
       if (id && !seen.has(id)) seen.set(id, { id, name });
     }
     return Array.from(seen.values());

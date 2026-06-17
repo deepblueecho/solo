@@ -538,6 +538,7 @@ export function useMessages(channelId: string | null) {
                   task_number: taskResp.task_number as number | undefined,
                   task_status: taskResp.status as string | undefined,
                   task_claimer_name: taskResp.claimer_name as string | undefined,
+                  task_claimer_deleted: taskResp.claimer_deleted as boolean | undefined,
                 };
               }
               // If WS message.new already arrived with the real message ID,
@@ -548,6 +549,7 @@ export function useMessages(channelId: string | null) {
                   task_number: taskResp.task_number as number | undefined,
                   task_status: taskResp.status as string | undefined,
                   task_claimer_name: taskResp.claimer_name as string | undefined,
+                  task_claimer_deleted: taskResp.claimer_deleted as boolean | undefined,
                 };
               }
               return m;
