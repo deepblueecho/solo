@@ -1,538 +1,718 @@
+// ============================================================================
+// Relationships Editor Page (Step 5)
+// - ReactFlow-based drag-and-drop relationship graph
+// - Create/delete relationships by connecting agent nodes
+// - 4 edge types with distinct visuals
+// - WebSocket sync for real-time collaboration
+// ============================================================================
+
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { GitBranch, LayoutGrid, Link2, Loader2, RefreshCw, Save, Trash2, X } from 'lucide-react';
-import { useAuth } from '@/lib/auth-context';
-import { useAgents } from '@/lib/hooks/use-agents';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  createRelationship,
-  deleteRelationship,
-  listRelationships,
-  updateRelationship,
-} from '@/lib/relationships-api';
-import type { Agent, AgentRelationship, RelationshipType } from '@/lib/types';
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  type Connection,
+  type Edge,
+  type Node,
+  type NodeMouseHandler,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import dagre from 'dagre';
+import { Loader2, Plus, Trash2, LayoutGrid, Undo2, Redo2, Download } from 'lucide-react';
 import { NavBar } from '@/components/ui/navbar';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Spinner } from '@/components/ui/spinner';
-import { PixelAvatar } from '@/components/ui/pixel-avatar';
-import { cn } from '@/lib/utils';
+import { RelationshipNode } from '@/components/relationships/relationship-node';
+import { RelationshipEdge } from '@/components/relationships/relationship-edge';
+import { CreateRelationshipModal } from '@/components/relationships/create-relationship-modal';
+import { RelationshipDetailPanel } from '@/components/relationships/relationship-detail-panel';
+import { apiClient, ApiError } from '@/lib/api-client';
+import { useWebSocket } from '@/lib/ws-context';
+import { t } from '@/lib/i18n';
+import type { Agent, AgentRelationship, RelationshipType } from '@/lib/types';
+import { useAgents } from '@/lib/hooks/use-agents';
 
-type Point = { x: number; y: number };
-type PositionMap = Record<string, Point>;
+// ---- Node/Edge types ----
 
-const NODE_W = 188;
-const NODE_H = 82;
-const STORAGE_KEY = 'solo-relationship-positions';
+const NODE_TYPES = { agentNode: RelationshipNode };
+const EDGE_TYPES = { relationship: RelationshipEdge };
 
-function readPositions(): PositionMap {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+// ---- Helpers ----
+
+interface UndoEntry {
+  nodes: Node[];
+  edges: Edge[];
 }
 
-function writePositions(positions: PositionMap) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(positions));
-  } catch {
-    // localStorage may be unavailable; dragging should still work for the session.
-  }
-}
-
-function autoLayout(agents: Agent[], relationships: AgentRelationship[]): PositionMap {
-  const agentIDs = new Set(agents.map((a) => a.id));
-  const children = new Map<string, string[]>();
-  const incoming = new Map<string, number>();
-
-  for (const agent of agents) {
-    children.set(agent.id, []);
-    incoming.set(agent.id, 0);
-  }
-  for (const rel of relationships) {
-    if (rel.rel_type !== 'assigns_to') continue;
-    if (!agentIDs.has(rel.from_agent_id) || !agentIDs.has(rel.to_agent_id)) continue;
-    children.get(rel.from_agent_id)!.push(rel.to_agent_id);
-    incoming.set(rel.to_agent_id, (incoming.get(rel.to_agent_id) ?? 0) + 1);
-  }
-
-  const level = new Map<string, number>();
-  const queue = agents
-    .filter((agent) => (incoming.get(agent.id) ?? 0) === 0)
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((agent) => agent.id);
-
-  for (const id of queue) level.set(id, 0);
-  for (let i = 0; i < queue.length; i++) {
-    const id = queue[i];
-    const nextLevel = (level.get(id) ?? 0) + 1;
-    for (const child of children.get(id) ?? []) {
-      if ((level.get(child) ?? -1) < nextLevel) {
-        level.set(child, nextLevel);
-        queue.push(child);
-      }
-    }
-  }
-  for (const agent of agents) {
-    if (!level.has(agent.id)) level.set(agent.id, 0);
-  }
-
-  const byLevel = new Map<number, Agent[]>();
-  for (const agent of agents) {
-    const l = level.get(agent.id) ?? 0;
-    byLevel.set(l, [...(byLevel.get(l) ?? []), agent]);
-  }
-
-  const positions: PositionMap = {};
-  [...byLevel.entries()].sort(([a], [b]) => a - b).forEach(([l, items]) => {
-    items.sort((a, b) => a.name.localeCompare(b.name)).forEach((agent, i) => {
-      positions[agent.id] = { x: 72 + l * 270, y: 72 + i * 132 };
-    });
-  });
-  return positions;
-}
-
-function centerOf(p: Point): Point {
-  return { x: p.x + NODE_W / 2, y: p.y + NODE_H / 2 };
-}
-
-function relationLabel(type: RelationshipType) {
-  return type === 'assigns_to' ? 'assigns to' : 'collaborates';
-}
+// ---- Page ----
 
 export default function RelationshipsPage() {
-  const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { agents, isLoading: agentsLoading, error: agentsError, refetch: refetchAgents } = useAgents();
+  const { agents, isLoading: agentsLoading, refetch: refetchAgents } = useAgents();
   const [relationships, setRelationships] = useState<AgentRelationship[]>([]);
-  const [isLoadingRels, setIsLoadingRels] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [positions, setPositions] = useState<PositionMap>({});
-  const [dragging, setDragging] = useState<{
-    id: string;
-    start: Point;
-    origin: Point;
-  } | null>(null);
-  const [selectedID, setSelectedID] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [form, setForm] = useState({
-    from_agent_id: '',
-    to_agent_id: '',
-    rel_type: 'assigns_to' as RelationshipType,
-    instruction: '',
-  });
-  const [draftInstruction, setDraftInstruction] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [preselectedFrom, setPreselectedFrom] = useState<string | null>(null);
+  const [preselectedTo, setPreselectedTo] = useState<string | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
+  const [detailRel, setDetailRel] = useState<AgentRelationship | null>(null);
+  const [detailAgent, setDetailAgent] = useState<Agent | null>(null);
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const [redoStack, setRedoStack] = useState<UndoEntry[]>([]);
+  const edgeToRelationshipMap = useRef<Map<string, AgentRelationship>>(new Map());
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) router.push('/auth/login');
-  }, [authLoading, isAuthenticated, router]);
+  // ---- Fetch data ----
 
-  const loadRelationships = useCallback(async () => {
-    setIsLoadingRels(true);
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
     setError(null);
     try {
-      setRelationships(await listRelationships());
+      const rels = await apiClient.get<AgentRelationship[]>('/api/v1/agent-relationships');
+      setRelationships(Array.isArray(rels) ? rels : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load relationships');
+      setError(err instanceof ApiError ? err.message : t('relationshipEditorLoading'));
     } finally {
-      setIsLoadingRels(false);
+      setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadRelationships();
-  }, [loadRelationships]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  useEffect(() => {
-    if (agents.length === 0) return;
-    const saved = readPositions();
-    const layout = autoLayout(agents, relationships);
-    const merged: PositionMap = {};
-    for (const agent of agents) {
-      merged[agent.id] = saved[agent.id] ?? layout[agent.id] ?? { x: 72, y: 72 };
+  // ---- Position persistence ----
+
+  const POS_STORAGE_KEY = 'solo-relationship-positions';
+
+  const loadPositions = useCallback((): Record<string, { x: number; y: number }> => {
+    try {
+      const raw = localStorage.getItem(POS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }, []);
+
+  const savePositions = useCallback((nodes: Node[]) => {
+    const pos: Record<string, { x: number; y: number }> = {};
+    for (const n of nodes) {
+      pos[n.id] = n.position;
     }
-    setPositions(merged);
-  }, [agents, relationships]);
+    try { localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos)); } catch { /* noop */ }
+  }, []);
 
-  const agentByID = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
-  const selected = selectedID ? relationships.find((rel) => rel.id === selectedID) ?? null : null;
+  // ---- Build initial nodes/edges ----
 
-  useEffect(() => {
-    setDraftInstruction(selected?.instruction ?? '');
-  }, [selected?.id, selected?.instruction]);
+  // ---- Build initial nodes/edges ----
 
-  useEffect(() => {
-    if (!dragging) return;
-    const handleMove = (event: PointerEvent) => {
-      const next = {
-        x: Math.max(0, dragging.origin.x + event.clientX - dragging.start.x),
-        y: Math.max(0, dragging.origin.y + event.clientY - dragging.start.y),
+  const initialNodes: Node[] = useMemo(() => {
+    const saved = loadPositions();
+    // Build set of occupied positions from saved data (for existing agents).
+    const occupied = new Set(
+      Object.values(saved).map((p) => `${Math.round(p.x)},${Math.round(p.y)}`),
+    );
+
+    const findFreePos = (i: number) => {
+      const COLS = 4;
+      const CELL_W = 220;
+      const CELL_H = 160;
+      let attempts = 0;
+      while (attempts < 100) {
+        const col = attempts < COLS ? attempts % COLS : (i + attempts) % COLS;
+        const row = Math.floor((i + attempts) / COLS);
+        const x = col * CELL_W + 100;
+        const y = row * CELL_H + 80;
+        if (!occupied.has(`${x},${y}`)) {
+          occupied.add(`${x},${y}`);
+          return { x, y };
+        }
+        attempts++;
+      }
+      return { x: (i % COLS) * CELL_W + 100, y: Math.floor(i / COLS) * CELL_H + 80 };
+    };
+
+    return agents.map((a, i) => ({
+      id: a.id,
+      type: 'agentNode',
+      position: saved[a.id] || findFreePos(i),
+      data: {
+        agentId: a.id,
+        agentName: a.name,
+        isActive: a.is_active,
+      },
+    }));
+  }, [agents, loadPositions]);
+
+  const initialEdges: Edge[] = useMemo(() => {
+    const map = new Map<string, AgentRelationship>();
+    const edges = relationships.map((r) => {
+      map.set(r.id, r);
+      const isCollab = r.rel_type === 'collaborates_with';
+      return {
+        id: r.id,
+        source: r.from_agent_id,
+        target: r.to_agent_id,
+        type: 'relationship',
+        // Collaboration is bidirectional: pin it to side handles so the line
+        // stays horizontal between same-rank peers instead of arcing top/bottom.
+        ...(isCollab ? { sourceHandle: 'right', targetHandle: 'left' } : {}),
+        data: {
+          relType: r.rel_type,
+          channelName: r.channel_name,
+        },
       };
-      setPositions((prev) => ({ ...prev, [dragging.id]: next }));
-    };
-    const handleUp = () => {
-      setPositions((prev) => {
-        writePositions(prev);
-        return prev;
+    });
+    edgeToRelationshipMap.current = map;
+    return edges;
+  }, [relationships]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Sync when data reloads — keep existing node positions, only add new / remove deleted.
+  useEffect(() => {
+    setNodes((prev) => {
+      const existingPos = new Map(prev.map((n) => [n.id, n.position]));
+      return initialNodes.map((n) => ({
+        ...n,
+        position: existingPos.get(n.id) || n.position,
+      }));
+    });
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
+
+  // Save positions when nodes change (drag via ReactFlow onNodesChange)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
+  useEffect(() => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => savePositions(nodes), 500);
+    return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+  }, [nodes, savePositions]);
+
+  // ---- WebSocket sync ----
+
+  const { onEvent } = useWebSocket();
+
+  useEffect(() => {
+    const unsub = onEvent((event) => {
+      if (event.type === 'relationship_created') {
+        setEdges((prev) => {
+          if (prev.find((e) => e.id === event.id)) return prev;
+          const newRel: AgentRelationship = {
+            id: event.id,
+            from_agent_id: event.from_agent_id,
+            to_agent_id: event.to_agent_id,
+            rel_type: event.rel_type as RelationshipType,
+            channel_id: event.channel_id,
+          };
+          edgeToRelationshipMap.current.set(event.id, newRel);
+          const isCollab = event.rel_type === 'collaborates_with';
+          return [...prev, {
+            id: event.id,
+            source: event.from_agent_id,
+            target: event.to_agent_id,
+            type: 'relationship',
+            ...(isCollab ? { sourceHandle: 'right', targetHandle: 'left' } : {}),
+            data: { relType: event.rel_type as RelationshipType, channelName: (event as { channel_name?: string }).channel_name },
+          }];
+        });
+      }
+      if (event.type === 'relationship_updated') {
+        setEdges((prev) => prev.map((e) => {
+          if (e.id !== event.id) return e;
+          const existing = edgeToRelationshipMap.current.get(event.id);
+          if (existing) {
+            existing.rel_type = event.rel_type as RelationshipType;
+            if (event.channel_id !== undefined) existing.channel_id = event.channel_id;
+          }
+          return {
+            ...e,
+            data: { ...e.data, relType: event.rel_type as RelationshipType, channelName: (event as { channel_name?: string }).channel_name },
+          };
+        }));
+        // Update detail panel if showing this relationship
+        setDetailRel((prev) => {
+          if (prev?.id === event.id) {
+            return { ...prev, rel_type: event.rel_type as RelationshipType, channel_id: event.channel_id };
+          }
+          return prev;
+        });
+      }
+      if (event.type === 'relationship_deleted') {
+        setEdges((prev) => prev.filter((e) => e.id !== event.id));
+        edgeToRelationshipMap.current.delete(event.id);
+        // Close detail panel if showing this relationship
+        setDetailRel((prev) => prev?.id === event.id ? null : prev);
+      }
+
+      // agent_deleted — server cascaded the agent's relationships and
+      // dropped the agent row's active flag. Drop every edge / node that
+      // referenced it locally so the graph doesn't show ghost nodes, then
+      // refetch agents to keep the agents list in sync.
+      if (event.type === 'agent_deleted') {
+        const removedIds = new Set(event.deleted_relationship_ids ?? []);
+        setEdges((prev) => {
+          const toDrop = new Set<string>();
+          for (const e of prev) {
+            if (e.source === event.agent_id || e.target === event.agent_id) {
+              toDrop.add(e.id);
+            } else if (removedIds.has(e.id)) {
+              toDrop.add(e.id);
+            }
+          }
+          for (const id of toDrop) {
+            edgeToRelationshipMap.current.delete(id);
+          }
+          return prev.filter((e) => !toDrop.has(e.id));
+        });
+        setNodes((prev) => prev.filter((n) => n.id !== event.agent_id));
+        setRelationships((prev) =>
+          prev
+            .filter((r) =>
+              r.from_agent_id !== event.agent_id &&
+              r.to_agent_id !== event.agent_id,
+            )
+            .filter((r) => !removedIds.has(r.id)),
+        );
+        // Close any detail panel showing data about the deleted agent.
+        setDetailRel((prev) =>
+          prev && (prev.from_agent_id === event.agent_id || prev.to_agent_id === event.agent_id)
+            ? null
+            : prev,
+        );
+        setDetailAgent((prev) => (prev?.id === event.agent_id ? null : prev));
+        // useAgents doesn't subscribe to WS; trigger a refetch so the
+        // nodes list rebuilt from `agents` matches the server's view.
+        void refetchAgents();
+      }
+    });
+    return unsub;
+  }, [onEvent, setEdges]);
+
+  // ---- Undo/Redo ----
+
+  const pushUndo = useCallback(() => {
+    setUndoStack((prev) => [...prev, { nodes: [...nodes], edges: [...edges] }]);
+    setRedoStack([]);
+  }, [nodes, edges]);
+
+  const undo = useCallback(() => {
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    setRedoStack((prev) => [...prev, { nodes: [...nodes], edges: [...edges] }]);
+    setNodes(entry.nodes);
+    setEdges(entry.edges);
+    setUndoStack((prev) => prev.slice(0, -1));
+  }, [undoStack, nodes, edges, setNodes, setEdges]);
+
+  const redo = useCallback(() => {
+    const entry = redoStack[redoStack.length - 1];
+    if (!entry) return;
+    setUndoStack((prev) => [...prev, { nodes: [...nodes], edges: [...edges] }]);
+    setNodes(entry.nodes);
+    setEdges(entry.edges);
+    setRedoStack((prev) => prev.slice(0, -1));
+  }, [redoStack, nodes, edges, setNodes, setEdges]);
+
+  // ---- Connect (create relationship via modal) ----
+
+  const onConnect = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target) return;
+    pushUndo();
+    setPreselectedFrom(connection.source);
+    setPreselectedTo(connection.target);
+    setShowCreateModal(true);
+  }, [pushUndo]);
+
+  const handleCreateModalClose = useCallback((open: boolean) => {
+    setShowCreateModal(open);
+    if (!open) {
+      setPreselectedFrom(null);
+      setPreselectedTo(null);
+    }
+  }, []);
+
+  const handleRelationshipCreated = useCallback(() => {
+    loadData();
+  }, [loadData]);
+
+  // ---- Edge click → show detail panel ----
+
+  const agentNameMap = useMemo(() => {
+    const m = new Map<string, { name: string; isActive: boolean }>();
+    for (const a of agents) m.set(a.id, { name: a.name, isActive: a.is_active });
+    return m;
+  }, [agents]);
+
+  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    setSelectedEdge(edge);
+    const rel = edgeToRelationshipMap.current.get(edge.id);
+    if (rel) {
+      const fromInfo = agentNameMap.get(rel.from_agent_id);
+      const toInfo = agentNameMap.get(rel.to_agent_id);
+      setDetailRel({
+        ...rel,
+        from_agent_name: fromInfo?.name,
+        from_agent_active: fromInfo?.isActive,
+        to_agent_name: toInfo?.name,
+        to_agent_active: toInfo?.isActive,
       });
-      setDragging(null);
-    };
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp, { once: true });
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-    };
-  }, [dragging]);
-
-  const canvasSize = useMemo(() => {
-    const values = Object.values(positions);
-    return {
-      width: Math.max(900, ...values.map((p) => p.x + NODE_W + 160)),
-      height: Math.max(560, ...values.map((p) => p.y + NODE_H + 120)),
-    };
-  }, [positions]);
-
-  const handleAutoLayout = useCallback(() => {
-    const next = autoLayout(agents, relationships);
-    setPositions(next);
-    writePositions(next);
-  }, [agents, relationships]);
-
-  const handleRefresh = useCallback(() => {
-    refetchAgents();
-    loadRelationships();
-  }, [loadRelationships, refetchAgents]);
-
-  const handleCreate = useCallback(async () => {
-    if (!form.from_agent_id || !form.to_agent_id || form.from_agent_id === form.to_agent_id) return;
-    setCreating(true);
-    setError(null);
-    try {
-      await createRelationship(form);
-      setShowCreate(false);
-      setForm((prev) => ({ ...prev, instruction: '' }));
-      await loadRelationships();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create relationship');
-    } finally {
-      setCreating(false);
+      setDetailAgent(null);
     }
-  }, [form, loadRelationships]);
+  }, [agentNameMap]);
 
-  const handleSaveSelected = useCallback(async () => {
-    if (!selected) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await updateRelationship(selected.id, { instruction: draftInstruction });
-      setRelationships((prev) => prev.map((rel) => (rel.id === updated.id ? updated : rel)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update relationship');
-    } finally {
-      setSaving(false);
+  const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
+    setSelectedEdge(null);
+    const agent = agents.find((a) => a.id === node.id);
+    if (agent) {
+      setDetailAgent(agent);
+      setDetailRel(null);
     }
-  }, [draftInstruction, selected]);
+  }, [agents]);
 
-  const handleDeleteSelected = useCallback(async () => {
-    if (!selected) return;
-    setDeleting(true);
-    setError(null);
+  const closeDetailPanel = useCallback(() => {
+    setDetailRel(null);
+    setDetailAgent(null);
+    setSelectedEdge(null);
+  }, []);
+
+  const handleDetailUpdate = useCallback(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleDetailDelete = useCallback((id: string) => {
+    setEdges((prev) => prev.filter((e) => e.id !== id));
+    edgeToRelationshipMap.current.delete(id);
+    setSelectedEdge(null);
+  }, [setEdges]);
+
+  const deleteSelectedEdge = useCallback(async () => {
+    if (!selectedEdge) return;
+    pushUndo();
     try {
-      await deleteRelationship(selected.id);
-      setRelationships((prev) => prev.filter((rel) => rel.id !== selected.id));
-      setSelectedID(null);
+      await apiClient.delete(`/api/v1/agent-relationships/${selectedEdge.id}`);
+      setEdges((prev) => prev.filter((e) => e.id !== selectedEdge.id));
+      edgeToRelationshipMap.current.delete(selectedEdge.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete relationship');
-    } finally {
-      setDeleting(false);
+      console.error('Failed to delete relationship:', err);
     }
-  }, [selected]);
+    setSelectedEdge(null);
+    setDetailRel(null);
+  }, [selectedEdge, pushUndo, setEdges]);
 
-  const loading = authLoading || agentsLoading || isLoadingRels;
-  if (loading) {
+  // ---- Keyboard shortcuts ----
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedEdge && document.activeElement === document.body) {
+          deleteSelectedEdge();
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+      }
+      if (e.key === 'Escape') {
+        setSelectedEdge(null);
+        setShowCreateModal(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedEdge, deleteSelectedEdge, undo, redo]);
+
+  // ---- Export ----
+
+  const exportPNG = useCallback(() => {
+    const svg = document.querySelector('.react-flow__renderer svg') as SVGSVGElement;
+    if (!svg) return;
+    const serializer = new XMLSerializer();
+    const source = serializer.serializeToString(svg);
+    const blob = new Blob(['<?xml version="1.0" standalone="no"?>\r\n' + source], { type: 'image/svg+xml' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'relationship-graph.svg';
+    link.click();
+  }, []);
+
+  // ---- Auto layout ----
+  // Dagre-based layered layout, TB direction.
+  // - assigns_to: directional edges that define the rank hierarchy
+  //   (parent on top, child below).
+  // - collaborates_with: same-rank constraint, implemented via a compound
+  //   graph. Every collab pair gets wrapped in a shared parent cluster
+  //   with rank: 'same', which forces dagre to keep them on one row.
+  // - assigns_to wins when both relationships exist on the same pair.
+
+  const autoLayout = useCallback(() => {
+    pushUndo();
+    try { localStorage.removeItem(POS_STORAGE_KEY); } catch { /* noop */ }
+    setNodes((prev) => {
+      const NODE_W = 180;
+      const NODE_H = 100;
+      const g = new dagre.graphlib.Graph({ compound: true });
+      g.setGraph({ rankdir: 'TB', nodesep: 100, ranksep: 140, marginx: 80, marginy: 80 });
+      g.setDefaultEdgeLabel(() => ({}));
+
+      for (const n of prev) {
+        g.setNode(n.id, { width: NODE_W, height: NODE_H });
+      }
+
+      const pairKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
+      const assignsPairs = new Set<string>();
+      for (const e of edges) {
+        if (!g.hasNode(e.source) || !g.hasNode(e.target)) continue;
+        if (e.data?.relType === 'assigns_to') {
+          assignsPairs.add(pairKey(e.source, e.target));
+        }
+      }
+
+      // Union-find over collaborates_with pairs so a chain (A↔B, B↔C)
+      // collapses into one same-rank cluster.
+      const parent = new Map<string, string>();
+      const find = (x: string): string => {
+        const p = parent.get(x);
+        if (!p || p === x) { parent.set(x, x); return x; }
+        const r = find(p); parent.set(x, r); return r;
+      };
+      const union = (a: string, b: string) => { parent.set(find(a), find(b)); };
+
+      for (const e of edges) {
+        if (!g.hasNode(e.source) || !g.hasNode(e.target)) continue;
+        if (e.data?.relType !== 'collaborates_with') continue;
+        if (assignsPairs.has(pairKey(e.source, e.target))) continue;
+        union(e.source, e.target);
+      }
+
+      // Build clusters: collab roots with > 1 member become same-rank parents.
+      const clusters = new Map<string, string[]>();
+      for (const n of prev) {
+        const root = find(n.id);
+        if (!clusters.has(root)) clusters.set(root, []);
+        clusters.get(root)!.push(n.id);
+      }
+      let clusterIdx = 0;
+      for (const [, members] of clusters) {
+        if (members.length < 2) continue;
+        const clusterId = `__collab_cluster_${clusterIdx++}`;
+        g.setNode(clusterId, {});
+        for (const m of members) g.setParent(m, clusterId);
+      }
+
+      // Add edges. assigns_to defines ranks; collaborates_with is purely
+      // visual once the cluster does the same-rank work.
+      for (const e of edges) {
+        if (!g.hasNode(e.source) || !g.hasNode(e.target)) continue;
+        const relType = e.data?.relType;
+        if (relType === 'assigns_to') {
+          g.setEdge(e.source, e.target, { minlen: 1, weight: 2 });
+        }
+        // collaborates_with: no dagre edge needed — the cluster handles rank.
+      }
+
+      dagre.layout(g);
+
+      const next = prev.map((n) => {
+        const pos = g.node(n.id);
+        if (!pos) return n;
+        return {
+          ...n,
+          position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
+        };
+      });
+      savePositions(next);
+      return next;
+    });
+  }, [pushUndo, setNodes, savePositions, edges]);
+
+  // ---- Loading ----
+
+  if (isLoading || agentsLoading) {
     return (
-      <div className="flex h-screen bg-background">
+      <div className="flex h-screen">
         <NavBar />
-        <div className="flex flex-1 items-center justify-center">
-          <Spinner label="Loading relationships..." />
+        <div className="flex-1 flex items-center justify-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="font-heading text-sm uppercase tracking-wider text-muted-foreground">
+            {t('relationshipEditorLoading')}
+          </span>
         </div>
       </div>
     );
   }
 
-  const visibleRelationships = relationships.filter(
-    (rel) => agentByID.has(rel.from_agent_id) && agentByID.has(rel.to_agent_id),
-  );
+  if (error) {
+    return (
+      <div className="flex h-screen">
+        <NavBar />
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <p className="font-mono text-sm text-brutal-danger">{error}</p>
+          <button type="button" onClick={loadData} className="btn-brutal px-4 py-2">{t('retry')}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Render ----
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen">
       <NavBar />
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b-2 border-black bg-brutal-cream px-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center border-2 border-black bg-brutal-primary shadow-brutal-sm">
-              <GitBranch className="h-4 w-4" />
-            </div>
-            <div>
-              <h1 className="font-heading text-lg font-black uppercase tracking-wider">Relationships</h1>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                Drag nodes · Auto layout · Edit instructions
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={handleRefresh}>
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              Refresh
-            </Button>
-            <Button size="sm" variant="outline" onClick={handleAutoLayout}>
-              <LayoutGrid className="mr-1.5 h-3.5 w-3.5" />
-              Auto Layout
-            </Button>
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Link2 className="mr-1.5 h-3.5 w-3.5" />
-              Create
-            </Button>
-          </div>
-        </header>
 
-        {(error || agentsError) && (
-          <div className="border-b-2 border-black bg-brutal-danger/10 px-4 py-2 font-body text-sm text-brutal-danger">
-            {error || agentsError}
-          </div>
-        )}
+      {/* Main editor area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 h-14 px-4 border-b-2 border-black bg-brutal-cream">
+          <h1 className="font-heading text-lg font-bold uppercase tracking-wider mr-auto">
+            {t('relationshipEditor')}
+          </h1>
 
-        <section className="relative min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle,rgba(0,0,0,0.08)_1px,transparent_1px)] [background-size:20px_20px]">
-          {agents.length === 0 ? (
-            <div className="flex h-full items-center justify-center p-8 text-center">
-              <p className="font-body text-sm text-muted-foreground">
-                No agents yet. Create agents from Teams before editing relationships.
-              </p>
-            </div>
-          ) : (
-            <div className="relative" style={{ width: canvasSize.width, height: canvasSize.height }}>
-              <svg
-                className="pointer-events-none absolute inset-0"
-                width={canvasSize.width}
-                height={canvasSize.height}
-              >
-                <defs>
-                  <marker id="relationship-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-                    <path d="M0,0 L0,6 L9,3 z" fill="#111" />
-                  </marker>
-                </defs>
-                {visibleRelationships.map((rel) => {
-                  const from = positions[rel.from_agent_id];
-                  const to = positions[rel.to_agent_id];
-                  if (!from || !to) return null;
-                  const a = centerOf(from);
-                  const b = centerOf(to);
-                  const dx = Math.max(80, Math.abs(b.x - a.x) / 2);
-                  const path = `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
-                  const isAssign = rel.rel_type === 'assigns_to';
-                  return (
-                    <g key={rel.id}>
-                      <path
-                        d={path}
-                        fill="none"
-                        stroke={selectedID === rel.id ? '#FFD23F' : isAssign ? '#111' : '#0f766e'}
-                        strokeWidth={selectedID === rel.id ? 5 : 3}
-                        strokeDasharray={isAssign ? undefined : '8 5'}
-                        markerEnd={isAssign ? 'url(#relationship-arrow)' : undefined}
-                      />
-                      <text
-                        x={(a.x + b.x) / 2}
-                        y={(a.y + b.y) / 2 - 8}
-                        className="fill-black font-mono text-[10px]"
-                        textAnchor="middle"
-                      >
-                        {relationLabel(rel.rel_type)}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
+          {/* Undo/Redo */}
+          <button
+            type="button"
+            onClick={undo}
+            disabled={undoStack.length === 0}
+            className="flex items-center gap-1 h-8 px-2 border-2 border-black bg-white hover:bg-brutal-primary-light disabled:opacity-30"
+            title={t('relationshipEditorUndo')}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={redoStack.length === 0}
+            className="flex items-center gap-1 h-8 px-2 border-2 border-black bg-white hover:bg-brutal-primary-light disabled:opacity-30"
+            title={t('relationshipEditorRedo')}
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </button>
 
-              {visibleRelationships.map((rel) => {
-                const from = positions[rel.from_agent_id];
-                const to = positions[rel.to_agent_id];
-                if (!from || !to) return null;
-                const a = centerOf(from);
-                const b = centerOf(to);
-                return (
-                  <button
-                    key={`${rel.id}-hit`}
-                    type="button"
-                    aria-label={`Select ${relationLabel(rel.rel_type)} relationship`}
-                    onClick={() => setSelectedID(rel.id)}
-                    className="absolute h-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-black bg-white px-2 font-mono text-[10px] shadow-brutal-sm hover:bg-brutal-primary"
-                    style={{ left: (a.x + b.x) / 2, top: (a.y + b.y) / 2 }}
-                  >
-                    {rel.rel_type === 'assigns_to' ? 'assign' : 'collab'}
-                  </button>
-                );
-              })}
+          <div className="w-px h-6 bg-black/20" />
 
-              {agents.map((agent) => {
-                const p = positions[agent.id] ?? { x: 72, y: 72 };
-                return (
-                  <div
-                    key={agent.id}
-                    className={cn(
-                      'absolute cursor-grab select-none border-2 border-black bg-white p-3 shadow-brutal active:cursor-grabbing',
-                      dragging?.id === agent.id && 'z-20 shadow-brutal-xl',
-                    )}
-                    style={{ left: p.x, top: p.y, width: NODE_W, height: NODE_H }}
-                    onPointerDown={(event) => {
-                      event.currentTarget.setPointerCapture(event.pointerId);
-                      setDragging({
-                        id: agent.id,
-                        start: { x: event.clientX, y: event.clientY },
-                        origin: p,
-                      });
-                    }}
-                  >
-                    <div className="flex items-start gap-2">
-                      <PixelAvatar agentId={agent.id} avatarUrl={agent.avatar_url} size="sm" />
-                      <div className="min-w-0">
-                        <div className="truncate font-heading text-sm font-black">{agent.name}</div>
-                        <div className="mt-0.5 line-clamp-2 font-body text-[11px] text-muted-foreground">
-                          {agent.description || 'No description'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </main>
+          {/* Auto layout */}
+          <button
+            type="button"
+            onClick={autoLayout}
+            className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-white hover:bg-brutal-info-light font-heading text-xs font-bold uppercase tracking-wider"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            {t('relationshipEditorAutoLayout')}
+          </button>
 
-      {selected && (
-        <aside className="w-[320px] shrink-0 border-l-2 border-black bg-white p-4 shadow-brutal-xl">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-heading text-sm font-black uppercase tracking-wider">Relationship</h2>
+          {/* Export */}
+          <button
+            type="button"
+            onClick={exportPNG}
+            className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-white hover:bg-brutal-primary font-heading text-xs font-bold uppercase tracking-wider"
+          >
+            <Download className="h-3.5 w-3.5" />
+            SVG
+          </button>
+
+          {/* Delete selected */}
+          {selectedEdge && (
             <button
               type="button"
-              onClick={() => setSelectedID(null)}
-              className="flex h-7 w-7 items-center justify-center border-2 border-black bg-white hover:bg-brutal-primary"
+              onClick={deleteSelectedEdge}
+              className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-brutal-danger text-white font-heading text-xs font-bold uppercase tracking-wider hover:bg-red-600"
             >
-              <X className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" />
+              {t('relationshipEditorDeleteEdge')}
             </button>
-          </div>
-          <div className="space-y-3 font-body text-sm">
-            <div className="rounded-none border-2 border-black bg-brutal-cream p-3">
-              <div className="font-heading text-xs font-bold uppercase text-muted-foreground">From</div>
-              <div className="font-bold">{agentByID.get(selected.from_agent_id)?.name ?? selected.from_agent_id}</div>
-            </div>
-            <div className="rounded-none border-2 border-black bg-brutal-cream p-3">
-              <div className="font-heading text-xs font-bold uppercase text-muted-foreground">To</div>
-              <div className="font-bold">{agentByID.get(selected.to_agent_id)?.name ?? selected.to_agent_id}</div>
-            </div>
-            <div>
-              <div className="mb-1 font-heading text-xs font-bold uppercase text-muted-foreground">Type</div>
-              <div className="inline-flex border-2 border-black bg-brutal-primary px-2 py-1 font-mono text-xs">
-                {selected.rel_type}
+          )}
+        </div>
+
+        {/* Graph */}
+        <div className="flex-1 relative">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onEdgeClick={onEdgeClick}
+            onPaneClick={() => { setSelectedEdge(null); closeDetailPanel(); }}
+            onNodeClick={onNodeClick}
+            onNodeDragStop={(_event, node) => {
+              setNodes((prev) => {
+                const next = prev.map((n) => n.id === node.id ? { ...n, position: node.position } : n);
+                savePositions(next);
+                return next;
+              });
+            }}
+            nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
+            fitView
+            defaultEdgeOptions={{
+              type: 'relationship',
+            }}
+            deleteKeyCode={null}
+          >
+            <Background color="rgba(0,0,0,0.08)" gap={20} />
+            <Controls
+              className="!border-2 !border-black !shadow-brutal-sm"
+              position="bottom-right"
+            />
+            <MiniMap
+              className="!border-2 !border-black !shadow-brutal"
+              nodeColor={(n) => {
+                const data = n.data as { isActive?: boolean } | undefined;
+                return data?.isActive ? '#88D498' : '#c0b9b1';
+              }}
+              position="bottom-left"
+            />
+          </ReactFlow>
+
+          {/* Create relationship modal (T5.2.4) */}
+          <CreateRelationshipModal
+            open={showCreateModal}
+            onOpenChange={handleCreateModalClose}
+            onCreated={handleRelationshipCreated}
+            preselectedFrom={preselectedFrom ?? undefined}
+            preselectedTo={preselectedTo ?? undefined}
+            agents={agents}
+          />
+
+          {/* Detail panel */}
+          {(detailRel || detailAgent) && (
+            <RelationshipDetailPanel
+              relationship={detailRel}
+              agent={detailAgent}
+              onClose={closeDetailPanel}
+              onUpdate={handleDetailUpdate}
+              onDelete={handleDetailDelete}
+            />
+          )}
+
+          {/* Empty state overlay */}
+          {agents.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="flex flex-col items-center gap-3 p-8 border-4 border-black bg-white shadow-brutal-xl">
+                <Plus className="h-10 w-10 text-muted-foreground" />
+                <p className="font-heading text-sm text-muted-foreground max-w-xs text-center">
+                  {t('relationshipEditorEmpty')}
+                </p>
               </div>
             </div>
-            <label className="block">
-              <span className="mb-1 block font-heading text-xs font-bold uppercase text-muted-foreground">
-                Instruction
-              </span>
-              <textarea
-                value={draftInstruction}
-                onChange={(event) => setDraftInstruction(event.target.value)}
-                className="min-h-[150px] w-full resize-y rounded-none border-2 border-black bg-white p-2 font-body text-sm outline-none focus:bg-brutal-primary-light/20"
-                placeholder="When should this relationship be used?"
-              />
-            </label>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleSaveSelected} disabled={saving}>
-                {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
-                Save
-              </Button>
-              <Button size="sm" variant="danger" onClick={handleDeleteSelected} disabled={deleting}>
-                {deleting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />}
-                Delete
-              </Button>
-            </div>
-          </div>
-        </aside>
-      )}
-
-      <Dialog open={showCreate} onOpenChange={setShowCreate} width="md">
-        <DialogHeader>
-          <DialogTitle className="font-heading text-base font-black uppercase tracking-wider">
-            Create Relationship
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <label className="block">
-            <span className="mb-1 block font-heading text-xs font-bold uppercase">From Agent</span>
-            <select
-              value={form.from_agent_id}
-              onChange={(event) => setForm((prev) => ({ ...prev, from_agent_id: event.target.value }))}
-              className="h-10 w-full rounded-none border-2 border-black bg-white px-2 font-body text-sm"
-            >
-              <option value="">Select agent...</option>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>{agent.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block font-heading text-xs font-bold uppercase">To Agent</span>
-            <select
-              value={form.to_agent_id}
-              onChange={(event) => setForm((prev) => ({ ...prev, to_agent_id: event.target.value }))}
-              className="h-10 w-full rounded-none border-2 border-black bg-white px-2 font-body text-sm"
-            >
-              <option value="">Select agent...</option>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>{agent.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block font-heading text-xs font-bold uppercase">Type</span>
-            <select
-              value={form.rel_type}
-              onChange={(event) => setForm((prev) => ({ ...prev, rel_type: event.target.value as RelationshipType }))}
-              className="h-10 w-full rounded-none border-2 border-black bg-white px-2 font-body text-sm"
-            >
-              <option value="assigns_to">assigns_to</option>
-              <option value="collaborates_with">collaborates_with</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block font-heading text-xs font-bold uppercase">Instruction</span>
-            <textarea
-              value={form.instruction}
-              onChange={(event) => setForm((prev) => ({ ...prev, instruction: event.target.value }))}
-              className="min-h-[96px] w-full resize-y rounded-none border-2 border-black bg-white p-2 font-body text-sm"
-              placeholder="Optional delegation/collaboration guidance"
-            />
-          </label>
+          )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-          <Button
-            onClick={handleCreate}
-            disabled={creating || !form.from_agent_id || !form.to_agent_id || form.from_agent_id === form.to_agent_id}
-          >
-            {creating && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-            Create
-          </Button>
-        </DialogFooter>
-      </Dialog>
+
+        {/* Bottom legend */}
+        <div className="flex items-center gap-4 h-10 px-4 border-t-2 border-black bg-white">
+          <span className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Legend:
+          </span>
+          {[
+            { type: 'assigns_to', color: '#4A90D9', dash: '' },
+            { type: 'collaborates_with', color: '#10B981', dash: '8,4' },
+          ].map(({ type, color, dash }) => (
+            <span key={type} className="flex items-center gap-1.5 font-mono text-[10px]">
+              <svg width="24" height="8"><line x1="0" y1="4" x2="24" y2="4" stroke={color} strokeWidth={2} strokeDasharray={dash || undefined} /></svg>
+              {type.replace(/_/g, ' ')}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

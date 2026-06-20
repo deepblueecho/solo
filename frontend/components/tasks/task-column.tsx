@@ -194,7 +194,7 @@ function TaskCard({
   parentTaskNumber,
   onParentClick,
 }: TaskCardProps) {
-  const [subtasksOpen, setSubtasksOpen] = useState(false);
+  const [subtasksOpen, setSubtasksOpen] = useState(true);
   const statusConf = STATUS_COLUMN_CONFIG[task.status];
   const taskNum = task.task_number ? `#${task.task_number}` : null;
   const isClaimed = !!task.claimer_id;
@@ -344,16 +344,20 @@ function TaskCard({
                 e.stopPropagation();
                 setSubtasksOpen((v) => !v);
               }}
-              className="flex w-full items-center gap-1.5 text-left text-[10px]"
+              className="flex w-full items-center gap-1.5 text-left text-[10px] font-heading font-black uppercase tracking-wider"
             >
               {subtasksOpen ? (
                 <ChevronDown className="h-3 w-3 flex-shrink-0" />
               ) : (
                 <ChevronRight className="h-3 w-3 flex-shrink-0" />
               )}
-              <span className="text-muted-foreground">{t('subTaskLabel')}</span>
-              <span className="font-bold">{task.done_subtask_count ?? 0}/{task.subtask_count}</span>
-              <div className="flex-1 h-1 border border-brutal-muted bg-muted">
+              <span className="border-2 border-black bg-brutal-cream px-1.5 py-0.5 text-black">
+                {t('subTaskLabel').replace(':', '')}
+              </span>
+              <span className="border-2 border-black bg-brutal-success px-1.5 py-0.5 text-black">
+                {task.done_subtask_count ?? 0}/{task.subtask_count}
+              </span>
+              <div className="flex-1 h-2 border-2 border-black bg-muted">
                 <div
                   className="h-full bg-brutal-success"
                   style={{ width: `${Math.min(((task.done_subtask_count ?? 0) / (task.subtask_count ?? 1)) * 100, 100)}%` }}

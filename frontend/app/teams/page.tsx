@@ -1,6 +1,6 @@
 // ============================================================================
 // /teams — Teams page (v2)
-// Left column: Graph / Agents / Humans sections, each collapsible.
+// Left column: Agents / Humans sections, each collapsible.
 // Right panel: detail view for the selected section or item.
 // - No AppFrame: this page owns its layout (no global Inbox/Channels sidebar).
 // - Selection: 'graph' | 'agent' | 'human' | null. Defaults to first agent.
@@ -32,7 +32,6 @@ import {
 import { BrutalAlert } from '@/components/ui/brutal-alert';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { TeamsLeftColumn, type TeamsSelection } from '@/components/teams/teams-left-column';
-import { TeamsGraphView } from '@/components/teams/teams-graph-view';
 import { TeamsAgentProfile } from '@/components/teams/teams-agent-profile';
 import { TeamsAgentWorkspace } from '@/components/teams/teams-agent-workspace';
 import { TeamsHumanProfile } from '@/components/teams/teams-human-profile';
@@ -97,10 +96,6 @@ export default function TeamsPage() {
 
   const handleSelectHuman = useCallback((userId: string) => {
     setSelection({ kind: 'human', id: userId });
-  }, []);
-
-  const handleSelectGraph = useCallback(() => {
-    setSelection({ kind: 'graph' });
   }, []);
 
   const loadTemplates = useCallback(async () => {
@@ -221,7 +216,6 @@ export default function TeamsPage() {
           agents={agents}
           humans={humans}
           selection={selection}
-          onSelectGraph={handleSelectGraph}
           onSelectAgent={handleSelectAgent}
           onSelectHuman={handleSelectHuman}
           onCreateAgent={() => setShowChoiceDialog(true)}
@@ -255,11 +249,6 @@ export default function TeamsPage() {
               {t('retry')}
             </Button>
           </div>
-        )}
-
-        {/* Graph view */}
-        {selection?.kind === 'graph' && (
-          <TeamsGraphView agents={agents} onSelectAgent={handleSelectAgent} />
         )}
 
         {/* Human card */}
