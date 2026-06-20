@@ -45,8 +45,11 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 	r.Get("/readyz", readinessHandler(pool, dm))
 
 	// Initialize services
+	workspaceRoot := defaultAgentWorkspaceRoot()
+	relationshipMD := service.NewRelationshipsMDGenerator(pool, workspaceRoot)
 	taskSvc := service.NewTaskService(pool)
-	relationshipSvc := service.NewAgentRelationshipService(pool)
+	relationshipSvc := service.NewAgentRelationshipService(pool, relationshipMD)
+	templateSvc := service.NewTemplateService(pool, relationshipMD)
 	computerSvc := service.NewComputerService(pool)
 	inboxSvc := service.NewInboxService(pool)
 
@@ -62,6 +65,7 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 	mentionSvc := service.NewMentionService(pool)
 	taskHandler := handler.NewTaskHandler(pool, hub, agentSvc, taskSvc, mentionSvc)
 	relationshipHandler := handler.NewAgentRelationshipHandler(relationshipSvc)
+	templateHandler := handler.NewTemplateHandler(templateSvc)
 	searchHandler := handler.NewSearchHandler(pool)
 	computerHandler := handler.NewComputerHandler(computerSvc, dm, pool)
 	inboxHandler := handler.NewInboxHandler(inboxSvc)
@@ -219,6 +223,11 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 			})
 		})
 
+		r.Route("/api/v1/templates", func(r chi.Router) {
+			r.Get("/", templateHandler.List)
+			r.Post("/{templateID}/apply", templateHandler.Apply)
+		})
+
 		// Agent backends metadata (registered backend adapters)
 		r.Get("/api/v1/agent-backends", agentHandler.AgentBackends)
 		r.Get("/api/v1/agent-backends/detect", agentHandler.AgentBackendsDetect)
@@ -317,6 +326,14 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 	r.Get("/api/v1/ws", hub.ServeWS)
 
 	return r
+}
+
+func defaultAgentWorkspaceRoot() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".", "agents")
+	}
+	return filepath.Join(home, ".solo", "agents")
 }
 
 // livenessHandler responds 200 OK to indicate the server process is alive.

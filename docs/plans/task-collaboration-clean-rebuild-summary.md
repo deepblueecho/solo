@@ -9,7 +9,7 @@ Base: `master` at `901e2d7`
 Compared with `master`:
 
 ```text
-24 files changed, 1211 insertions(+), 258 deletions(-)
+34 files changed, 2139 insertions(+), 261 deletions(-)
 ```
 
 By commit:
@@ -21,6 +21,7 @@ By commit:
 | `741be2f` | Add task submit/accept/reject lifecycle | 8 files, +374/-107 |
 | `b233169` | Fold subtasks under parent task cards | 2 files, +59/-5 |
 | `35d463d` | Route wakes to mentioned agents or coordinator | 2 files, +207/-136 |
+| latest | Restore team templates and workspace relationship docs | 15 files, +785/-13 |
 
 Note: the final wake-routing commit includes `gofmt` cleanup in `internal/server/service/agent.go`, so the raw line count is larger than the semantic change.
 
@@ -40,6 +41,26 @@ Note: the final wake-routing commit includes `gofmt` cleanup in `internal/server
   - `collaborates_with`
 - `collaborates_with` is unique regardless of direction.
 - `assigns_to` is directional.
+- Relationships affect runtime in two ways:
+  - server wake routing uses `assigns_to` to find the coordinator
+  - relationship/template changes generate `RELATIONSHIPS.md` in the agent workspace
+
+The agent prompt tells agents to read `RELATIONSHIPS.md` before deciding whether to coordinate, delegate, claim, or collaborate. There is no second direct `TaskContext` relationship injection path.
+
+### Team templates
+
+- Added `agent_templates` migration with starter team templates.
+- Added template API:
+  - `GET /api/v1/templates`
+  - `POST /api/v1/templates/{templateID}/apply`
+- Applying a template creates:
+  - agents
+  - `assigns_to` relationships from the leader to members
+  - channel membership in the user's `all-*` channel when available
+- Added `/teams` create flow:
+  - Single Agent
+  - From Template
+- Runtime must be selected before applying a template.
 
 ### Task lifecycle
 
@@ -56,6 +77,9 @@ Note: the final wake-routing commit includes `gofmt` cleanup in `internal/server
   - `solo task accept`
   - `solo task reject`
 - Updated agent prompt so agents use lifecycle commands instead of `solo task update -s` for review flow.
+- Raw status update compatibility now enforces:
+  - only the creator can move a task to `done`
+  - `close` and `reopen` are human-only actions
 
 ### Task UI
 
@@ -98,11 +122,11 @@ Note: the final wake-routing commit includes `gofmt` cleanup in `internal/server
 - No dependency popover or block DAG UI.
 - No relationship graph UI.
 - No relationship event publisher.
-- No `RELATIONSHIPS.md` generation.
+- No old full `RELATIONSHIPS.md` report with recent activity/task-count sections.
 - No channel-scoped relationship model.
 - No extra relationship types.
-- No template backend migration/API.
-- No teams gallery expansion.
+- No full old template gallery component; the template picker is integrated into the existing `/teams` create dialog.
+- No large old template catalog beyond starter team templates.
 - No automatic execution-driven transition to review.
 
 ## Differences from the original plan
@@ -113,9 +137,9 @@ Unchanged. We kept baseline verification as its own commit.
 
 ### PR1
 
-Changed: templates were not ported into backend/API.
+Changed after audit: templates were restored after the initial clean rebuild missed them.
 
-Reason: `master` already had clear frontend role templates, and adding backend templates would expand scope without solving the current task/relationship behavior problem.
+Reason: the user explicitly asked to keep templates and their UI. The final version includes template backend/API, seed migration, `/teams` UI entry, and workspace `RELATIONSHIPS.md` generation. It intentionally avoids a second direct prompt-injection path for the same relationship data.
 
 ### PR2
 
@@ -140,8 +164,24 @@ Reason: we kept the architecture smaller. The coordinator is the agent with no p
 - `internal/server/service/agent.go` has a larger diff because `gofmt` fixed existing indentation while touching the file.
 - `solo task update -s` still exists for compatibility, but the agent prompt no longer teaches it as the lifecycle path.
 - Relationship routing assumes `assigns_to` means `leader assigns_to worker`.
+- Relationships write a lean `RELATIONSHIPS.md`; runtime sees relationships by reading that workspace file, plus server wake routing uses the same relationship graph.
 - Wake routing now reduces fan-out. This is intended, but it means a channel with no relationships will pick one stable fallback agent instead of all agents.
 - Subtasks are folded only when parent and child are both present in the loaded task list.
+
+## Explicit requirement audit
+
+| User requirement | Current status |
+|---|---|
+| Keep colleague relationships | Kept |
+| Keep templates and template UI | Restored after audit |
+| Keep only useful relationship types | Kept: `assigns_to`, `collaborates_with` |
+| Remove block/unblock | Removed / not ported |
+| Keep task parent/child DAG UI | Kept as folded subtasks under parent cards |
+| Keep wake behavior responsive when no mention | Kept: coordinator fallback |
+| Explicit mention should be precise | Kept: only mentioned agents wake |
+| Claim should not be absolutely first if coordinator should delegate | Kept in prompt: claim before executing, delegate first when coordinating |
+| Agent can mark done when agent is creator | Kept: `accept` moves creator-owned reviewed work to `done`; raw `done` is also creator-only |
+| Close/reopen human-only | Kept: agent actors are rejected for `close` and `reopen`; humans keep old status compatibility |
 
 ## Verification
 

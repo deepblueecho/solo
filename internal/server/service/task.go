@@ -73,6 +73,7 @@ var (
 	ErrTaskNotClaimable      = errors.New("task status does not allow claiming")
 	ErrTaskNotClaimer        = errors.New("you are not the claimer of this task")
 	ErrTaskNotCreator        = errors.New("you are not the creator of this task")
+	ErrTaskHumanOnly         = errors.New("this task action is human-only")
 	ErrTaskNotSubmittable    = errors.New("task is not ready to submit")
 	ErrTaskNotReviewable     = errors.New("task is not in review")
 )
@@ -671,6 +672,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, channelID, taskID, userID 
 		if err := validateStatusTransition(currentTask.Status, *req.Status); err != nil {
 			return nil, err
 		}
+		if err := s.validateStatusActor(ctx, currentTask, userID, *req.Status); err != nil {
+			return nil, err
+		}
 	}
 
 	// Build dynamic update
@@ -742,6 +746,30 @@ func (s *TaskService) UpdateTask(ctx context.Context, channelID, taskID, userID 
 	)
 
 	return updatedTask, nil
+}
+
+func (s *TaskService) validateStatusActor(ctx context.Context, task *Task, userID, newStatus string) error {
+	isClose := newStatus == TaskStatusClosed
+	isReopen := task.Status == TaskStatusClosed && newStatus != TaskStatusClosed
+	if isClose || isReopen {
+		isAgent, err := s.isAgentActor(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if isAgent {
+			return ErrTaskHumanOnly
+		}
+	}
+	if newStatus == TaskStatusDone && task.CreatorID != userID {
+		return ErrTaskNotCreator
+	}
+	return nil
+}
+
+func (s *TaskService) isAgentActor(ctx context.Context, userID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE id = $1)`, userID).Scan(&exists)
+	return exists, err
 }
 
 // DeleteTask deletes a task.

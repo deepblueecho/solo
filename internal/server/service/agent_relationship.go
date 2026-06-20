@@ -18,11 +18,16 @@ const (
 var ErrRelationshipNotFound = errors.New("relationship not found")
 
 type AgentRelationshipService struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	mdGen *RelationshipsMDGenerator
 }
 
-func NewAgentRelationshipService(pool *pgxpool.Pool) *AgentRelationshipService {
-	return &AgentRelationshipService{pool: pool}
+func NewAgentRelationshipService(pool *pgxpool.Pool, mdGen ...*RelationshipsMDGenerator) *AgentRelationshipService {
+	s := &AgentRelationshipService{pool: pool}
+	if len(mdGen) > 0 {
+		s.mdGen = mdGen[0]
+	}
+	return s
 }
 
 type AgentRelationship struct {
@@ -104,6 +109,7 @@ func (s *AgentRelationshipService) Create(ctx context.Context, userID string, re
 	if err != nil {
 		return nil, err
 	}
+	s.regenerateRelationshipDocs(ctx, rel.FromAgentID, rel.ToAgentID)
 	return &rel, nil
 }
 
@@ -160,10 +166,22 @@ func (s *AgentRelationshipService) Update(ctx context.Context, userID, id string
 	if err != nil {
 		return nil, err
 	}
+	s.regenerateRelationshipDocs(ctx, rel.FromAgentID, rel.ToAgentID)
 	return &rel, nil
 }
 
 func (s *AgentRelationshipService) Delete(ctx context.Context, userID, id string) error {
+	var fromID, toID string
+	_ = s.pool.QueryRow(ctx, `
+		SELECT r.from_agent_id::text, r.to_agent_id::text
+		  FROM agent_relationships r
+		  JOIN agents fa ON fa.id = r.from_agent_id
+		  JOIN agents ta ON ta.id = r.to_agent_id
+		 WHERE r.id = $1
+		   AND fa.owner_id = $2::uuid AND ta.owner_id = $2::uuid
+		   AND fa.is_active = true AND ta.is_active = true
+	`, id, userID).Scan(&fromID, &toID)
+
 	tag, err := s.pool.Exec(ctx, `
 		DELETE FROM agent_relationships r
 		USING agents fa, agents ta
@@ -178,5 +196,17 @@ func (s *AgentRelationshipService) Delete(ctx context.Context, userID, id string
 	if tag.RowsAffected() == 0 {
 		return ErrRelationshipNotFound
 	}
+	s.regenerateRelationshipDocs(ctx, fromID, toID)
 	return nil
+}
+
+func (s *AgentRelationshipService) regenerateRelationshipDocs(ctx context.Context, agentIDs ...string) {
+	if s.mdGen == nil {
+		return
+	}
+	for _, id := range agentIDs {
+		if id != "" {
+			_ = s.mdGen.GenerateForAgent(ctx, id)
+		}
+	}
 }
