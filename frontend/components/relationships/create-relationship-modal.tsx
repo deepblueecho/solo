@@ -9,7 +9,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Loader2 } from 'lucide-react';
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, type SelectOption } from '@/components/ui/select';
 import { apiClient } from '@/lib/api-client';
@@ -112,6 +112,12 @@ export function CreateRelationshipModal({
     !isSubmitting &&
     !cycleWarning;
 
+  const handleSwapAgents = () => {
+    if (!fromAgentId && !toAgentId) return;
+    setFromAgentId(toAgentId);
+    setToAgentId(fromAgentId);
+  };
+
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setIsSubmitting(true);
@@ -144,36 +150,49 @@ export function CreateRelationshipModal({
       </DialogHeader>
 
       <div className="space-y-4">
-        {/* From Agent */}
-        <div>
-          <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">
-            {t('relationshipEditorFrom')}
-          </label>
-          <Select
-            options={fromAgentOptions}
-            value={fromAgentId}
-            onChange={setFromAgentId}
-            placeholder={preselectedFrom ? agents.find((a) => a.id === preselectedFrom)?.name : 'Select agent...'}
-            size="md"
-            className="w-full"
-            disabled={!!preselectedFrom}
-          />
-        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-3">
+          {/* From Agent */}
+          <div>
+            <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">
+              {t('relationshipEditorFrom')}
+            </label>
+            <Select
+              options={fromAgentOptions}
+              value={fromAgentId}
+              onChange={setFromAgentId}
+              placeholder={preselectedFrom ? agents.find((a) => a.id === preselectedFrom)?.name : 'Select agent...'}
+              size="md"
+              className="w-full"
+              disabled={!!preselectedFrom}
+            />
+          </div>
 
-        {/* To Agent */}
-        <div>
-          <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">
-            {t('relationshipEditorTo')}
-          </label>
-          <Select
-            options={agentOptions}
-            value={toAgentId}
-            onChange={setToAgentId}
-            placeholder={preselectedTo ? agents.find((a) => a.id === preselectedTo)?.name : 'Select agent...'}
-            size="md"
-            className="w-full"
-            disabled={!!preselectedTo}
-          />
+          {/* To Agent */}
+          <div>
+            <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">
+              {t('relationshipEditorTo')}
+            </label>
+            <Select
+              options={agentOptions}
+              value={toAgentId}
+              onChange={setToAgentId}
+              placeholder={preselectedTo ? agents.find((a) => a.id === preselectedTo)?.name : 'Select agent...'}
+              size="md"
+              className="w-full"
+              disabled={!!preselectedTo}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSwapAgents}
+            disabled={!fromAgentId && !toAgentId}
+            className="flex h-10 w-10 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-primary-light disabled:opacity-30"
+            aria-label="Swap from and to agents"
+            title="Swap"
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Relationship Type */}

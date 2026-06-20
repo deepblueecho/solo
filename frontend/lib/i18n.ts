@@ -552,8 +552,6 @@ const en = {
   relationshipEditorChannel: 'Channel *',
   relationshipEditorChannelPlaceholder: 'Select channel...',
   relationshipEditorAutoLayout: 'Auto Layout',
-  relationshipEditorExportPNG: 'Export PNG',
-  relationshipEditorExportSVG: 'Export SVG',
   relationshipEditorUndo: 'Undo',
   relationshipEditorRedo: 'Redo',
   relationshipEditorNodeUnconnected: 'Unconnected',

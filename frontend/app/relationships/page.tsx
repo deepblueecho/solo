@@ -23,7 +23,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
-import { Loader2, Plus, Trash2, LayoutGrid, Undo2, Redo2, Download } from 'lucide-react';
+import { Loader2, Plus, Trash2, LayoutGrid, Undo2, Redo2 } from 'lucide-react';
 import { NavBar } from '@/components/ui/navbar';
 import { RelationshipNode } from '@/components/relationships/relationship-node';
 import { RelationshipEdge } from '@/components/relationships/relationship-edge';
@@ -421,20 +421,6 @@ export default function RelationshipsPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [selectedEdge, deleteSelectedEdge, undo, redo]);
 
-  // ---- Export ----
-
-  const exportPNG = useCallback(() => {
-    const svg = document.querySelector('.react-flow__renderer svg') as SVGSVGElement;
-    if (!svg) return;
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svg);
-    const blob = new Blob(['<?xml version="1.0" standalone="no"?>\r\n' + source], { type: 'image/svg+xml' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'relationship-graph.svg';
-    link.click();
-  }, []);
-
   // ---- Auto layout ----
   // Dagre-based layered layout, TB direction.
   // - assigns_to: directional edges that define the rank hierarchy
@@ -599,16 +585,6 @@ export default function RelationshipsPage() {
             {t('relationshipEditorAutoLayout')}
           </button>
 
-          {/* Export */}
-          <button
-            type="button"
-            onClick={exportPNG}
-            className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-white hover:bg-brutal-primary font-heading text-xs font-bold uppercase tracking-wider"
-          >
-            <Download className="h-3.5 w-3.5" />
-            SVG
-          </button>
-
           {/* Delete selected */}
           {selectedEdge && (
             <button
@@ -643,6 +619,7 @@ export default function RelationshipsPage() {
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
             fitView
+            fitViewOptions={{ padding: 0.35, maxZoom: 0.75 }}
             defaultEdgeOptions={{
               type: 'relationship',
             }}
