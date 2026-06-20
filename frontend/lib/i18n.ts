@@ -505,6 +505,8 @@ const en = {
   agentRuntimeModelConfig: 'Model Config',
   agentRuntimeEnvVars: 'Environment Variables',
   agentRuntimeConfig: 'Runtime Config',
+  agentRuntimeNotConfigured: 'Not configured',
+  agentRuntimeDefault: 'Default',
   agentRuntimeNoEnvVars: 'No environment variables configured',
   agentRuntimeSave: 'Save',
   agentRuntimeSaving: 'Saving...',

@@ -1004,7 +1004,7 @@ func TestHandleTaskCreateMissingTitle(t *testing.T) {
 
 func TestHandleMessageSendMissingContent(t *testing.T) {
 	code, _, stderr := captureAndRun(t, func() {
-		handleMessageSend([]string{"-C", "550e8400-e29b-41d4-a716-446655440002"}, "http://localhost", "tok")
+		handleMessageSend([]string{"--target", "#550e8400-e29b-41d4-a716-446655440002"}, "http://localhost", "tok")
 	})
 	if code != 2 {
 		t.Errorf("expected exit 2 for missing -c, got %d", code)
