@@ -45,9 +45,27 @@ func TestBuildSystemPrompt_CRITICALRULES(t *testing.T) {
 func TestBuildSystemPrompt_StartupSequence(t *testing.T) {
 	p := BuildSystemPrompt(AgentConfig{Name: "Bot"}, ChannelContext{TriggerType: TriggerChat}, "", nil)
 	assertHas(t, p, "Startup sequence")
+	assertHas(t, p, "Read RELATIONSHIPS.md")
 	assertHas(t, p, "Read MEMORY.md")
 	assertHas(t, p, "stop and wait")
 	assertHas(t, p, "Complete ALL your work before stopping")
+}
+
+func TestBuildSystemPrompt_RelationshipsBeforeMessaging(t *testing.T) {
+	p := BuildSystemPrompt(
+		AgentConfig{Name: "Bot", WorkspacePath: "/tmp/bot-workspace"},
+		ChannelContext{TriggerType: TriggerChat},
+		"", nil,
+	)
+	assertHas(t, p, "Agent Relationships — CHECK BEFORE ACTING")
+	assertHas(t, p, "cat /tmp/bot-workspace/RELATIONSHIPS.md")
+	assertHas(t, p, "Re-read it before processing any task")
+
+	relationships := strings.Index(p, "## Agent Relationships")
+	messaging := strings.Index(p, "## Messaging")
+	if relationships < 0 || messaging < 0 || relationships > messaging {
+		t.Fatalf("expected relationships section before messaging")
+	}
 }
 
 func TestBuildSystemPrompt_CLICommands(t *testing.T) {
