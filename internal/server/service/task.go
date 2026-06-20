@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
@@ -72,39 +72,42 @@ var (
 	ErrTaskInTerminalState   = errors.New("task is in a terminal state and cannot be claimed")
 	ErrTaskNotClaimable      = errors.New("task status does not allow claiming")
 	ErrTaskNotClaimer        = errors.New("you are not the claimer of this task")
+	ErrTaskNotCreator        = errors.New("you are not the creator of this task")
+	ErrTaskNotSubmittable    = errors.New("task is not ready to submit")
+	ErrTaskNotReviewable     = errors.New("task is not in review")
 )
 
 // Task represents a task in a channel.
 type Task struct {
-	ID             string     `json:"id"`
-	TaskNumber     int        `json:"task_number"`
-	ChannelID      string     `json:"channel_id"`
-	CreatorID      string     `json:"creator_id"`
-	CreatorName    string     `json:"creator_name,omitempty"`
-	Title          string     `json:"title"`
-	Description    string     `json:"description,omitempty"`
-	Status         string     `json:"status"`
-	ClaimerID      string     `json:"claimer_id,omitempty"`
-	ClaimerName    string     `json:"claimer_name,omitempty"`
-	ClaimerDeleted bool       `json:"claimer_deleted"`
-	Priority       string     `json:"priority"`
-	DueDate        *time.Time `json:"due_date,omitempty"`
-	MessageID      string     `json:"message_id,omitempty"`
-	ParentTaskID   *string    `json:"parent_task_id,omitempty"`
-	SubtaskCount   int        `json:"subtask_count,omitempty"`
-	DoneSubtaskCount int      `json:"done_subtask_count,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID               string     `json:"id"`
+	TaskNumber       int        `json:"task_number"`
+	ChannelID        string     `json:"channel_id"`
+	CreatorID        string     `json:"creator_id"`
+	CreatorName      string     `json:"creator_name,omitempty"`
+	Title            string     `json:"title"`
+	Description      string     `json:"description,omitempty"`
+	Status           string     `json:"status"`
+	ClaimerID        string     `json:"claimer_id,omitempty"`
+	ClaimerName      string     `json:"claimer_name,omitempty"`
+	ClaimerDeleted   bool       `json:"claimer_deleted"`
+	Priority         string     `json:"priority"`
+	DueDate          *time.Time `json:"due_date,omitempty"`
+	MessageID        string     `json:"message_id,omitempty"`
+	ParentTaskID     *string    `json:"parent_task_id,omitempty"`
+	SubtaskCount     int        `json:"subtask_count,omitempty"`
+	DoneSubtaskCount int        `json:"done_subtask_count,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // TaskCreateRequest contains the fields needed to create a task.
 type TaskCreateRequest struct {
-	Title         string     `json:"title"`
-	Description   string     `json:"description,omitempty"`
-	Priority      string     `json:"priority,omitempty"`
-	DueDate       *time.Time `json:"due_date,omitempty"`
-	MessageID     string     `json:"message_id,omitempty"`
-	ParentTaskID  string     `json:"parent_task_id,omitempty"`
+	Title        string     `json:"title"`
+	Description  string     `json:"description,omitempty"`
+	Priority     string     `json:"priority,omitempty"`
+	DueDate      *time.Time `json:"due_date,omitempty"`
+	MessageID    string     `json:"message_id,omitempty"`
+	ParentTaskID string     `json:"parent_task_id,omitempty"`
 }
 
 // TaskUpdateRequest contains the fields that can be updated on a task.
@@ -415,6 +418,65 @@ func (s *TaskService) UnclaimTask(ctx context.Context, channelID, taskID, userID
 	)
 
 	return refetched, nil
+}
+
+func (s *TaskService) SubmitTask(ctx context.Context, channelID, taskID, userID string) (*Task, error) {
+	task, err := s.GetTask(ctx, channelID, taskID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if task.ClaimerID != userID {
+		return nil, ErrTaskNotClaimer
+	}
+	if task.Status != TaskStatusInProgress {
+		return nil, ErrTaskNotSubmittable
+	}
+	return s.setTaskStatus(ctx, channelID, taskID, userID, TaskStatusInReview)
+}
+
+func (s *TaskService) AcceptTask(ctx context.Context, channelID, taskID, userID string) (*Task, error) {
+	task, err := s.GetTask(ctx, channelID, taskID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if task.CreatorID != userID {
+		return nil, ErrTaskNotCreator
+	}
+	if task.Status != TaskStatusInReview {
+		return nil, ErrTaskNotReviewable
+	}
+	return s.setTaskStatus(ctx, channelID, taskID, userID, TaskStatusDone)
+}
+
+func (s *TaskService) RejectTask(ctx context.Context, channelID, taskID, userID string) (*Task, error) {
+	task, err := s.GetTask(ctx, channelID, taskID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if task.CreatorID != userID {
+		return nil, ErrTaskNotCreator
+	}
+	if task.Status != TaskStatusInReview {
+		return nil, ErrTaskNotReviewable
+	}
+	return s.setTaskStatus(ctx, channelID, taskID, userID, TaskStatusInProgress)
+}
+
+func (s *TaskService) setTaskStatus(ctx context.Context, channelID, taskID, userID, status string) (*Task, error) {
+	if err := s.requireChannelMember(ctx, channelID, userID); err != nil {
+		return nil, err
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2 AND channel_id = $3`,
+		status, taskID, channelID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrTaskNotFound
+	}
+	return s.GetTask(ctx, channelID, taskID, userID)
 }
 
 // ConvertMessageToTask creates a task from an existing message (asTask).
@@ -918,4 +980,3 @@ func truncateForTitle(s string, maxLen int) string {
 	}
 	return string(runes[:maxLen]) + "..."
 }
-

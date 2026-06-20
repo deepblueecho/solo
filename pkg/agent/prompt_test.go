@@ -39,7 +39,7 @@ func TestBuildSystemPrompt_CRITICALRULES(t *testing.T) {
 	assertHas(t, p, "CRITICAL RULES")
 	assertHas(t, p, "only output channel")
 	assertHas(t, p, "Do not combine multiple")
-	assertHas(t, p, "move on to a different task")
+	assertHas(t, p, "If you are coordinating others")
 }
 
 func TestBuildSystemPrompt_StartupSequence(t *testing.T) {
@@ -55,7 +55,9 @@ func TestBuildSystemPrompt_CLICommands(t *testing.T) {
 	assertHas(t, p, "Communication — solo CLI ONLY")
 	assertHas(t, p, "solo task list")
 	assertHas(t, p, "solo task claim")
-	assertHas(t, p, "solo task update")
+	assertHas(t, p, "solo task submit")
+	assertHas(t, p, "solo task accept")
+	assertHas(t, p, "solo task reject")
 	assertHas(t, p, "solo task create")
 	assertHas(t, p, "solo task unclaim")
 	assertHas(t, p, "solo message send")
@@ -146,10 +148,11 @@ func TestBuildSystemPrompt_TaskWorkflow(t *testing.T) {
 		"", nil,
 	)
 	assertHas(t, p, "Decision rule")
-	assertHas(t, p, "Status flow")
+	assertHas(t, p, "Lifecycle")
 	assertHas(t, p, "in_progress")
 	assertHas(t, p, "in_review")
 	assertHas(t, p, "done")
+	assertHas(t, p, "solo task submit")
 	assertHas(t, p, "solo task create")
 }
 

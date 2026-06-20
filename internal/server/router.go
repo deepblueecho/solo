@@ -160,6 +160,9 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 						// Claim / Unclaim (Phase 1)
 						r.Post("/claim", taskHandler.Claim)
 						r.Delete("/claim", taskHandler.Unclaim)
+						r.Post("/submit", taskHandler.Submit)
+						r.Post("/accept", taskHandler.Accept)
+						r.Post("/reject", taskHandler.Reject)
 					})
 				})
 
