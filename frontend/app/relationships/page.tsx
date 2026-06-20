@@ -619,7 +619,7 @@ export default function RelationshipsPage() {
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
             fitView
-            fitViewOptions={{ padding: 0.35, maxZoom: 0.75 }}
+            fitViewOptions={{ padding: 0.25, maxZoom: 0.85 }}
             defaultEdgeOptions={{
               type: 'relationship',
             }}
