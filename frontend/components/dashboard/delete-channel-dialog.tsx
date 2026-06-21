@@ -7,9 +7,11 @@
 import { useState } from 'react';
 import {
   Dialog,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogCloseButton,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { t } from '@/lib/i18n';
@@ -41,7 +43,10 @@ export function DeleteChannelDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTitle>Delete Channel</DialogTitle>
+      <DialogHeader>
+        <DialogTitle>Delete Channel</DialogTitle>
+        <DialogCloseButton onClick={() => onOpenChange(false)} />
+      </DialogHeader>
       <DialogDescription>
         Are you sure you want to delete <strong>#{channelName}</strong>? All messages in the channel will be permanently removed.
       </DialogDescription>
@@ -57,7 +62,7 @@ export function DeleteChannelDialog({
         </Button>
         <Button
           type="button"
-          variant="destructive"
+          variant="danger"
           onClick={handleDelete}
           disabled={isDeleting}
         >

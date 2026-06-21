@@ -642,6 +642,19 @@
   outline: none;
 }
 
+.focus-brutal-compact:focus,
+.focus-brutal-compact:focus-visible {
+  background: var(--color-brutal-primary-light);
+  box-shadow: 5px 5px 0 0 var(--color-brutal-shadow);
+  outline: none !important;
+}
+
+.focus-brutal-plain:focus,
+.focus-brutal-plain:focus-visible {
+  box-shadow: none;
+  outline: none !important;
+}
+
 /* ============================================================
    Selection Styling
    ============================================================ */

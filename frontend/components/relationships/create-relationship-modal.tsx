@@ -13,6 +13,7 @@ import { AlertTriangle, ArrowLeftRight, Loader2 } from 'lucide-react';
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, type SelectOption } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { apiClient } from '@/lib/api-client';
 import { t } from '@/lib/i18n';
 import type { RelationshipType, Agent } from '@/lib/types';
@@ -237,14 +238,14 @@ export function CreateRelationshipModal({
           <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">
             {relType === 'assigns_to' ? 'Delegation Criteria' : 'Collaboration Criteria'}
           </label>
-          <textarea
+          <Textarea
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             placeholder={relType === 'assigns_to'
               ? `Delegate coding tasks with: clear requirement description, acceptance criteria, relevant file paths, existing patterns to follow.\n\nReport back with: implementation status, files changed, acceptance criteria checklist (pass/fail each), test results, and self-review concerns.`
               : `Coordinate on: API contract sync, shared component design, integration testing.\n\nKeep in sync: interface definitions, breaking changes, deployment order.`
             }
-            className="w-full min-h-[100px] px-3 py-2 border-2 border-black font-mono text-xs resize-y bg-white"
+            className="min-h-[100px] font-mono text-xs resize-y"
             rows={4}
           />
           <p className="mt-1 font-mono text-[10px] text-muted-foreground">

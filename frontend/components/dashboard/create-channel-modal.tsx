@@ -11,6 +11,7 @@ import { z } from 'zod';
 import {
   Dialog,
   DialogCloseButton,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
@@ -76,10 +77,10 @@ export function CreateChannelModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <div className="flex items-center justify-between">
+      <DialogHeader>
         <DialogTitle>Create Channel</DialogTitle>
         <DialogCloseButton onClick={() => handleOpenChange(false)} />
-      </div>
+      </DialogHeader>
       <DialogDescription>
         Channels are collaboration spaces around specific topics. Use a suitable name like general, random, or project-alpha.
       </DialogDescription>

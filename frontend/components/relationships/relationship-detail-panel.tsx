@@ -11,10 +11,18 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Trash2, Edit3, Check, AlertTriangle, MessageSquare } from 'lucide-react';
+import { X, Trash2, Edit3, Check, MessageSquare } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { Button, iconActionClass } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogCloseButton,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   detailEditActionClass,
   detailFieldLabelClass,
@@ -389,7 +397,7 @@ export function RelationshipDetailPanel({
                   ? 'Delegate coding tasks with: clear requirement description...\n\nReport back with: implementation status, files changed...'
                   : 'Coordinate on: API contract sync, shared component design...\n\nKeep in sync: interface definitions, breaking changes...'
                 }
-                className="w-full min-h-[80px] px-3 py-2 border-2 border-black font-mono text-xs resize-y bg-white"
+                className="input-brutal min-h-[80px] w-full resize-y px-3 py-2 font-mono text-xs"
                 rows={4}
               />
               <div className="flex items-center gap-2">
@@ -541,48 +549,44 @@ export function RelationshipDetailPanel({
 
       {/* Delete action */}
       <div className="border-t-2 border-black p-4 bg-brutal-cream">
-        {!showDeleteConfirm ? (
+        <Button
+          type="button"
+          onClick={() => setShowDeleteConfirm(true)}
+          variant="danger"
+          className="w-full justify-center"
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          {t('relationshipEditorDelete')}
+        </Button>
+      </div>
+
+      <Dialog open={showDeleteConfirm} onOpenChange={(open) => !isDeleting && setShowDeleteConfirm(open)}>
+        <DialogHeader>
+          <DialogTitle>{t('relationshipEditorDelete')}</DialogTitle>
+          <DialogCloseButton onClick={() => setShowDeleteConfirm(false)} />
+        </DialogHeader>
+        <DialogDescription>
+          {t('relationshipEditorDeleteConfirm')}
+        </DialogDescription>
+        <DialogFooter>
           <Button
             type="button"
-            onClick={() => setShowDeleteConfirm(true)}
-            variant="danger"
-            className="w-full justify-center"
+            onClick={() => setShowDeleteConfirm(false)}
+            disabled={isDeleting}
+            variant="outline"
           >
-            <Trash2 className="mr-2 h-4 w-4" />
-            {t('relationshipEditorDelete')}
+            {t('cancel')}
           </Button>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex items-start gap-2 px-3 py-2 border-2 border-brutal-danger bg-brutal-danger-light">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-brutal-danger" />
-              <p className="font-heading text-[10px] font-bold uppercase tracking-wider text-brutal-danger">
-                {t('relationshipEditorDeleteConfirm')}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                variant="danger"
-                size="sm"
-                className="flex-1 text-[10px] uppercase tracking-wider"
-              >
-                {isDeleting ? t('deleting') : t('confirm')}
-              </Button>
-              <Button
-                type="button"
-                onClick={() => setShowDeleteConfirm(false)}
-                variant="outline"
-                size="sm"
-                className="flex-1 text-[10px] uppercase tracking-wider"
-              >
-                {t('cancel')}
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
+          <Button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            variant="danger"
+          >
+            {isDeleting ? t('deleting') : t('confirm')}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }

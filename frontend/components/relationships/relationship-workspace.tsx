@@ -856,14 +856,16 @@ export function RelationshipWorkspace({
                             </div>
                             <p className="font-sans text-xs text-muted-foreground mt-0.5">{tmpl.description}</p>
                           </div>
-                          <button
+                          <Button
                             type="button"
                             onClick={() => handleApplyTemplate(tmpl.id)}
                             disabled={applyingTemplate === tmpl.id}
-                            className="flex-shrink-0 px-3 py-1.5 border-2 border-black bg-brutal-success text-black font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-success-light disabled:opacity-50"
+                            variant="success"
+                            size="sm"
+                            className="flex-shrink-0"
                           >
                             {applyingTemplate === tmpl.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
-                          </button>
+                          </Button>
                         </div>
                       ))}
                     </div>

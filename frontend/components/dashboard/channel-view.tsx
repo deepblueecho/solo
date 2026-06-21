@@ -17,7 +17,7 @@ import { MemberList } from './member-list';
 import { AddAgentModal } from './add-agent-modal';
 import { ChannelSearch } from './channel-search';
 import { TaskBoard } from '@/components/tasks/task-board';
-import { Button, iconActionClass } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { tabButtonClass } from '@/components/ui/tab-bar';
 import {
   Dialog,
@@ -583,16 +583,19 @@ export function ChannelView({
             </div>
           </DialogTitle>
           <div className="flex items-center gap-1">
-            <button
+            <Button
+              type="button"
               onClick={() => {
                 setIsMemberPopoverOpen(false);
                 setIsAddAgentModalOpen(true);
               }}
-              className={iconActionClass('shadow-brutal-sm')}
+              variant="primary"
+              size="icon"
+              className="h-7 w-7"
               aria-label={t('addAgentToChannel')}
             >
               <Plus className="h-3.5 w-3.5" />
-            </button>
+            </Button>
             <DialogCloseButton onClick={() => setIsMemberPopoverOpen(false)} />
           </div>
         </DialogHeader>

@@ -535,20 +535,22 @@ function DeleteConfirmDialog({
         {t('deleteMessageConfirm', { name: messageAuthor })}
       </DialogDescription>
       <DialogFooter>
-        <button
+        <Button
           type="button"
           onClick={() => onOpenChange(false)}
-          className="btn-brutal btn-brutal-sm"
+          variant="outline"
+          size="sm"
         >
           {t('cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={onConfirm}
-          className="btn-brutal btn-brutal-sm bg-brutal-danger text-white"
+          variant="danger"
+          size="sm"
         >
           {t('delete')}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

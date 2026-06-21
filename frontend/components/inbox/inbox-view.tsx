@@ -141,7 +141,7 @@ export function InboxView() {
             placeholder={t('filterSender')}
             value={senderFilter}
             onChange={(e) => setSenderFilter(e.target.value)}
-            className="ml-auto h-7 w-36 text-xs border-2 border-black bg-white px-2 font-body shadow-brutal-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brutal-info"
+            className="focus-brutal-compact ml-auto h-7 w-36 border-2 border-black bg-white px-2 py-1 font-body text-xs shadow-brutal-sm outline-none transition-shadow placeholder:text-muted-foreground"
           />
         </TabBar>
 
