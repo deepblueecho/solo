@@ -6,6 +6,7 @@ import { Loader2, InboxIcon, Mail } from 'lucide-react';
 import { useInbox } from '@/lib/hooks/use-inbox';
 import { useInboxUnread } from '@/lib/hooks/use-inbox-unread';
 import { InboxItem } from './inbox-item';
+import { Button } from '@/components/ui/button';
 import { TabBar } from '@/components/ui/tab-bar';
 import type { TabBarTab } from '@/components/ui/tab-bar';
 import type { InboxItem as InboxItemType, Message } from '@/lib/types';
@@ -106,20 +107,24 @@ export function InboxView() {
           </div>
           {items.length > 0 && (
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
                 onClick={handleMarkAllRead}
-                className="border-2 border-black bg-white px-3 py-1 text-xs font-heading font-bold shadow-brutal-sm hover:bg-brutal-cream active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+                variant="outline"
+                size="sm"
+                className="px-3 text-xs"
               >
                 {t('markAllRead')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={handleClearAll}
-                className="border-2 border-black bg-brutal-primary px-3 py-1 text-xs font-heading font-bold text-black shadow-brutal-sm hover:-translate-y-px hover:shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+                variant="primary"
+                size="sm"
+                className="px-3 text-xs"
               >
                 {t('clearInbox')}
-              </button>
+              </Button>
             </div>
           )}
         </div>

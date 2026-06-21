@@ -25,6 +25,7 @@ const channelList = read('components/dashboard/channel-list.tsx');
 const dmList = read('components/dashboard/dm-list.tsx');
 const channelView = read('components/dashboard/channel-view.tsx');
 const dmView = read('components/dashboard/dm-view.tsx');
+const inboxView = read('components/inbox/inbox-view.tsx');
 const tasksLeftColumn = read('components/tasks/tasks-left-column.tsx');
 const createTaskModal = read('components/tasks/create-task-modal.tsx');
 const createRelationshipModal = read('components/relationships/create-relationship-modal.tsx');
@@ -203,6 +204,14 @@ assert(
     channelView.includes('tabButtonClass') &&
     dmView.includes('tabButtonClass'),
   'Dashboard message/task tabs should share the same tab-button primitive',
+);
+assert(
+  inboxView.includes("import { Button } from '@/components/ui/button'") &&
+    inboxView.includes('variant="outline"') &&
+    inboxView.includes('variant="primary"') &&
+    !inboxView.includes('className="border-2 border-black bg-white px-3 py-1 text-xs font-heading font-bold shadow-brutal-sm hover:bg-brutal-cream active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"') &&
+    !inboxView.includes('className="border-2 border-black bg-brutal-primary px-3 py-1 text-xs font-heading font-bold text-black shadow-brutal-sm hover:-translate-y-px hover:shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"'),
+  'Inbox header actions should use shared brutal Button primitives',
 );
 assert(
   !exists('components/agents/agent-detail-panel.tsx') &&
