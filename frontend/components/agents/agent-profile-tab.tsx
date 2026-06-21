@@ -16,7 +16,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { Decoration } from '@/components/ui/decoration';
-import { BrutalSeparator } from '@/components/ui/brutal-separator';
 import { useComputers } from '@/lib/hooks/use-computers';
 import { useComputerForAgent } from '@/lib/hooks/use-computer-for-agent';
 import { cn } from '@/lib/utils';
@@ -69,9 +68,9 @@ function InlineTextField({
   if (editing) {
     return (
       <div className="space-y-1.5">
-        <span className="font-heading text-xs font-bold text-muted-foreground uppercase tracking-wider">
+        <div className="font-heading text-xs font-bold text-muted-foreground uppercase tracking-wider">
           {label}
-        </span>
+        </div>
         {multiline ? (
           <textarea
             value={draft}
@@ -94,17 +93,17 @@ function InlineTextField({
             type="button"
             onClick={handleSave}
             disabled={saving || draft === value}
-            className="btn-brutal btn-brutal-sm h-7 px-2 text-xs"
+            className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-brutal-success text-black font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-success-light disabled:opacity-50"
           >
-            {saving ? '...' : <><Check className="mr-1 h-3 w-3" />{t('save')}</>}
+            {saving ? t('saving') : <><Check className="h-3 w-3" />{t('save')}</>}
           </button>
           <button
             type="button"
             onClick={handleCancel}
             disabled={saving}
-            className="btn-flat h-7 text-xs"
+            className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-muted-light"
           >
-            <X className="mr-1 h-3 w-3" />
+            <X className="h-3 w-3" />
             {t('cancel')}
           </button>
         </div>
@@ -114,12 +113,9 @@ function InlineTextField({
 
   return (
     <div className="space-y-1">
-      <span className="inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black">
-        {label}
-      </span>
-      <div className="flex items-center gap-2 group">
-        <span className="font-body text-sm text-foreground min-w-0 flex-1">
-          {value || <span className="italic text-muted-foreground">{placeholder || t('agentProfileNotSet')}</span>}
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black">
+          {label}
         </span>
         <button
           type="button"
@@ -127,11 +123,17 @@ function InlineTextField({
             setDraft(value);
             setEditing(true);
           }}
-          className="flex h-6 w-6 items-center justify-center opacity-0 group-hover:opacity-100 border-2 border-black bg-white shadow-brutal-sm transition-opacity"
+          className="flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-black"
           aria-label={t('agentProfileEdit', { label })}
         >
           <Pencil className="h-3 w-3" />
+          {t('edit')}
         </button>
+      </div>
+      <div className="flex items-center gap-2 group">
+        <span className="font-body text-sm text-foreground min-w-0 flex-1">
+          {value || <span className="italic text-muted-foreground">{placeholder || t('agentProfileNotSet')}</span>}
+        </span>
       </div>
     </div>
   );
@@ -334,22 +336,21 @@ export function AgentProfileTab({ agentId, showHeader = true }: AgentProfileTabP
             />
           </div>
 
-          <BrutalSeparator />
         </>
       )}
 
       {/* Status toggle */}
-      <StatusToggle
-        active={agent.is_active}
-        onToggle={(active) => handleUpdate('is_active', active)}
-      />
-
-      <BrutalSeparator />
+      <div className="border-2 border-black bg-white p-3">
+        <StatusToggle
+          active={agent.is_active}
+          onToggle={(active) => handleUpdate('is_active', active)}
+        />
+      </div>
 
       {/* v3.3: Name field removed (the avatar/header above already
           shows the name). Description + System Prompt are grouped under
           a single `★ INFO` tilted sticker section. */}
-      <div className="space-y-2">
+      <div className="space-y-3 border-2 border-black bg-white p-3">
         <h4>
           <span
             className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm"
@@ -377,12 +378,10 @@ export function AgentProfileTab({ agentId, showHeader = true }: AgentProfileTabP
         </div>
       </div>
 
-      <BrutalSeparator />
-
       {/* Read-only metadata — v3.3: bare layout (no card-brutal wrapper)
           to match the chunky-sticker-title + naked-fields style of the
           Computers detail. Section header is a tilted primary chip. */}
-      <div className="space-y-2">
+      <div className="space-y-3 border-2 border-black bg-white p-3">
         <h4>
           <span
             className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm"

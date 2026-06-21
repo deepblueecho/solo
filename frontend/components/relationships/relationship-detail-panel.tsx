@@ -13,6 +13,7 @@ import { useState, useCallback } from 'react';
 import { X, Trash2, Edit3, Check, AlertTriangle } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
+import { Button } from '@/components/ui/button';
 import { TeamsAgentProfile } from '@/components/teams/teams-agent-profile';
 import { TeamsAgentWorkspace } from '@/components/teams/teams-agent-workspace';
 import { apiClient, ApiError } from '@/lib/api-client';
@@ -201,7 +202,7 @@ export function RelationshipDetailPanel({
           </button>
         </div>
 
-        <div className={agentTab === 'profile' ? 'flex-1 overflow-y-auto p-4' : 'flex-1 overflow-hidden'}>
+        <div className="flex-1 overflow-hidden">
           {agentTab === 'profile' ? (
             <TeamsAgentProfile
               agentId={agent.id}
@@ -265,8 +266,7 @@ export function RelationshipDetailPanel({
 
       <div className="border-b-2 border-black bg-white px-4 py-3">
         <div
-          className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 border-2 border-black font-heading text-xs font-black uppercase tracking-wider"
-          style={{ backgroundColor: colors.bg }}
+          className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 border-2 border-black bg-brutal-primary font-heading text-xs font-black uppercase tracking-wider shadow-brutal-sm"
         >
           <svg width="16" height="8">
             <line x1="0" y1="4" x2="16" y2="4"
@@ -322,8 +322,8 @@ export function RelationshipDetailPanel({
         {/* Instruction */}
         <div className="p-3 border-2 border-black bg-white">
           <div className="flex items-center justify-between mb-2">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              {relationship.rel_type === 'assigns_to' ? 'Delegation Criteria' : 'Collaboration Criteria'}
+            <div className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm">
+              ★ {relationship.rel_type === 'assigns_to' ? 'Delegation Criteria' : 'Collaboration Criteria'}
             </div>
             {!isEditingInstruction ? (
               <button
@@ -375,7 +375,7 @@ export function RelationshipDetailPanel({
               </div>
             </div>
           ) : (
-            <div className="font-mono text-[11px] text-black whitespace-pre-wrap leading-relaxed">
+            <div className="font-body text-sm text-black whitespace-pre-wrap leading-relaxed">
               {relationship.instruction || (
                 <span className="text-muted-foreground italic">
                   {relationship.rel_type === 'assigns_to'
@@ -390,8 +390,8 @@ export function RelationshipDetailPanel({
         {/* Type edit (in-place) */}
         <div className="p-3 border-2 border-black bg-white">
           <div className="flex items-center justify-between mb-2">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              {t('relationshipEditorType')}
+            <div className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm">
+              ★ {t('relationshipEditorType')}
             </div>
             {!isEditing ? (
               <button
@@ -440,7 +440,7 @@ export function RelationshipDetailPanel({
               </div>
             </div>
           ) : (
-            <div className="font-mono text-xs font-bold text-black">
+            <div className="font-mono text-xs text-black">
               {relationship.rel_type.replace(/_/g, ' ')}
             </div>
           )}
@@ -449,7 +449,7 @@ export function RelationshipDetailPanel({
         {/* Channel info */}
         {relationship.channel_id && (
           <div className="p-3 border-2 border-black bg-brutal-cream">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+            <div className="mb-2 inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black">
               Channel
             </div>
             <div className="font-mono text-xs text-black">
@@ -463,8 +463,8 @@ export function RelationshipDetailPanel({
         {/* Weight */}
         {relationship.weight !== undefined && relationship.weight !== null && (
           <div className="p-3 border-2 border-black bg-brutal-cream">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-              Weight
+            <div className="mb-2 inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm">
+              ★ Weight
             </div>
             <div className="font-mono text-xs text-black">{relationship.weight}</div>
           </div>
@@ -473,10 +473,10 @@ export function RelationshipDetailPanel({
         {/* Created at */}
         {relationship.created_at && (
           <div className="p-3 border-2 border-black bg-brutal-cream">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-              Created
+            <div className="mb-2 inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm">
+              ★ Created
             </div>
-            <div className="font-mono text-[10px] text-black">
+            <div className="font-mono text-xs text-black">
               {new Date(relationship.created_at).toLocaleString()}
             </div>
           </div>
@@ -491,14 +491,15 @@ export function RelationshipDetailPanel({
       {/* Delete action */}
       <div className="border-t-2 border-black p-4 bg-brutal-cream">
         {!showDeleteConfirm ? (
-          <button
+          <Button
             type="button"
             onClick={() => setShowDeleteConfirm(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-brutal-danger bg-white text-brutal-danger font-heading text-xs font-bold uppercase tracking-wider hover:bg-brutal-danger-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all shadow-brutal-sm"
+            variant="danger"
+            className="w-full justify-center"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="mr-2 h-4 w-4" />
             {t('relationshipEditorDelete')}
-          </button>
+          </Button>
         ) : (
           <div className="space-y-2">
             <div className="flex items-start gap-2 px-3 py-2 border-2 border-brutal-danger bg-brutal-danger-light">

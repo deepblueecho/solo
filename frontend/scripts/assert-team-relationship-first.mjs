@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const exists = (path) => existsSync(new URL(`../${path}`, import.meta.url));
 const assert = (condition, message) => {
   if (!condition) {
     throw new Error(message);
@@ -8,13 +9,20 @@ const assert = (condition, message) => {
 };
 
 const teamsPage = read('app/teams/page.tsx');
-const relationshipsPage = read('app/relationships/page.tsx');
+const relationshipWorkspace = read('components/relationships/relationship-workspace.tsx');
 const detailPanel = read('components/relationships/relationship-detail-panel.tsx');
 const teamsAgentProfile = read('components/teams/teams-agent-profile.tsx');
+const agentProfileTab = read('components/agents/agent-profile-tab.tsx');
+const relationshipEdge = read('components/relationships/relationship-edge.tsx');
+const relationshipNode = read('components/relationships/relationship-node.tsx');
 
 assert(
-  relationshipsPage.includes('export function RelationshipWorkspace'),
-  'relationships page should expose a reusable RelationshipWorkspace component',
+  !exists('app/relationships/page.tsx'),
+  'standalone /relationships route should be removed',
+);
+assert(
+  relationshipWorkspace.includes('export function RelationshipWorkspace'),
+  'relationship workspace should live as a reusable Teams component',
 );
 assert(
   teamsPage.includes('<RelationshipWorkspace') && !teamsPage.includes('TeamsLeftColumn'),
@@ -25,11 +33,11 @@ assert(
   'agent node detail should reuse the existing Teams profile/workspace components',
 );
 assert(
-  relationshipsPage.includes('AgentForm') && relationshipsPage.includes('Create from Template'),
+  relationshipWorkspace.includes('AgentForm') && relationshipWorkspace.includes('Create from Template'),
   'relationship workspace should preserve single-agent and template creation',
 );
 assert(
-  !relationshipsPage.includes('+ Agent'),
+  !relationshipWorkspace.includes('+ Agent'),
   'toolbar should not show a duplicate plus in the Agent button label',
 );
 assert(
@@ -49,8 +57,32 @@ assert(
   'embedded agent profile should delete in-place without redirecting away from the relationship graph',
 );
 assert(
-  relationshipsPage.includes('onAgentDeleted={handleAgentDeleted}'),
+  relationshipWorkspace.includes('onAgentDeleted={handleAgentDeleted}'),
   'relationship graph should refresh agents after deleting one from the embedded profile',
+);
+assert(
+  teamsAgentProfile.includes('flex h-full flex-col') && teamsAgentProfile.includes('border-t-2 border-black p-4 bg-brutal-cream'),
+  'agent delete action should be fixed in a bottom footer instead of hidden at the end of the scroll content',
+);
+assert(
+  !teamsAgentProfile.includes('BrutalSeparator') && !agentProfileTab.includes('<BrutalSeparator'),
+  'agent detail should use boxed sections instead of long separator lines',
+);
+assert(
+  relationshipWorkspace.includes('selected: e.id === edge.id') && relationshipEdge.includes('selected ? 4'),
+  'relationship edges should show a visible selected state after click',
+);
+assert(
+  relationshipEdge.includes("cursor: 'pointer'") && relationshipEdge.includes('hover:-translate-y-0.5'),
+  'relationship edges should use the same pointer and press feedback as agent nodes',
+);
+assert(
+  !relationshipWorkspace.includes('relationshipEditorDeleteEdge'),
+  'toolbar should not show a duplicate delete relationship action',
+);
+assert(
+  relationshipNode.includes('selected ?') && relationshipNode.includes('bg-brutal-primary'),
+  'agent nodes should show a visible selected state after click',
 );
 
 console.log('team relationship-first source checks passed');

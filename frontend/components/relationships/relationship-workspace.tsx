@@ -1,5 +1,5 @@
 // ============================================================================
-// Relationships Editor Page (Step 5)
+// RelationshipWorkspace — graph editor embedded in Teams
 // - ReactFlow-based drag-and-drop relationship graph
 // - Create/delete relationships by connecting agent nodes
 // - 4 edge types with distinct visuals
@@ -23,7 +23,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
-import { Loader2, Plus, Trash2, LayoutGrid, Undo2, Redo2, Layers } from 'lucide-react';
+import { Loader2, Plus, LayoutGrid, Undo2, Redo2, Layers } from 'lucide-react';
 import { NavBar } from '@/components/ui/navbar';
 import { Select } from '@/components/ui/select';
 import { RelationshipNode } from '@/components/relationships/relationship-node';
@@ -58,7 +58,7 @@ interface UndoEntry {
   edges: Edge[];
 }
 
-// ---- Page ----
+// ---- Component ----
 
 interface RelationshipWorkspaceProps {
   title?: string;
@@ -430,6 +430,7 @@ export function RelationshipWorkspace({
 
   const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
     setSelectedEdge(edge);
+    setEdges((prev) => prev.map((e) => ({ ...e, selected: e.id === edge.id })));
     const rel = edgeToRelationshipMap.current.get(edge.id);
     if (rel) {
       const fromInfo = agentNameMap.get(rel.from_agent_id);
@@ -443,22 +444,24 @@ export function RelationshipWorkspace({
       });
       setDetailAgent(null);
     }
-  }, [agentNameMap]);
+  }, [agentNameMap, setEdges]);
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedEdge(null);
+    setEdges((prev) => prev.map((e) => ({ ...e, selected: false })));
     const agent = agents.find((a) => a.id === node.id);
     if (agent) {
       setDetailAgent(agent);
       setDetailRel(null);
     }
-  }, [agents]);
+  }, [agents, setEdges]);
 
   const closeDetailPanel = useCallback(() => {
     setDetailRel(null);
     setDetailAgent(null);
     setSelectedEdge(null);
-  }, []);
+    setEdges((prev) => prev.map((e) => ({ ...e, selected: false })));
+  }, [setEdges]);
 
   const handleDetailUpdate = useCallback(() => {
     loadData();
@@ -485,6 +488,7 @@ export function RelationshipWorkspace({
       console.error('Failed to delete relationship:', err);
     }
     setSelectedEdge(null);
+    setEdges((prev) => prev.map((e) => ({ ...e, selected: false })));
     setDetailRel(null);
   }, [selectedEdge, pushUndo, setEdges]);
 
@@ -503,12 +507,13 @@ export function RelationshipWorkspace({
       }
       if (e.key === 'Escape') {
         setSelectedEdge(null);
+        setEdges((prev) => prev.map((edge) => ({ ...edge, selected: false })));
         setShowCreateModal(false);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedEdge, deleteSelectedEdge, undo, redo]);
+  }, [selectedEdge, deleteSelectedEdge, undo, redo, setEdges]);
 
   // ---- Auto layout ----
   // Dagre-based layered layout, TB direction.
@@ -681,18 +686,6 @@ export function RelationshipWorkspace({
             <Plus className="h-3.5 w-3.5" />
             Agent
           </button>
-
-          {/* Delete selected */}
-          {selectedEdge && (
-            <button
-              type="button"
-              onClick={deleteSelectedEdge}
-              className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-brutal-danger text-white font-heading text-xs font-bold uppercase tracking-wider hover:bg-red-600"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {t('relationshipEditorDeleteEdge')}
-            </button>
-          )}
         </div>
 
         {/* Graph */}
@@ -916,8 +909,4 @@ export function RelationshipWorkspace({
       </div>
     </div>
   );
-}
-
-export default function RelationshipsPage() {
-  return <RelationshipWorkspace />;
 }

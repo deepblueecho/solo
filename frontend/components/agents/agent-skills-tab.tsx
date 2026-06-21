@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AlertCircle, Puzzle, Globe, Folder } from 'lucide-react';
+import { AlertCircle, Puzzle, Globe, Folder, ChevronDown } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { apiClient, ApiError } from '@/lib/api-client';
@@ -69,6 +69,7 @@ export function AgentSkillsTab({ agentId }: AgentSkillsTabProps) {
   const [workspacePaths, setWorkspacePaths] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   const load = async () => {
     setIsLoading(true);
@@ -128,7 +129,11 @@ export function AgentSkillsTab({ agentId }: AgentSkillsTabProps) {
     <div className="space-y-4">
       {/* v3.3: section tag uses a violet chip to match the Profile
           field tag style and add a third color to the panel. */}
-      <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
         <span
           className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm"
           style={{ transform: 'rotate(-0.8deg)' }}
@@ -139,9 +144,10 @@ export function AgentSkillsTab({ agentId }: AgentSkillsTabProps) {
             {skills.length}
           </span>
         </span>
-      </div>
+        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
 
-      {skills.length === 0 ? (
+      {!isOpen ? null : skills.length === 0 ? (
         <div className="card-brutal bg-brutal-cream p-6 text-center">
           <p className="font-mono text-sm text-foreground">{t('agentSkillEmpty')}</p>
           <p className="mt-2 font-mono text-[11px] text-muted-foreground">
