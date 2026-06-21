@@ -33,7 +33,7 @@ assert(
   'toolbar should not show a duplicate plus in the Agent button label',
 );
 assert(
-  detailPanel.includes('agentPanelWidth') && detailPanel.includes('cursor-col-resize'),
+  detailPanel.includes('panelWidth') && detailPanel.includes('cursor-col-resize'),
   'agent detail panel should be resizable like the channel thread panel',
 );
 assert(
