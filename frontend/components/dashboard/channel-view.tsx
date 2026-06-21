@@ -423,15 +423,17 @@ export function ChannelView({
                 }}
               />
             )}
-            <button
+            <Button
               type="button"
               onClick={() => setIsMemberPopoverOpen(true)}
-              className="flex h-8 w-8 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-cream transition-colors"
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
               aria-label={t('channelMembers')}
               title={t('channelMembers')}
             >
               <Users className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         </div>
 

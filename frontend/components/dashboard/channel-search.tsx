@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, X, Hash } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
 import { t } from '@/lib/i18n';
 import type { SearchResult, SearchResponse } from '@/lib/types';
@@ -143,15 +144,17 @@ export function ChannelSearch({ channelId, channelName, onResultClick }: Channel
     <div ref={containerRef} className="relative flex items-center">
       {/* Search trigger button */}
       {!open ? (
-        <button
+        <Button
           type="button"
           onClick={handleOpen}
-          className="flex h-8 w-8 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-cream transition-colors"
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
           aria-label={t('channelSearch', { channel: channelName })}
           title={t('channelSearch', { channel: channelName })}
         >
           <Search className="h-4 w-4 text-muted-foreground" />
-        </button>
+        </Button>
       ) : (
         /* Search dropdown */
         <div className="absolute right-0 top-full z-50 mt-1 w-80 border-2 border-black bg-white shadow-brutal">

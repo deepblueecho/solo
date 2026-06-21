@@ -24,6 +24,7 @@ const selectableRow = read('components/ui/selectable-row.tsx');
 const channelList = read('components/dashboard/channel-list.tsx');
 const dmList = read('components/dashboard/dm-list.tsx');
 const channelView = read('components/dashboard/channel-view.tsx');
+const channelSearch = read('components/dashboard/channel-search.tsx');
 const dmView = read('components/dashboard/dm-view.tsx');
 const inboxView = read('components/inbox/inbox-view.tsx');
 const tasksLeftColumn = read('components/tasks/tasks-left-column.tsx');
@@ -204,6 +205,14 @@ assert(
     channelView.includes('tabButtonClass') &&
     dmView.includes('tabButtonClass'),
   'Dashboard message/task tabs should share the same tab-button primitive',
+);
+assert(
+  channelSearch.includes("import { Button } from '@/components/ui/button'") &&
+    channelSearch.includes('className="h-8 w-8 p-0"') &&
+    channelView.includes('className="h-8 w-8 p-0"') &&
+    !channelSearch.includes('className="flex h-8 w-8 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-cream transition-colors"') &&
+    !channelView.includes('className="flex h-8 w-8 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-cream transition-colors"'),
+  'Channel header icon actions should use shared brutal Button primitives',
 );
 assert(
   inboxView.includes("import { Button } from '@/components/ui/button'") &&
