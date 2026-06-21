@@ -26,6 +26,7 @@ const channelView = read('components/dashboard/channel-view.tsx');
 const dmView = read('components/dashboard/dm-view.tsx');
 const tasksLeftColumn = read('components/tasks/tasks-left-column.tsx');
 const createTaskModal = read('components/tasks/create-task-modal.tsx');
+const createRelationshipModal = read('components/relationships/create-relationship-modal.tsx');
 const teamsAgentItem = read('components/teams/teams-agent-item.tsx');
 const teamsHumanItem = read('components/teams/teams-human-item.tsx');
 const navbar = read('components/ui/navbar.tsx');
@@ -106,10 +107,19 @@ assert(
   button.includes('success: "btn-brutal-success"') &&
     brutalCss.includes('.btn-brutal-success') &&
     agentProfileTab.includes('variant="success"') &&
+    createRelationshipModal.includes('variant="success"') &&
     detailPanel.includes('variant="success"') &&
     !agentProfileTab.includes('bg-brutal-success text-black font-heading text-[10px]') &&
+    !createRelationshipModal.includes('btn-brutal-sm bg-brutal-success') &&
     !detailPanel.includes('bg-brutal-success text-black font-heading text-[10px]'),
   'Agent and relationship edit save actions should use the shared brutal Button success variant',
+);
+assert(
+  createRelationshipModal.includes("import { Button } from '@/components/ui/button'") &&
+    createRelationshipModal.includes('size="icon"') &&
+    !createRelationshipModal.includes('className="flex h-10 w-10 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-primary-light disabled:opacity-30"') &&
+    !createRelationshipModal.includes('className="btn-brutal-sm px-4 py-1.5"'),
+  'create relationship modal actions should use shared brutal Button primitives',
 );
 assert(
   relationshipWorkspace.includes('selected: e.id === edge.id') && relationshipEdge.includes('selected ? 4'),

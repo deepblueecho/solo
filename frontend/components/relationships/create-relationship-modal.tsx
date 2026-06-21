@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, ArrowLeftRight, Loader2 } from 'lucide-react';
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Select, type SelectOption } from '@/components/ui/select';
 import { apiClient } from '@/lib/api-client';
 import { t } from '@/lib/i18n';
@@ -183,16 +184,17 @@ export function CreateRelationshipModal({
             />
           </div>
 
-          <button
+          <Button
             type="button"
             onClick={handleSwapAgents}
             disabled={!fromAgentId && !toAgentId}
-            className="flex h-10 w-10 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-primary-light disabled:opacity-30"
+            variant="outline"
+            size="icon"
             aria-label="Swap from and to agents"
             title="Swap"
           >
             <ArrowLeftRight className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Relationship Type */}
@@ -265,18 +267,22 @@ export function CreateRelationshipModal({
       </div>
 
       <DialogFooter>
-        <button
+        <Button
           type="button"
           onClick={() => onOpenChange(false)}
-          className="btn-brutal-sm px-4 py-1.5"
+          variant="outline"
+          size="sm"
+          className="px-4"
         >
           {t('cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit || !!cycleWarning}
-          className="btn-brutal-sm bg-brutal-success text-black px-4 py-1.5 disabled:opacity-50 disabled:pointer-events-none"
+          variant="success"
+          size="sm"
+          className="px-4"
         >
           {isSubmitting ? (
             <span className="flex items-center gap-1.5">
@@ -286,7 +292,7 @@ export function CreateRelationshipModal({
           ) : (
             t('create')
           )}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );
