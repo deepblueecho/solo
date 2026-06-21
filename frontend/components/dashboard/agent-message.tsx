@@ -23,6 +23,7 @@ interface AgentMessageProps {
   onReply?: (message: Message) => void;
   /** Lowercased display_names that may receive highlight. Empty = no @mentions highlighted. */
   validNames?: string[];
+  isHighlighted?: boolean;
 }
 
 /** Fenced code block renderer — black bg, Space Mono, green text */
@@ -52,7 +53,7 @@ function CodeBlock({
 
 /** Wrap @mentions and #task-numbers in HTML spans, protecting code fences */
 
-export function AgentMessage({ message, onReply, validNames = [] }: AgentMessageProps) {
+export function AgentMessage({ message, onReply, validNames = [], isHighlighted }: AgentMessageProps) {
   const time = new Date(message.created_at).toLocaleString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -63,7 +64,10 @@ export function AgentMessage({ message, onReply, validNames = [] }: AgentMessage
   return (
     <div
       data-message-id={message.id}
-      className="group relative flex gap-3 px-6 py-2.5 agent-message border-l-brutal-primary border-b border-brutal-muted"
+      className={cn(
+        'group relative flex gap-3 px-6 py-2.5 agent-message border-l-brutal-primary border-b border-brutal-muted',
+        isHighlighted && 'bg-brutal-info-light ring-2 ring-black',
+      )}
       role="listitem"
     >
       <PixelAvatar agentId={message.user_id} size="md" className="mt-0.5 flex-shrink-0" />
