@@ -17,6 +17,7 @@ const relationshipEdge = read('components/relationships/relationship-edge.tsx');
 const relationshipNode = read('components/relationships/relationship-node.tsx');
 const teamsAgentWorkspace = read('components/teams/teams-agent-workspace.tsx');
 const button = read('components/ui/button.tsx');
+const dialog = read('components/ui/dialog.tsx');
 const panelHeader = read('components/ui/panel-header.tsx');
 const selectableRow = read('components/ui/selectable-row.tsx');
 const channelList = read('components/dashboard/channel-list.tsx');
@@ -141,6 +142,7 @@ assert(
 );
 assert(
   button.includes('export function iconActionClass') &&
+    dialog.includes('iconActionClass') &&
     detailPanel.includes('iconActionClass') &&
     createTaskModal.includes('iconActionClass'),
   'Drawer and modal close buttons should share the same icon action primitive',
