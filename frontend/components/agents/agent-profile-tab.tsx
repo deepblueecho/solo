@@ -89,23 +89,27 @@ function InlineTextField({
           />
         )}
         <div className="flex items-center gap-1.5">
-          <button
+          <Button
             type="button"
             onClick={handleSave}
             disabled={saving || draft === value}
-            className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-brutal-success text-black font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-success-light disabled:opacity-50"
+            variant="success"
+            size="sm"
+            className="gap-1 text-[10px] uppercase tracking-wider"
           >
             {saving ? t('saving') : <><Check className="h-3 w-3" />{t('save')}</>}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={handleCancel}
             disabled={saving}
-            className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-muted-light"
+            variant="outline"
+            size="sm"
+            className="gap-1 text-[10px] uppercase tracking-wider"
           >
             <X className="h-3 w-3" />
             {t('cancel')}
-          </button>
+          </Button>
         </div>
       </div>
     );

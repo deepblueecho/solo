@@ -19,6 +19,8 @@ const buttonVariants = cva(
         primary: "btn-brutal-primary",
         // Dangerous action (destructive intent; white text on coral red)
         danger: "btn-brutal-danger",
+        // Successful action (save/confirm intent; green fill)
+        success: "btn-brutal-success",
         // Outlined: white fill, 2px black border (already on the base)
         outline: "bg-brutal-white text-brutal-black",
         // Ghost: transparent until hover, then yellow tint

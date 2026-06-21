@@ -387,11 +387,13 @@ export function RelationshipDetailPanel({
                 rows={4}
               />
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={handleSaveInstruction}
                   disabled={isSaving}
-                  className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-brutal-success text-black font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-success-light disabled:opacity-50"
+                  variant="success"
+                  size="sm"
+                  className="gap-1 text-[10px] uppercase tracking-wider"
                 >
                   {isSaving ? (
                     <span>{t('saving')}</span>
@@ -401,14 +403,16 @@ export function RelationshipDetailPanel({
                       {t('save')}
                     </>
                   )}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => setIsEditingInstruction(false)}
-                  className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-muted-light"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-[10px] uppercase tracking-wider"
                 >
                   {t('cancel')}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -452,11 +456,13 @@ export function RelationshipDetailPanel({
                 className="w-full"
               />
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-brutal-success text-black font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-success-light disabled:opacity-50"
+                  variant="success"
+                  size="sm"
+                  className="gap-1 text-[10px] uppercase tracking-wider"
                 >
                   {isSaving ? (
                     <span>{t('saving')}</span>
@@ -466,14 +472,16 @@ export function RelationshipDetailPanel({
                       {t('save')}
                     </>
                   )}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-muted-light"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-[10px] uppercase tracking-wider"
                 >
                   {t('cancel')}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -546,21 +554,25 @@ export function RelationshipDetailPanel({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="flex-1 px-3 py-1.5 border-2 border-brutal-danger bg-brutal-danger text-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-red-600 disabled:opacity-50"
+                variant="danger"
+                size="sm"
+                className="flex-1 text-[10px] uppercase tracking-wider"
               >
                 {isDeleting ? t('deleting') : t('confirm')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 px-3 py-1.5 border-2 border-black bg-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-muted-light"
+                variant="outline"
+                size="sm"
+                className="flex-1 text-[10px] uppercase tracking-wider"
               >
                 {t('cancel')}
-              </button>
+              </Button>
             </div>
           </div>
         )}

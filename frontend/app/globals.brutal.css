@@ -393,6 +393,12 @@
   color: var(--color-brutal-white);
 }
 
+/* Success variant (green save/confirm action). */
+.btn-brutal-success {
+  background: var(--color-brutal-success);
+  color: var(--color-brutal-black);
+}
+
 /* Small variant: same translate rhythm as base, just smaller shadow. */
 .btn-brutal-sm {
   box-shadow: 3px 3px 0 0 var(--color-brutal-shadow);

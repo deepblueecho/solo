@@ -30,6 +30,7 @@ const teamsAgentItem = read('components/teams/teams-agent-item.tsx');
 const teamsHumanItem = read('components/teams/teams-human-item.tsx');
 const navbar = read('components/ui/navbar.tsx');
 const tabBar = read('components/ui/tab-bar.tsx');
+const brutalCss = read('app/globals.brutal.css');
 
 assert(
   !exists('app/relationships/page.tsx'),
@@ -100,6 +101,15 @@ assert(
 assert(
   !teamsAgentProfile.includes('BrutalSeparator') && !agentProfileTab.includes('<BrutalSeparator'),
   'agent detail should use boxed sections instead of long separator lines',
+);
+assert(
+  button.includes('success: "btn-brutal-success"') &&
+    brutalCss.includes('.btn-brutal-success') &&
+    agentProfileTab.includes('variant="success"') &&
+    detailPanel.includes('variant="success"') &&
+    !agentProfileTab.includes('bg-brutal-success text-black font-heading text-[10px]') &&
+    !detailPanel.includes('bg-brutal-success text-black font-heading text-[10px]'),
+  'Agent and relationship edit save actions should use the shared brutal Button success variant',
 );
 assert(
   relationshipWorkspace.includes('selected: e.id === edge.id') && relationshipEdge.includes('selected ? 4'),
