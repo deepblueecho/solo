@@ -60,6 +60,7 @@ export function RelationshipDetailPanel({
   const [isEditing, setIsEditing] = useState(false);
   const [agentTab, setAgentTab] = useState<'profile' | 'workspace'>('profile');
   const [panelWidth, setPanelWidth] = useState(400);
+  const [hasUserResizedPanel, setHasUserResizedPanel] = useState(false);
   const [editType, setEditType] = useState<RelationshipType>(
     relationship?.rel_type ?? 'assigns_to',
   );
@@ -138,6 +139,7 @@ export function RelationshipDetailPanel({
             const startX = e.clientX;
             const startWidth = panelWidth;
             const onMove = (ev: MouseEvent) => {
+              setHasUserResizedPanel(true);
               setPanelWidth(Math.max(280, Math.min(800, startWidth + startX - ev.clientX)));
             };
             const onUp = () => {
@@ -192,7 +194,10 @@ export function RelationshipDetailPanel({
           </button>
           <button
             type="button"
-            onClick={() => setAgentTab('workspace')}
+            onClick={() => {
+              setAgentTab('workspace');
+              if (!hasUserResizedPanel) setPanelWidth((width) => Math.max(width, 720));
+            }}
             className={[
               'px-3 py-2 font-heading text-xs font-bold uppercase tracking-wider',
               agentTab === 'workspace' ? 'bg-brutal-primary text-black' : 'bg-white hover:bg-brutal-primary-light',

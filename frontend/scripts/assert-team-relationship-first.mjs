@@ -15,10 +15,16 @@ const teamsAgentProfile = read('components/teams/teams-agent-profile.tsx');
 const agentProfileTab = read('components/agents/agent-profile-tab.tsx');
 const relationshipEdge = read('components/relationships/relationship-edge.tsx');
 const relationshipNode = read('components/relationships/relationship-node.tsx');
+const teamsAgentWorkspace = read('components/teams/teams-agent-workspace.tsx');
+const navbar = read('components/ui/navbar.tsx');
 
 assert(
   !exists('app/relationships/page.tsx'),
   'standalone /relationships route should be removed',
+);
+assert(
+  !exists('app/workspace/page.tsx'),
+  'standalone /workspace route should be removed',
 );
 assert(
   relationshipWorkspace.includes('export function RelationshipWorkspace'),
@@ -83,6 +89,38 @@ assert(
 assert(
   relationshipNode.includes('selected ?') && relationshipNode.includes('bg-brutal-primary'),
   'agent nodes should show a visible selected state after click',
+);
+assert(
+  detailPanel.includes('Math.max(width, 720)') && detailPanel.includes('hasUserResizedPanel'),
+  'workspace tab should expand the drawer without overriding user-resized width',
+);
+assert(
+  teamsAgentWorkspace.includes('useState(160)') && teamsAgentWorkspace.includes('Math.max(120, Math.min(240'),
+  'workspace file pane should default narrow and be resizable within drawer-friendly bounds',
+);
+assert(
+  teamsAgentWorkspace.includes('PanelLeftClose') && teamsAgentWorkspace.includes('isFilePaneCollapsed'),
+  'workspace file pane should be collapsible',
+);
+assert(
+  teamsAgentWorkspace.includes('firstFilePath') && teamsAgentWorkspace.includes('void handleSelect(path'),
+  'workspace drawer should auto-select the first file',
+);
+assert(
+  teamsAgentWorkspace.includes('Maximize2') && teamsAgentWorkspace.includes('fixed inset-0'),
+  'workspace drawer should fullscreen in-place instead of linking away',
+);
+assert(
+  !teamsAgentWorkspace.includes('href={`/workspace?agent=${agentId}`}') && !navbar.includes("href: '/workspace'"),
+  'workspace should not be exposed as a separate left-nav tab from Teams',
+);
+assert(
+  !exists('components/agents/agent-detail-panel.tsx') &&
+    !exists('components/agents/agent-workspace-tab.tsx') &&
+    !exists('components/workspace/agent-selector.tsx') &&
+    !exists('components/workspace/breadcrumb.tsx') &&
+    !exists('components/workspace/resizable-panel.tsx'),
+  'legacy standalone workspace and agent detail components should be deleted',
 );
 
 console.log('team relationship-first source checks passed');

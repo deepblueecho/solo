@@ -8,7 +8,6 @@ import {
   ClipboardList,
   Users,
   Monitor,
-  FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
@@ -19,7 +18,6 @@ const NAV_ITEMS = [
   { href: '/tasks', icon: ClipboardList, label: t('navTasks') },
   { href: '/teams', icon: Users, label: t('navTeams') },
   { href: '/computers', icon: Monitor, label: t('navComputers') },
-  { href: '/workspace', icon: FolderOpen, label: 'Workspace' },
 ] as const;
 
 export function NavBar() {
