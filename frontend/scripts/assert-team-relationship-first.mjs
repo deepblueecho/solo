@@ -56,6 +56,14 @@ assert(
   'relationship workspace should preserve single-agent and template creation',
 );
 assert(
+  relationshipWorkspace.includes("import { Button } from '@/components/ui/button'") &&
+    relationshipWorkspace.includes('variant="outline"') &&
+    relationshipWorkspace.includes('variant="primary"') &&
+    !relationshipWorkspace.includes('className="flex items-center gap-1 h-8 px-2 border-2 border-black bg-white hover:bg-brutal-primary-light disabled:opacity-30"') &&
+    !relationshipWorkspace.includes('className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-white hover:bg-brutal-info-light font-heading text-xs font-bold uppercase tracking-wider"'),
+  'relationship toolbar actions should use the shared brutal Button primitive instead of raw button classes',
+);
+assert(
   !relationshipWorkspace.includes('+ Agent'),
   'toolbar should not show a duplicate plus in the Agent button label',
 );

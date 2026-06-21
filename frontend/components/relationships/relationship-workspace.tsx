@@ -26,6 +26,7 @@ import dagre from 'dagre';
 import { Loader2, Plus, LayoutGrid, Undo2, Redo2, Layers } from 'lucide-react';
 import { NavBar } from '@/components/ui/navbar';
 import { Select } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { RelationshipNode } from '@/components/relationships/relationship-node';
 import { RelationshipEdge } from '@/components/relationships/relationship-edge';
 import { CreateRelationshipModal } from '@/components/relationships/create-relationship-modal';
@@ -648,44 +649,54 @@ export function RelationshipWorkspace({
           </h1>
 
           {/* Undo/Redo */}
-          <button
+          <Button
             type="button"
             onClick={undo}
             disabled={undoStack.length === 0}
-            className="flex items-center gap-1 h-8 px-2 border-2 border-black bg-white hover:bg-brutal-primary-light disabled:opacity-30"
+            variant="outline"
+            size="sm"
+            className="gap-1 px-2"
             title={t('relationshipEditorUndo')}
+            aria-label={t('relationshipEditorUndo')}
           >
             <Undo2 className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={redo}
             disabled={redoStack.length === 0}
-            className="flex items-center gap-1 h-8 px-2 border-2 border-black bg-white hover:bg-brutal-primary-light disabled:opacity-30"
+            variant="outline"
+            size="sm"
+            className="gap-1 px-2"
             title={t('relationshipEditorRedo')}
+            aria-label={t('relationshipEditorRedo')}
           >
             <Redo2 className="h-3.5 w-3.5" />
-          </button>
+          </Button>
 
           <div className="w-px h-6 bg-black/20" />
 
           {/* Auto layout */}
-          <button
+          <Button
             type="button"
             onClick={autoLayout}
-            className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-white hover:bg-brutal-info-light font-heading text-xs font-bold uppercase tracking-wider"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 uppercase tracking-wider"
           >
             <LayoutGrid className="h-3.5 w-3.5" />
             {t('relationshipEditorAutoLayout')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => setShowChoiceDialog(true)}
-            className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-brutal-primary hover:bg-brutal-primary-light font-heading text-xs font-bold uppercase tracking-wider"
+            variant="primary"
+            size="sm"
+            className="gap-1.5 uppercase tracking-wider"
           >
             <Plus className="h-3.5 w-3.5" />
             Agent
-          </button>
+          </Button>
         </div>
 
         {/* Graph */}
