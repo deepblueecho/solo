@@ -50,6 +50,7 @@ export function InboxView() {
   }, [markAllRead]);
 
   const [threadMessage, setThreadMessage] = useState<Message | null>(null);
+  const [threadTargetMessageId, setThreadTargetMessageId] = useState<string | undefined>(undefined);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
 
   const handleItemClick = useCallback(
@@ -62,6 +63,7 @@ export function InboxView() {
         case 'thread_reply':
           if (item.channel_id && item.thread_id) {
             const isAgent = item.parent_sender_type === 'agent';
+            setThreadTargetMessageId(item.message_id);
             setThreadMessage({
               id: item.thread_id,
               channel_id: item.channel_id,
@@ -91,6 +93,7 @@ export function InboxView() {
 
   const handleThreadClose = useCallback(() => {
     setThreadMessage(null);
+    setThreadTargetMessageId(undefined);
   }, []);
 
   return (
@@ -224,6 +227,7 @@ export function InboxView() {
             <ThreadPanel
               parentMessage={threadMessage}
               onClose={handleThreadClose}
+              targetMessageId={threadTargetMessageId}
               replyCount={0}
             />
           </Suspense>

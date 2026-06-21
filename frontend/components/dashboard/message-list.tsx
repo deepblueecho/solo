@@ -109,6 +109,7 @@ const TASK_HEADER_CONFIG: Record<string, { label: string; borderClass: string; b
 
 interface MessageItemProps {
   message: Message;
+  isHighlighted?: boolean;
   onRetry: (id: string, content: string) => void;
   onCancel?: (id: string) => void;
   onReply?: (message: Message) => void;
@@ -119,6 +120,7 @@ interface MessageItemProps {
 
 const MessageItem = memo(function MessageItem({
   message,
+  isHighlighted,
   onRetry,
   onCancel,
   onReply,
@@ -240,6 +242,7 @@ const MessageItem = memo(function MessageItem({
         !isTaskMessage && 'hover:bg-brutal-muted/15',
         isFailed && 'bg-brutal-danger-light/30',
         isEditing && 'border-l-[3px] border-l-brutal-primary bg-brutal-primary-light/30',
+        isHighlighted && 'bg-brutal-info-light ring-2 ring-black',
         isTaskMessage && headerConfig?.borderClass,
         isTaskMessage && headerConfig?.bgClass,
         isTaskMessage && 'cursor-pointer',
@@ -700,6 +703,7 @@ export function MessageList({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const prevMessageCountRef = useRef(0);
   const scrollRestoreRef = useRef<number | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -812,9 +816,16 @@ export function MessageList({
       const el = document.querySelector(`[data-message-id="${scrollToMessageId}"]`);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightedMessageId(scrollToMessageId);
       }
     }, 100);
-    return () => clearTimeout(timer);
+    const clearTimer = setTimeout(() => {
+      setHighlightedMessageId((current) => current === scrollToMessageId ? null : current);
+    }, 2600);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(clearTimer);
+    };
   }, [scrollToMessageId, scrollKey, isLoading]);
 
   const scrollToBottom = () => {
@@ -887,11 +898,13 @@ export function MessageList({
                 message={message}
                 onReply={onReply}
                 validNames={validNames}
+                isHighlighted={highlightedMessageId === message.id}
               />
             ) : (
               <MessageItem
                 key={message.id}
                 message={message}
+                isHighlighted={highlightedMessageId === message.id}
                 onRetry={onRetry}
                 onCancel={onCancel}
                 onReply={onReply}

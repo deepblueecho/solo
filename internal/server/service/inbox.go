@@ -43,6 +43,131 @@ type UnreadCount struct {
 	DM            int `json:"dm"`
 }
 
+const listInboxQuery = `
+	SELECT id, item_type, channel_id, channel_name, thread_id, dm_id,
+	       sender_name, sender_avatar, content_preview, is_mention, created_at,
+	       is_unread, parent_sender_name, parent_sender_type, parent_sender_id, parent_content
+	FROM (
+		-- Thread replies
+		SELECT m.id,
+		       'thread_reply' AS item_type,
+		       c.id::text AS channel_id,
+		       c.name AS channel_name,
+		       t.root_message_id::text AS thread_id,
+		       NULL::text AS dm_id,
+		       COALESCE(u.display_name, a.name, 'Unknown') AS sender_name,
+		       NULL::text AS sender_avatar,
+		       LEFT(m.content, 50) AS content_preview,
+		       EXISTS (
+		           SELECT 1 FROM user_mentions um
+		           WHERE um.message_id = m.id AND um.mentioned_user_id = $1
+		       ) AS is_mention,
+		       m.created_at,
+		       r.message_id IS NULL AS is_unread,
+		       COALESCE(pu.display_name, pa.name) AS parent_sender_name,
+		       pm.sender_type AS parent_sender_type,
+		       pm.sender_id::text AS parent_sender_id,
+		       pm.content AS parent_content
+		FROM messages m
+		JOIN threads t ON m.thread_id = t.id
+		JOIN channels c ON t.channel_id = c.id AND c.type != 'dm'
+		LEFT JOIN messages pm ON pm.id = t.root_message_id
+		LEFT JOIN users pu ON pm.sender_type = 'user' AND pm.sender_id = pu.id
+		LEFT JOIN agents pa ON pm.sender_type = 'agent' AND pm.sender_id = pa.id
+		LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
+		LEFT JOIN agents a ON m.sender_type = 'agent' AND m.sender_id = a.id
+		LEFT JOIN user_inbox_reads r ON r.user_id = $1 AND r.message_id = m.id
+		WHERE m.sender_id != $1
+		  AND m.sender_type IN ('user', 'agent')
+		  AND (u.id IS NOT NULL OR a.id IS NOT NULL)
+		  AND m.thread_id IS NOT NULL
+		  AND (
+		      pm.sender_type = 'user' AND pm.sender_id = $1
+		      OR EXISTS (
+		          SELECT 1 FROM user_mentions um
+		          WHERE um.message_id = m.id AND um.mentioned_user_id = $1
+		      )
+		  )
+		  AND m.created_at < $2
+		  AND m.created_at > $3
+		  AND (COALESCE($5::text[], '{}'::text[]) = '{}'::text[] OR 'thread_reply' = ANY($5::text[]))
+		  AND ($6 = '' OR COALESCE(u.display_name, a.name) ILIKE '%' || $6 || '%')
+		  AND COALESCE(m.is_deleted, false) = false
+
+		UNION ALL
+
+		-- DM messages
+		SELECT m.id,
+		       'dm' AS item_type,
+		       NULL::text AS channel_id,
+		       NULL::text AS channel_name,
+		       NULL::text AS thread_id,
+		       c.id::text AS dm_id,
+		       COALESCE(u.display_name, a.name, 'Unknown') AS sender_name,
+		       NULL::text AS sender_avatar,
+		       LEFT(m.content, 50) AS content_preview,
+		       false AS is_mention,
+		       m.created_at,
+		       r.message_id IS NULL AS is_unread,
+		       NULL::text AS parent_sender_name,
+		       NULL::text AS parent_sender_type,
+		       NULL::text AS parent_sender_id,
+		       NULL::text AS parent_content
+		FROM messages m
+		JOIN channels c ON m.channel_id = c.id AND c.type = 'dm'
+		JOIN dm_members dm ON dm.channel_id = c.id AND dm.member_id = $1
+		LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
+		LEFT JOIN agents a ON m.sender_type = 'agent' AND m.sender_id = a.id
+		LEFT JOIN user_inbox_reads r ON r.user_id = $1 AND r.message_id = m.id
+		WHERE m.sender_id != $1
+		  AND m.sender_type IN ('user', 'agent')
+		  AND (u.id IS NOT NULL OR a.id IS NOT NULL)
+		  AND m.thread_id IS NULL
+		  AND m.created_at < $2
+		  AND m.created_at > $3
+		  AND ($5::text[] = '{}' OR 'dm' = ANY($5::text[]))
+		  AND ($6 = '' OR COALESCE(u.display_name, a.name) ILIKE '%' || $6 || '%')
+		  AND COALESCE(m.is_deleted, false) = false
+
+		UNION ALL
+
+		-- @Mentions via user_mentions
+		SELECT m.id,
+		       'mention' AS item_type,
+		       c.id::text AS channel_id,
+		       c.name AS channel_name,
+		       NULL::text AS thread_id,
+		       NULL::text AS dm_id,
+		       COALESCE(u.display_name, a.name, 'Unknown') AS sender_name,
+		       NULL::text AS sender_avatar,
+		       LEFT(m.content, 50) AS content_preview,
+		       true AS is_mention,
+		       m.created_at,
+		       r.message_id IS NULL AS is_unread,
+		       NULL::text AS parent_sender_name,
+		       NULL::text AS parent_sender_type,
+		       NULL::text AS parent_sender_id,
+		       NULL::text AS parent_content
+		FROM messages m
+		JOIN user_mentions um ON um.message_id = m.id AND um.mentioned_user_id = $1
+		JOIN channels c ON m.channel_id = c.id AND c.type != 'dm'
+		LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
+		LEFT JOIN agents a ON m.sender_type = 'agent' AND m.sender_id = a.id
+		LEFT JOIN user_inbox_reads r ON r.user_id = $1 AND r.message_id = m.id
+		WHERE m.sender_id != $1
+		  AND m.sender_type IN ('user', 'agent')
+		  AND (u.id IS NOT NULL OR a.id IS NOT NULL)
+		  AND m.thread_id IS NULL
+		  AND m.created_at < $2
+		  AND m.created_at > $3
+		  AND ($5::text[] = '{}' OR 'mention' = ANY($5::text[]))
+		  AND ($6 = '' OR COALESCE(u.display_name, a.name) ILIKE '%' || $6 || '%')
+		  AND COALESCE(m.is_deleted, false) = false
+	) sub
+	ORDER BY created_at DESC
+	LIMIT $4
+`
+
 func (s *InboxService) List(ctx context.Context, userID string, before time.Time, limit int, types []string, senderFilter string) ([]InboxItem, bool, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 30
@@ -54,128 +179,8 @@ func (s *InboxService) List(ctx context.Context, userID string, before time.Time
 		 FROM user_inbox_state WHERE user_id = $1`, userID,
 	).Scan(&clearedBefore)
 
-	query := `
-		SELECT id, item_type, channel_id, channel_name, thread_id, dm_id,
-		       sender_name, sender_avatar, content_preview, is_mention, created_at,
-		       is_unread, parent_sender_name, parent_sender_type, parent_sender_id, parent_content
-		FROM (
-			-- Thread replies
-			SELECT m.id,
-			       'thread_reply' AS item_type,
-			       c.id::text AS channel_id,
-			       c.name AS channel_name,
-			       t.root_message_id::text AS thread_id,
-			       NULL::text AS dm_id,
-			       COALESCE(u.display_name, a.name, 'Unknown') AS sender_name,
-			       NULL::text AS sender_avatar,
-			       LEFT(m.content, 50) AS content_preview,
-			       false AS is_mention,
-			       m.created_at,
-			       r.message_id IS NULL AS is_unread,
-			       COALESCE(pu.display_name, pa.name) AS parent_sender_name,
-			       pm.sender_type AS parent_sender_type,
-			       pm.sender_id::text AS parent_sender_id,
-			       pm.content AS parent_content
-			FROM messages m
-			JOIN threads t ON m.thread_id = t.id
-			JOIN channels c ON t.channel_id = c.id AND c.type != 'dm'
-			LEFT JOIN messages pm ON pm.id = t.root_message_id
-			LEFT JOIN users pu ON pm.sender_type = 'user' AND pm.sender_id = pu.id
-			LEFT JOIN agents pa ON pm.sender_type = 'agent' AND pm.sender_id = pa.id
-			LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
-			LEFT JOIN agents a ON m.sender_type = 'agent' AND m.sender_id = a.id
-			LEFT JOIN user_inbox_reads r ON r.user_id = $1 AND r.message_id = m.id
-			WHERE m.sender_id != $1
-			  AND m.sender_type IN ('user', 'agent')
-			  AND (u.id IS NOT NULL OR a.id IS NOT NULL)
-			  AND m.thread_id IS NOT NULL
-			  AND t.channel_id IN (
-			      SELECT DISTINCT m2.channel_id
-			      FROM messages m2
-			      JOIN threads t2 ON m2.thread_id = t2.id
-			      WHERE m2.sender_id = $1
-			  )
-			  AND m.created_at < $2
-			  AND m.created_at > $3
-			  AND (COALESCE($5::text[], '{}'::text[]) = '{}'::text[] OR 'thread_reply' = ANY($5::text[]))
-			  AND ($6 = '' OR COALESCE(u.display_name, a.name) ILIKE '%' || $6 || '%')
-			  AND COALESCE(m.is_deleted, false) = false
-
-			UNION ALL
-
-			-- DM messages
-			SELECT m.id,
-			       'dm' AS item_type,
-			       NULL::text AS channel_id,
-			       NULL::text AS channel_name,
-			       NULL::text AS thread_id,
-			       c.id::text AS dm_id,
-			       COALESCE(u.display_name, a.name, 'Unknown') AS sender_name,
-			       NULL::text AS sender_avatar,
-			       LEFT(m.content, 50) AS content_preview,
-			       false AS is_mention,
-			       m.created_at,
-			       r.message_id IS NULL AS is_unread,
-			       NULL::text AS parent_sender_name,
-			       NULL::text AS parent_sender_type,
-			       NULL::text AS parent_sender_id,
-			       NULL::text AS parent_content
-			FROM messages m
-			JOIN channels c ON m.channel_id = c.id AND c.type = 'dm'
-			JOIN dm_members dm ON dm.channel_id = c.id AND dm.member_id = $1
-			LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
-			LEFT JOIN agents a ON m.sender_type = 'agent' AND m.sender_id = a.id
-			LEFT JOIN user_inbox_reads r ON r.user_id = $1 AND r.message_id = m.id
-			WHERE m.sender_id != $1
-			  AND m.sender_type IN ('user', 'agent')
-			  AND (u.id IS NOT NULL OR a.id IS NOT NULL)
-			  AND m.thread_id IS NULL
-			  AND m.created_at < $2
-			  AND m.created_at > $3
-			  AND ($5::text[] = '{}' OR 'dm' = ANY($5::text[]))
-			  AND ($6 = '' OR COALESCE(u.display_name, a.name) ILIKE '%' || $6 || '%')
-			  AND COALESCE(m.is_deleted, false) = false
-
-			UNION ALL
-
-			-- @Mentions via user_mentions
-			SELECT m.id,
-			       'mention' AS item_type,
-			       c.id::text AS channel_id,
-			       c.name AS channel_name,
-			       m.thread_id::text AS thread_id,
-			       NULL::text AS dm_id,
-			       COALESCE(u.display_name, a.name, 'Unknown') AS sender_name,
-			       NULL::text AS sender_avatar,
-			       LEFT(m.content, 50) AS content_preview,
-			       true AS is_mention,
-			       m.created_at,
-			       r.message_id IS NULL AS is_unread,
-			       NULL::text AS parent_sender_name,
-			       NULL::text AS parent_sender_type,
-			       NULL::text AS parent_sender_id,
-			       NULL::text AS parent_content
-			FROM messages m
-			JOIN user_mentions um ON um.message_id = m.id AND um.mentioned_user_id = $1
-			JOIN channels c ON m.channel_id = c.id AND c.type != 'dm'
-			LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
-			LEFT JOIN agents a ON m.sender_type = 'agent' AND m.sender_id = a.id
-			LEFT JOIN user_inbox_reads r ON r.user_id = $1 AND r.message_id = m.id
-			WHERE m.sender_id != $1
-			  AND m.sender_type IN ('user', 'agent')
-			  AND (u.id IS NOT NULL OR a.id IS NOT NULL)
-			  AND m.created_at < $2
-			  AND m.created_at > $3
-			  AND ($5::text[] = '{}' OR 'mention' = ANY($5::text[]))
-			  AND ($6 = '' OR COALESCE(u.display_name, a.name) ILIKE '%' || $6 || '%')
-			  AND COALESCE(m.is_deleted, false) = false
-		) sub
-		ORDER BY created_at DESC
-		LIMIT $4
-	`
-
 	args := []any{userID, before, clearedBefore, limit + 1, types, senderFilter}
-	rows, err := s.pool.Query(ctx, query, args...)
+	rows, err := s.pool.Query(ctx, listInboxQuery, args...)
 	if err != nil {
 		return nil, false, fmt.Errorf("inbox list: %w", err)
 	}
@@ -218,17 +223,19 @@ func (s *InboxService) UnreadCount(ctx context.Context, userID string) (*UnreadC
 		 FROM messages m
 		 JOIN threads t ON m.thread_id = t.id
 		 JOIN channels c ON t.channel_id = c.id AND c.type != 'dm'
+		 LEFT JOIN messages pm ON pm.id = t.root_message_id
 		 LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
 		 LEFT JOIN agents a ON m.sender_type = 'agent' AND m.sender_id = a.id
 		 WHERE m.sender_id != $1
 		   AND m.sender_type IN ('user', 'agent')
 		   AND (u.id IS NOT NULL OR a.id IS NOT NULL)
 		   AND m.thread_id IS NOT NULL
-		   AND t.channel_id IN (
-		       SELECT DISTINCT m2.channel_id
-		       FROM messages m2
-		       JOIN threads t2 ON m2.thread_id = t2.id
-		       WHERE m2.sender_id = $1
+		   AND (
+		       pm.sender_type = 'user' AND pm.sender_id = $1
+		       OR EXISTS (
+		           SELECT 1 FROM user_mentions um
+		           WHERE um.message_id = m.id AND um.mentioned_user_id = $1
+		       )
 		   )
 		   AND COALESCE(m.is_deleted, false) = false
 		   `+readFilter,
@@ -267,6 +274,7 @@ func (s *InboxService) UnreadCount(ctx context.Context, userID string) (*UnreadC
 		 WHERE m.sender_id != $1
 		   AND m.sender_type IN ('user', 'agent')
 		   AND (u.id IS NOT NULL OR a.id IS NOT NULL)
+		   AND m.thread_id IS NULL
 		   AND COALESCE(m.is_deleted, false) = false
 		   `+readFilter,
 		userID,
@@ -310,12 +318,21 @@ func (s *InboxService) MarkAllRead(ctx context.Context, userID string) error {
 			SELECT m.id FROM messages m
 			JOIN threads t ON m.thread_id = t.id
 			JOIN channels c ON t.channel_id = c.id AND c.type != 'dm'
+			LEFT JOIN messages pm ON pm.id = t.root_message_id
 			LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
 			LEFT JOIN agents a ON m.sender_type = 'agent' AND m.sender_id = a.id
 			LEFT JOIN user_inbox_reads r ON r.user_id = $1 AND r.message_id = m.id
 			WHERE m.sender_id != $1
 			  AND m.sender_type IN ('user', 'agent') AND (u.id IS NOT NULL OR a.id IS NOT NULL)
-			  AND m.thread_id IS NOT NULL AND COALESCE(m.is_deleted, false) = false
+			  AND m.thread_id IS NOT NULL
+			  AND (
+			      pm.sender_type = 'user' AND pm.sender_id = $1
+			      OR EXISTS (
+			          SELECT 1 FROM user_mentions um
+			          WHERE um.message_id = m.id AND um.mentioned_user_id = $1
+			      )
+			  )
+			  AND COALESCE(m.is_deleted, false) = false
 			  AND r.message_id IS NULL
 			UNION
 			SELECT m.id FROM messages m
@@ -337,7 +354,7 @@ func (s *InboxService) MarkAllRead(ctx context.Context, userID string) error {
 			LEFT JOIN user_inbox_reads r ON r.user_id = $1 AND r.message_id = m.id
 			WHERE m.sender_id != $1
 			  AND m.sender_type IN ('user', 'agent') AND (u.id IS NOT NULL OR a.id IS NOT NULL)
-			  AND COALESCE(m.is_deleted, false) = false AND r.message_id IS NULL
+			  AND m.thread_id IS NULL AND COALESCE(m.is_deleted, false) = false AND r.message_id IS NULL
 		 ) sub ON CONFLICT DO NOTHING`,
 		userID,
 	)

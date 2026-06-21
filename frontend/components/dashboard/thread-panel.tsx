@@ -38,6 +38,8 @@ interface ThreadPanelProps {
   parentMessage: Message;
   onClose: () => void;
   members?: ChannelMember[];
+  /** Reply message ID to scroll/highlight after opening the thread. */
+  targetMessageId?: string;
   /** Initial reply count from parent message (P25-10-F) */
   replyCount?: number;
   /** Optional task associated with this thread's parent message */
@@ -161,7 +163,7 @@ const mdComponents = {
 
 // ---- Reply item ----
 
-function ReplyItem({ message, validNames = [] }: { message: { id: string; display_name?: string; content: string; created_at: string; status?: string; sender_type?: string }; validNames?: string[] }) {
+function ReplyItem({ message, validNames = [], isHighlighted }: { message: { id: string; display_name?: string; content: string; created_at: string; status?: string; sender_type?: string }; validNames?: string[]; isHighlighted?: boolean }) {
   const isFailed = message.status === 'failed';
   const isSending = message.status === 'sending';
   const isStreaming = message.status === 'streaming';
@@ -173,7 +175,14 @@ function ReplyItem({ message, validNames = [] }: { message: { id: string; displa
   });
 
   return (
-    <div className={`flex gap-3 px-6 py-2 border-b-2 border-black ${isAgent ? 'border-l-2 border-l-brutal-primary' : ''}`}>
+    <div
+      data-message-id={message.id}
+      className={cn(
+        'flex gap-3 px-6 py-2 border-b-2 border-black',
+        isAgent && 'border-l-2 border-l-brutal-primary',
+        isHighlighted && 'bg-brutal-info-light ring-2 ring-black',
+      )}
+    >
       {isAgent ? (
         <PixelAvatar agentId={message.id} size="sm" />
       ) : (
@@ -617,6 +626,7 @@ export function ThreadPanel({
   parentMessage,
   onClose,
   members = [],
+  targetMessageId,
   replyCount: initialReplyCount = 0,
   task,
   onClaimTask,
@@ -650,6 +660,7 @@ export function ThreadPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevMessageCount = useRef(0);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     loadThreadMessages(parentMessage.channel_id, parentMessage.id);
@@ -696,10 +707,28 @@ export function ThreadPanel({
   }, [messages.length]);
 
   useEffect(() => {
-    if (!isLoading && messages.length > 0) {
+    if (!isLoading && messages.length > 0 && !targetMessageId) {
       bottomRef.current?.scrollIntoView();
     }
-  }, [isLoading, messages.length]);
+  }, [isLoading, messages.length, targetMessageId]);
+
+  useEffect(() => {
+    if (!targetMessageId || isLoading) return;
+    const timer = setTimeout(() => {
+      const el = scrollRef.current?.querySelector(`[data-message-id="${targetMessageId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightedMessageId(targetMessageId);
+      }
+    }, 100);
+    const clearTimer = setTimeout(() => {
+      setHighlightedMessageId((current) => current === targetMessageId ? null : current);
+    }, 2600);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(clearTimer);
+    };
+  }, [targetMessageId, isLoading, messages.length]);
 
   return (
     <div
@@ -758,7 +787,12 @@ export function ThreadPanel({
             return (
               <div className="space-y-0 py-2">
                 {messages.map((reply) => (
-                  <ReplyItem key={reply.id} message={reply} validNames={validNames} />
+                  <ReplyItem
+                    key={reply.id}
+                    message={reply}
+                    validNames={validNames}
+                    isHighlighted={highlightedMessageId === reply.id}
+                  />
                 ))}
               </div>
             );
