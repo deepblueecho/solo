@@ -52,6 +52,12 @@ assert(
   'agent node detail should reuse the existing Teams profile/workspace components',
 );
 assert(
+  detailPanel.includes('handleMessageAgent') &&
+    detailPanel.includes('variant="outline"') &&
+    !detailPanel.includes('className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 border-2 border-black bg-white px-2.5 font-heading text-[10px] font-black uppercase tracking-wider hover:bg-brutal-primary-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50 transition-all"'),
+  'agent detail message action should use the shared brutal Button primitive',
+);
+assert(
   relationshipWorkspace.includes('AgentForm') && relationshipWorkspace.includes('Create from Template'),
   'relationship workspace should preserve single-agent and template creation',
 );

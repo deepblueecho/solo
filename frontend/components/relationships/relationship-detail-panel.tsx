@@ -199,16 +199,18 @@ export function RelationshipDetailPanel({
               )}
             </div>
           </div>
-          <button
+          <Button
             type="button"
             onClick={handleMessageAgent}
             disabled={isOpeningDM}
-            className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 border-2 border-black bg-white px-2.5 font-heading text-[10px] font-black uppercase tracking-wider hover:bg-brutal-primary-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50 transition-all"
+            variant="outline"
+            size="sm"
+            className="flex-shrink-0 gap-1.5 px-2.5 text-[10px] font-black uppercase tracking-wider"
             aria-label={`${t('teamsMessage')} ${agent.name}`}
           >
             <MessageSquare className="h-3.5 w-3.5" />
             <span>{t('teamsMessage')}</span>
-          </button>
+          </Button>
         </div>
 
         <div className="grid grid-cols-2 border-b-2 border-black">
