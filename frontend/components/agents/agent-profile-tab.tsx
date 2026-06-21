@@ -25,6 +25,7 @@ import type { Agent } from '@/lib/types';
 
 interface AgentProfileTabProps {
   agentId: string;
+  showHeader?: boolean;
 }
 
 // ---- Inline editable field component ----
@@ -213,7 +214,7 @@ function formatDate(iso: string): string {
 
 // ---- Component ----
 
-export function AgentProfileTab({ agentId }: AgentProfileTabProps) {
+export function AgentProfileTab({ agentId, showHeader = true }: AgentProfileTabProps) {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -305,33 +306,37 @@ export function AgentProfileTab({ agentId }: AgentProfileTabProps) {
 
   return (
     <div className="space-y-5">
-      {/* Avatar + Name — v3.3: framed avatar (2px border + cream
-          backdrop + sticker tilt) anchors the header; violet rotating
-          star sticker adds a complementary color accent. */}
-      <div className="relative">
-        <div className="flex items-center gap-3">
-          <div
-            className="border-2 border-black shadow-brutal-sm bg-brutal-cream"
-            style={{ transform: 'rotate(-2deg)' }}
-          >
-            <PixelAvatar agentId={agent.id} avatarUrl={agent.avatar_url} size="md" />
+      {showHeader && (
+        <>
+          {/* Avatar + Name — v3.3: framed avatar (2px border + cream
+              backdrop + sticker tilt) anchors the header; violet rotating
+              star sticker adds a complementary color accent. */}
+          <div className="relative">
+            <div className="flex items-center gap-3">
+              <div
+                className="border-2 border-black shadow-brutal-sm bg-brutal-cream"
+                style={{ transform: 'rotate(-2deg)' }}
+              >
+                <PixelAvatar agentId={agent.id} avatarUrl={agent.avatar_url} size="md" />
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-base text-foreground">{agent.name}</h3>
+                <p className="font-mono text-[11px] text-muted-foreground">{agent.model_provider || t('agentProfileNoRuntime')}</p>
+              </div>
+            </div>
+            <Decoration
+              shape="star"
+              color="violet"
+              size="sm"
+              animation="spin"
+              rotation={14}
+              className="absolute -top-3 -right-3"
+            />
           </div>
-          <div>
-            <h3 className="font-heading font-bold text-base text-foreground">{agent.name}</h3>
-            <p className="font-mono text-[11px] text-muted-foreground">{agent.model_provider || t('agentProfileNoRuntime')}</p>
-          </div>
-        </div>
-        <Decoration
-          shape="star"
-          color="violet"
-          size="sm"
-          animation="spin"
-          rotation={14}
-          className="absolute -top-3 -right-3"
-        />
-      </div>
 
-      <BrutalSeparator />
+          <BrutalSeparator />
+        </>
+      )}
 
       {/* Status toggle */}
       <StatusToggle

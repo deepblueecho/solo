@@ -23,17 +23,28 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
-import { Loader2, Plus, Trash2, LayoutGrid, Undo2, Redo2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, LayoutGrid, Undo2, Redo2, Layers } from 'lucide-react';
 import { NavBar } from '@/components/ui/navbar';
+import { Select } from '@/components/ui/select';
 import { RelationshipNode } from '@/components/relationships/relationship-node';
 import { RelationshipEdge } from '@/components/relationships/relationship-edge';
 import { CreateRelationshipModal } from '@/components/relationships/create-relationship-modal';
 import { RelationshipDetailPanel } from '@/components/relationships/relationship-detail-panel';
+import { AgentForm, type AgentFormValues } from '@/components/agents/agent-form';
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCloseButton,
+} from '@/components/ui/dialog';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useWebSocket } from '@/lib/ws-context';
+import { useToast } from '@/components/ui/toast';
 import { t } from '@/lib/i18n';
-import type { Agent, AgentRelationship, RelationshipType } from '@/lib/types';
+import type { Agent, AgentBackendDetectItem, AgentRelationship, RelationshipType } from '@/lib/types';
 import { useAgents } from '@/lib/hooks/use-agents';
+import { listTemplates, applyTemplate, type Template } from '@/lib/templates-api';
+import { useCliDetection } from '@/lib/hooks/use-cli-detection';
 
 // ---- Node/Edge types ----
 
@@ -49,12 +60,29 @@ interface UndoEntry {
 
 // ---- Page ----
 
-export default function RelationshipsPage() {
-  const { agents, isLoading: agentsLoading, refetch: refetchAgents } = useAgents();
+interface RelationshipWorkspaceProps {
+  title?: string;
+}
+
+export function RelationshipWorkspace({
+  title = t('relationshipEditor'),
+}: RelationshipWorkspaceProps = {}) {
+  const { agents, isLoading: agentsLoading, refetch: refetchAgents, createAgent } = useAgents();
+  const { showToast } = useToast();
+  const { results: detection, isLoading: detectionLoading } = useCliDetection();
   const [relationships, setRelationships] = useState<AgentRelationship[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showChoiceDialog, setShowChoiceDialog] = useState(false);
+  const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
+  const [isCreatingAgent, setIsCreatingAgent] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [selectedModelProvider, setSelectedModelProvider] = useState('');
   const [preselectedFrom, setPreselectedFrom] = useState<string | null>(null);
   const [preselectedTo, setPreselectedTo] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
@@ -335,6 +363,63 @@ export default function RelationshipsPage() {
     loadData();
   }, [loadData]);
 
+  const handleCreateAgent = useCallback(async (values: AgentFormValues) => {
+    if (isCreatingAgent) return;
+    setIsCreatingAgent(true);
+    try {
+      await createAgent(values);
+      await refetchAgents();
+      setShowCreateAgentModal(false);
+      showToast(t('teamsAgentCreated'), 'success');
+    } catch {
+      showToast(t('teamsAgentCreateError'), 'error');
+    } finally {
+      setIsCreatingAgent(false);
+    }
+  }, [createAgent, isCreatingAgent, refetchAgents, showToast]);
+
+  const loadTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    setTemplateError(null);
+    try {
+      setTemplates(await listTemplates());
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : 'Failed to load templates');
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, []);
+
+  const handleOpenTemplates = useCallback(() => {
+    setShowChoiceDialog(false);
+    setShowTemplateModal(true);
+    void loadTemplates();
+    if (!selectedModelProvider) {
+      const available = (Object.values(detection) as AgentBackendDetectItem[]).find((rt) => rt.available);
+      if (available) setSelectedModelProvider(available.type);
+    }
+  }, [detection, loadTemplates, selectedModelProvider]);
+
+  const handleApplyTemplate = useCallback(async (templateID: string) => {
+    if (!selectedModelProvider) {
+      setTemplateError('Please select a runtime');
+      return;
+    }
+    setApplyingTemplate(templateID);
+    setTemplateError(null);
+    try {
+      await applyTemplate(templateID, selectedModelProvider);
+      await refetchAgents();
+      await loadData();
+      setShowTemplateModal(false);
+      showToast('Team created from template', 'success');
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : 'Failed to apply template');
+    } finally {
+      setApplyingTemplate(null);
+    }
+  }, [loadData, refetchAgents, selectedModelProvider, showToast]);
+
   // ---- Edge click → show detail panel ----
 
   const agentNameMap = useMemo(() => {
@@ -384,6 +469,10 @@ export default function RelationshipsPage() {
     edgeToRelationshipMap.current.delete(id);
     setSelectedEdge(null);
   }, [setEdges]);
+
+  const handleAgentDeleted = useCallback(() => {
+    void refetchAgents();
+  }, [refetchAgents]);
 
   const deleteSelectedEdge = useCallback(async () => {
     if (!selectedEdge) return;
@@ -550,7 +639,7 @@ export default function RelationshipsPage() {
         {/* Toolbar */}
         <div className="flex items-center gap-2 h-14 px-4 border-b-2 border-black bg-brutal-cream">
           <h1 className="font-heading text-lg font-bold uppercase tracking-wider mr-auto">
-            {t('relationshipEditor')}
+            {title}
           </h1>
 
           {/* Undo/Redo */}
@@ -583,6 +672,14 @@ export default function RelationshipsPage() {
           >
             <LayoutGrid className="h-3.5 w-3.5" />
             {t('relationshipEditorAutoLayout')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowChoiceDialog(true)}
+            className="flex items-center gap-1.5 h-8 px-3 border-2 border-black bg-brutal-primary hover:bg-brutal-primary-light font-heading text-xs font-bold uppercase tracking-wider"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Agent
           </button>
 
           {/* Delete selected */}
@@ -650,14 +747,141 @@ export default function RelationshipsPage() {
             agents={agents}
           />
 
+          <Dialog open={showChoiceDialog} onOpenChange={setShowChoiceDialog} width="sm">
+            <DialogHeader>
+              <DialogTitle>Create Agent</DialogTitle>
+              <DialogCloseButton onClick={() => setShowChoiceDialog(false)} />
+            </DialogHeader>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowChoiceDialog(false);
+                  setShowCreateAgentModal(true);
+                }}
+                className="w-full flex items-center gap-3 p-4 border-2 border-black bg-white hover:bg-brutal-primary-light text-left"
+              >
+                <Plus className="h-5 w-5 flex-shrink-0" />
+                <div>
+                  <div className="font-heading text-sm font-bold">Single Agent</div>
+                  <p className="font-sans text-xs text-muted-foreground mt-0.5">Create one agent with custom name, role, and runtime.</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenTemplates}
+                className="w-full flex items-center gap-3 p-4 border-2 border-black bg-white hover:bg-brutal-accent-light text-left"
+              >
+                <Layers className="h-5 w-5 flex-shrink-0" />
+                <div>
+                  <div className="font-heading text-sm font-bold">From Template</div>
+                  <p className="font-sans text-xs text-muted-foreground mt-0.5">Create a team of agents with preset roles and relationships.</p>
+                </div>
+              </button>
+            </div>
+          </Dialog>
+
+          <Dialog
+            open={showCreateAgentModal}
+            onOpenChange={(open) => {
+              if (!open) setShowCreateAgentModal(false);
+            }}
+            width="lg"
+          >
+            <DialogHeader>
+              <DialogTitle>{t('teamsCreateAgent')}</DialogTitle>
+              <DialogCloseButton onClick={() => setShowCreateAgentModal(false)} />
+            </DialogHeader>
+            <AgentForm
+              onSubmit={handleCreateAgent}
+              isSubmitting={isCreatingAgent}
+              submitLabel={t('teamsCreateAgent')}
+            />
+          </Dialog>
+
+          <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal} width="lg">
+            <DialogHeader>
+              <DialogTitle>Create from Template</DialogTitle>
+              <DialogCloseButton onClick={() => setShowTemplateModal(false)} />
+            </DialogHeader>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              <div>
+                <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">
+                  Runtime <span className="text-brutal-danger">*</span>
+                </label>
+                {detectionLoading ? (
+                  <p className="font-mono text-xs text-muted-foreground">Detecting runtimes...</p>
+                ) : (
+                  <Select
+                    value={selectedModelProvider}
+                    onChange={setSelectedModelProvider}
+                    options={(Object.values(detection) as AgentBackendDetectItem[]).map((rt) => ({
+                      value: rt.type,
+                      label: `${rt.available ? '●' : '○'} ${rt.display_name}${rt.version ? ` (${rt.version})` : ''}`,
+                      disabled: !rt.available,
+                    }))}
+                    placeholder="Select runtime..."
+                    size="md"
+                    className="w-full"
+                  />
+                )}
+              </div>
+
+              {templatesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : templates.length === 0 ? (
+                <p className="font-mono text-sm text-muted-foreground text-center py-4">No templates available.</p>
+              ) : (
+                [...new Set(templates.map((tmpl) => tmpl.category))].map((category) => (
+                  <div key={category}>
+                    <h3 className="font-heading text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 border-b-2 border-black pb-1">
+                      {category}
+                    </h3>
+                    <div className="space-y-2">
+                      {templates.filter((tmpl) => tmpl.category === category).map((tmpl) => (
+                        <div key={tmpl.id} className="flex items-start gap-3 p-3 border-2 border-black bg-white">
+                          <span className="text-2xl flex-shrink-0">{tmpl.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-heading text-sm font-bold text-black">{tmpl.name}</span>
+                              <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 border-2 border-black bg-brutal-cream font-mono text-[10px] font-bold text-black">
+                                {tmpl.member_count}
+                              </span>
+                            </div>
+                            <p className="font-sans text-xs text-muted-foreground mt-0.5">{tmpl.description}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyTemplate(tmpl.id)}
+                            disabled={applyingTemplate === tmpl.id}
+                            className="flex-shrink-0 px-3 py-1.5 border-2 border-black bg-brutal-success text-black font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-success-light disabled:opacity-50"
+                          >
+                            {applyingTemplate === tmpl.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+              {templateError && (
+                <p className="font-mono text-xs text-brutal-danger">{templateError}</p>
+              )}
+            </div>
+          </Dialog>
+
           {/* Detail panel */}
           {(detailRel || detailAgent) && (
             <RelationshipDetailPanel
+              key={detailAgent ? `agent-${detailAgent.id}` : `relationship-${detailRel?.id}`}
               relationship={detailRel}
               agent={detailAgent}
               onClose={closeDetailPanel}
               onUpdate={handleDetailUpdate}
               onDelete={handleDetailDelete}
+              onAgentDeleted={handleAgentDeleted}
             />
           )}
 
@@ -692,4 +916,8 @@ export default function RelationshipsPage() {
       </div>
     </div>
   );
+}
+
+export default function RelationshipsPage() {
+  return <RelationshipWorkspace />;
 }

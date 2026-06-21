@@ -34,6 +34,8 @@ import { t } from '@/lib/i18n';
 
 interface TeamsAgentProfileProps {
   agentId: string;
+  redirectAfterDelete?: boolean;
+  showProfileHeader?: boolean;
   /**
    * Called after the delete API returns success. The parent owns the
    * canonical agent list (sidebar) and should refetch + clear its
@@ -42,7 +44,12 @@ interface TeamsAgentProfileProps {
   onAgentDeleted?: (deletedId: string) => void;
 }
 
-export function TeamsAgentProfile({ agentId, onAgentDeleted }: TeamsAgentProfileProps) {
+export function TeamsAgentProfile({
+  agentId,
+  redirectAfterDelete = true,
+  showProfileHeader = true,
+  onAgentDeleted,
+}: TeamsAgentProfileProps) {
   const router = useRouter();
   const { agents, deleteAgent } = useAgents();
   const { showToast } = useToast();
@@ -57,11 +64,13 @@ export function TeamsAgentProfile({ agentId, onAgentDeleted }: TeamsAgentProfile
       await deleteAgent(agentId);
       showToast(t('agentDeleteSuccess'), 'success');
       onAgentDeleted?.(agentId);
-      const remaining = agents.filter((a) => a.id !== agentId);
-      if (remaining.length > 0) {
-        router.replace(`/teams?agent=${remaining[0].id}&tab=profile`, { scroll: false });
-      } else {
-        router.replace('/teams', { scroll: false });
+      if (redirectAfterDelete) {
+        const remaining = agents.filter((a) => a.id !== agentId);
+        if (remaining.length > 0) {
+          router.replace(`/teams?agent=${remaining[0].id}&tab=profile`, { scroll: false });
+        } else {
+          router.replace('/teams', { scroll: false });
+        }
       }
     } catch {
       showToast(t('agentDeleteError'), 'error');
@@ -69,11 +78,11 @@ export function TeamsAgentProfile({ agentId, onAgentDeleted }: TeamsAgentProfile
       setDeleting(false);
       setConfirmOpen(false);
     }
-  }, [agentId, agents, deleteAgent, onAgentDeleted, router, showToast]);
+  }, [agentId, agents, deleteAgent, onAgentDeleted, redirectAfterDelete, router, showToast]);
 
   return (
     <div className="space-y-6">
-      <AgentProfileTab agentId={agentId} />
+      <AgentProfileTab agentId={agentId} showHeader={showProfileHeader} />
       <BrutalSeparator />
       <AgentRuntimeTab agentId={agentId} />
       <BrutalSeparator />

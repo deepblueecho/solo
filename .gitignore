@@ -6,6 +6,9 @@ CLAUDE.md
 # Open Code
 .opencode
 
+# codex
+.codex
+
 # Environment
 .env
 # .env.production is tracked — it's a template with placeholders, no real secrets
