@@ -16,10 +16,12 @@ const agentProfileTab = read('components/agents/agent-profile-tab.tsx');
 const relationshipEdge = read('components/relationships/relationship-edge.tsx');
 const relationshipNode = read('components/relationships/relationship-node.tsx');
 const teamsAgentWorkspace = read('components/teams/teams-agent-workspace.tsx');
+const button = read('components/ui/button.tsx');
 const selectableRow = read('components/ui/selectable-row.tsx');
 const channelList = read('components/dashboard/channel-list.tsx');
 const dmList = read('components/dashboard/dm-list.tsx');
 const tasksLeftColumn = read('components/tasks/tasks-left-column.tsx');
+const createTaskModal = read('components/tasks/create-task-modal.tsx');
 const teamsAgentItem = read('components/teams/teams-agent-item.tsx');
 const teamsHumanItem = read('components/teams/teams-human-item.tsx');
 const navbar = read('components/ui/navbar.tsx');
@@ -132,6 +134,12 @@ assert(
     teamsAgentItem.includes('selectableRowClass') &&
     teamsHumanItem.includes('selectableRowClass'),
   'Dashboard, Tasks, and Teams list selections should share the same selected-row primitive',
+);
+assert(
+  button.includes('export function iconActionClass') &&
+    detailPanel.includes('iconActionClass') &&
+    createTaskModal.includes('iconActionClass'),
+  'Drawer and modal close buttons should share the same icon action primitive',
 );
 assert(
   !exists('components/agents/agent-detail-panel.tsx') &&

@@ -14,7 +14,7 @@ import { useRouter } from 'next/navigation';
 import { X, Trash2, Edit3, Check, AlertTriangle, MessageSquare } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
-import { Button } from '@/components/ui/button';
+import { Button, iconActionClass } from '@/components/ui/button';
 import { TeamsAgentProfile } from '@/components/teams/teams-agent-profile';
 import { TeamsAgentWorkspace } from '@/components/teams/teams-agent-workspace';
 import { useDM } from '@/lib/hooks/use-dm';
@@ -177,7 +177,7 @@ export function RelationshipDetailPanel({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center border-2 border-black bg-white hover:bg-brutal-primary-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+            className={iconActionClass()}
             aria-label={t('close')}
           >
             <X className="h-3.5 w-3.5" />
@@ -291,7 +291,7 @@ export function RelationshipDetailPanel({
         <button
           type="button"
           onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center border-2 border-black bg-white hover:bg-brutal-primary-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+          className={iconActionClass()}
           aria-label={t('close')}
         >
           <X className="h-3.5 w-3.5" />

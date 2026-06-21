@@ -12,6 +12,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { iconActionClass } from '@/components/ui/button';
 import type { CreateTaskInput } from '@/lib/types';
 import { t } from '@/lib/i18n';
 
@@ -142,7 +143,7 @@ export function CreateTaskModal({
             type="button"
             onClick={() => !isDisabled && onOpenChange(false)}
             disabled={isDisabled}
-            className="flex h-7 w-7 items-center justify-center border-2 border-black bg-white hover:bg-brutal-primary-light transition-colors disabled:opacity-50"
+            className={iconActionClass()}
             aria-label={t('close')}
           >
             <X className="h-3.5 w-3.5" />
