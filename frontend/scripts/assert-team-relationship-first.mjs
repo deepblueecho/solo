@@ -17,14 +17,18 @@ const relationshipEdge = read('components/relationships/relationship-edge.tsx');
 const relationshipNode = read('components/relationships/relationship-node.tsx');
 const teamsAgentWorkspace = read('components/teams/teams-agent-workspace.tsx');
 const button = read('components/ui/button.tsx');
+const panelHeader = read('components/ui/panel-header.tsx');
 const selectableRow = read('components/ui/selectable-row.tsx');
 const channelList = read('components/dashboard/channel-list.tsx');
 const dmList = read('components/dashboard/dm-list.tsx');
+const channelView = read('components/dashboard/channel-view.tsx');
+const dmView = read('components/dashboard/dm-view.tsx');
 const tasksLeftColumn = read('components/tasks/tasks-left-column.tsx');
 const createTaskModal = read('components/tasks/create-task-modal.tsx');
 const teamsAgentItem = read('components/teams/teams-agent-item.tsx');
 const teamsHumanItem = read('components/teams/teams-human-item.tsx');
 const navbar = read('components/ui/navbar.tsx');
+const tabBar = read('components/ui/tab-bar.tsx');
 
 assert(
   !exists('app/relationships/page.tsx'),
@@ -140,6 +144,19 @@ assert(
     detailPanel.includes('iconActionClass') &&
     createTaskModal.includes('iconActionClass'),
   'Drawer and modal close buttons should share the same icon action primitive',
+);
+assert(
+  panelHeader.includes('export function panelHeaderClass') &&
+    panelHeader.includes('export function panelTitleClass') &&
+    detailPanel.includes('panelHeaderClass') &&
+    detailPanel.includes('panelTitleClass'),
+  'Relationship and agent drawer headers should share the same panel-header primitive',
+);
+assert(
+  tabBar.includes('export function tabButtonClass') &&
+    channelView.includes('tabButtonClass') &&
+    dmView.includes('tabButtonClass'),
+  'Dashboard message/task tabs should share the same tab-button primitive',
 );
 assert(
   !exists('components/agents/agent-detail-panel.tsx') &&

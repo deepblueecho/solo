@@ -18,6 +18,7 @@ import { AddAgentModal } from './add-agent-modal';
 import { ChannelSearch } from './channel-search';
 import { TaskBoard } from '@/components/tasks/task-board';
 import { Button } from '@/components/ui/button';
+import { tabButtonClass } from '@/components/ui/tab-bar';
 import {
   Dialog,
   DialogHeader,
@@ -381,13 +382,7 @@ export function ChannelView({
               <button
                 type="button"
                 onClick={() => setChannelViewTab('messages')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-heading font-bold border-2 transition-all',
-                  'active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
-                  channelViewTab === 'messages'
-                    ? 'bg-brutal-primary text-black border-black shadow-brutal-sm -translate-y-px'
-                    : 'text-muted-foreground hover:text-foreground border-transparent hover:border-black hover:bg-white hover:shadow-brutal-sm hover:-translate-y-px',
-                )}
+                className={tabButtonClass(channelViewTab === 'messages')}
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 {t('messages')}
@@ -395,13 +390,7 @@ export function ChannelView({
               <button
                 type="button"
                 onClick={() => setChannelViewTab('tasks')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-heading font-bold border-2 transition-all',
-                  'active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
-                  channelViewTab === 'tasks'
-                    ? 'bg-brutal-primary text-black border-black shadow-brutal-sm -translate-y-px'
-                    : 'text-muted-foreground hover:text-foreground border-transparent hover:border-black hover:bg-white hover:shadow-brutal-sm hover:-translate-y-px',
-                )}
+                className={tabButtonClass(channelViewTab === 'tasks')}
               >
                 <ClipboardList className="h-3.5 w-3.5" />
                 {t('tasks')}

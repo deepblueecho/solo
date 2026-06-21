@@ -17,6 +17,17 @@ interface TabBarProps {
   children?: React.ReactNode;
 }
 
+export function tabButtonClass(isActive: boolean, className?: string) {
+  return cn(
+    'flex items-center gap-1.5 px-3 py-1.5 text-xs font-heading font-bold border-2 transition-all',
+    'active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
+    isActive
+      ? 'bg-brutal-primary text-black border-black shadow-brutal-sm -translate-y-px'
+      : 'text-muted-foreground hover:text-foreground border-transparent hover:border-black hover:bg-white hover:shadow-brutal-sm hover:-translate-y-px',
+    className,
+  );
+}
+
 export function TabBar({
   tabs,
   activeKey,

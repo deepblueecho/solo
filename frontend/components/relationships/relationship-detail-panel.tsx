@@ -15,6 +15,7 @@ import { X, Trash2, Edit3, Check, AlertTriangle, MessageSquare } from 'lucide-re
 import { Select } from '@/components/ui/select';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { Button, iconActionClass } from '@/components/ui/button';
+import { panelHeaderClass, panelTitleClass } from '@/components/ui/panel-header';
 import { TeamsAgentProfile } from '@/components/teams/teams-agent-profile';
 import { TeamsAgentWorkspace } from '@/components/teams/teams-agent-workspace';
 import { useDM } from '@/lib/hooks/use-dm';
@@ -170,8 +171,8 @@ export function RelationshipDetailPanel({
           }}
         />
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b-2 border-black bg-brutal-cream">
-          <h3 className="font-heading text-sm font-black uppercase tracking-wider">
+        <div className={panelHeaderClass()}>
+          <h3 className={panelTitleClass()}>
             {t('agentDetailTitle')}
           </h3>
           <button
@@ -284,8 +285,8 @@ export function RelationshipDetailPanel({
         }}
       />
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b-2 border-black bg-brutal-cream">
-        <h3 className="font-heading text-sm font-black uppercase tracking-wider">
+      <div className={panelHeaderClass()}>
+        <h3 className={panelTitleClass()}>
           {t('relationshipEditorEdgeDetail')}
         </h3>
         <button
