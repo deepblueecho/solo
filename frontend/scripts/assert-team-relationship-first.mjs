@@ -15,6 +15,7 @@ const teamsAgentProfile = read('components/teams/teams-agent-profile.tsx');
 const agentProfileTab = read('components/agents/agent-profile-tab.tsx');
 const relationshipEdge = read('components/relationships/relationship-edge.tsx');
 const relationshipNode = read('components/relationships/relationship-node.tsx');
+const typeSelector = read('components/relationships/type-selector.tsx');
 const teamsAgentWorkspace = read('components/teams/teams-agent-workspace.tsx');
 const button = read('components/ui/button.tsx');
 const dialog = read('components/ui/dialog.tsx');
@@ -109,8 +110,10 @@ assert(
     agentProfileTab.includes('variant="success"') &&
     createRelationshipModal.includes('variant="success"') &&
     detailPanel.includes('variant="success"') &&
+    typeSelector.includes('variant="success"') &&
     !agentProfileTab.includes('bg-brutal-success text-black font-heading text-[10px]') &&
     !createRelationshipModal.includes('btn-brutal-sm bg-brutal-success') &&
+    !typeSelector.includes('btn-brutal-xs') &&
     !detailPanel.includes('bg-brutal-success text-black font-heading text-[10px]'),
   'Agent and relationship edit save actions should use the shared brutal Button success variant',
 );
