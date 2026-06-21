@@ -187,6 +187,8 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case err == service.ErrTaskNotChannelMember:
 			writeError(w, http.StatusForbidden, "not a channel member")
+		case err == service.ErrTaskInvalidTransition:
+			writeError(w, http.StatusConflict, err.Error())
 		default:
 			slog.Error("failed to create task", "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to create task")
@@ -888,7 +890,7 @@ func (h *TaskHandler) writeTaskLifecycleError(w http.ResponseWriter, err error) 
 		writeError(w, http.StatusForbidden, "you are not the claimer of this task")
 	case err == service.ErrTaskNotCreator || err == service.ErrTaskHumanOnly:
 		writeError(w, http.StatusForbidden, err.Error())
-	case err == service.ErrTaskNotSubmittable || err == service.ErrTaskNotReviewable || err == service.ErrTaskInTerminalState || err == service.ErrTaskInvalidTransition:
+	case err == service.ErrTaskNotSubmittable || err == service.ErrTaskNotReviewable || err == service.ErrTaskInTerminalState || err == service.ErrTaskInvalidTransition || err == service.ErrTaskHasOpenSubtasks:
 		writeError(w, http.StatusConflict, err.Error())
 	case err == service.ErrTaskReasonRequired:
 		writeError(w, http.StatusBadRequest, err.Error())

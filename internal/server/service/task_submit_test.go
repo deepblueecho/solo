@@ -1,0 +1,129 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func TestSubmitTaskParentWithOpenSubtaskReturnsGuard(t *testing.T) {
+	pool := taskSubmitTestPool(t)
+	ctx := context.Background()
+	creatorID := taskSubmitUser(t, pool)
+	agentID := taskSubmitAgent(t, pool, creatorID)
+	channelID := taskSubmitChannel(t, pool, creatorID)
+	taskSubmitMember(t, pool, channelID, "user", creatorID)
+	taskSubmitMember(t, pool, channelID, "agent", agentID)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tasks WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channel_members WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channels WHERE id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM agents WHERE id = $1`, agentID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, creatorID)
+	})
+
+	parentID := taskSubmitTask(t, pool, channelID, creatorID, agentID, TaskStatusInProgress, nil)
+	_ = taskSubmitTask(t, pool, channelID, creatorID, "", TaskStatusTodo, &parentID)
+
+	_, err := NewTaskService(pool).SubmitTask(ctx, channelID, parentID, agentID)
+	if !errors.Is(err, ErrTaskHasOpenSubtasks) {
+		t.Fatalf("SubmitTask error = %v, want %v", err, ErrTaskHasOpenSubtasks)
+	}
+}
+
+func taskSubmitTestPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://solo:solo-dev@localhost:5432/solo?sslmode=disable"
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Skipf("skipping DB test: %v", err)
+	}
+	if err := pool.Ping(context.Background()); err != nil {
+		pool.Close()
+		t.Skipf("skipping DB test: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func taskSubmitUser(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	id := uuid.NewString()
+	email := fmt.Sprintf("submit-%s@example.test", id)
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO users (id, email, display_name, password_hash) VALUES ($1, $2, $3, 'test')`,
+		id, email, "Submit Tester",
+	)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	return id
+}
+
+func taskSubmitAgent(t *testing.T, pool *pgxpool.Pool, ownerID string) string {
+	t.Helper()
+	id := uuid.NewString()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO agents (id, name, owner_id, model_name) VALUES ($1, $2, $3, 'test-model')`,
+		id, "submit-agent-"+id[:8], ownerID,
+	)
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	return id
+}
+
+func taskSubmitChannel(t *testing.T, pool *pgxpool.Pool, creatorID string) string {
+	t.Helper()
+	id := uuid.NewString()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO channels (id, name, created_by) VALUES ($1, $2, $3)`,
+		id, "submit-test-"+id[:8], creatorID,
+	)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	return id
+}
+
+func taskSubmitMember(t *testing.T, pool *pgxpool.Pool, channelID, memberType, memberID string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO channel_members (channel_id, member_type, member_id) VALUES ($1, $2, $3)`,
+		channelID, memberType, memberID,
+	)
+	if err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+}
+
+func taskSubmitTask(t *testing.T, pool *pgxpool.Pool, channelID, creatorID, claimerID, status string, parentID *string) string {
+	t.Helper()
+	id := uuid.NewString()
+	var claimer any
+	if claimerID != "" {
+		claimer = claimerID
+	}
+	var parent any
+	if parentID != nil {
+		parent = *parentID
+	}
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO tasks (id, channel_id, creator_id, claimer_id, title, status, priority, task_number, parent_task_id)
+		 VALUES ($1, $2, $3, $4, 'submit-test', $5, 'normal',
+		   (SELECT COALESCE(MAX(task_number), 0) + 1 FROM tasks WHERE channel_id = $2), $6)`,
+		id, channelID, creatorID, claimer, status, parent,
+	)
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	return id
+}

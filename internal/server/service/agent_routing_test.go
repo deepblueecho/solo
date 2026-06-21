@@ -25,3 +25,61 @@ func TestChooseCoordinatorFromEdgesFallback(t *testing.T) {
 		t.Fatalf("expected first agent fallback, got %#v", got)
 	}
 }
+
+func TestSelectWakeAgentIDsMatchesCurrentTaskRouting(t *testing.T) {
+	active := []string{"lead", "be", "fe"}
+	edges := []relationshipEdge{{from: "lead", to: "be"}, {from: "lead", to: "fe"}}
+
+	tests := []struct {
+		name string
+		in   wakeRouteInput
+		want []string
+	}{
+		{
+			name: "explicit mention wins",
+			in: wakeRouteInput{
+				ActiveIDs:    active,
+				MentionedIDs: []string{"be"},
+				Edges:        edges,
+			},
+			want: []string{"be"},
+		},
+		{
+			name: "unknown mention suppresses fallback",
+			in: wakeRouteInput{
+				ActiveIDs:  active,
+				HasMention: true,
+			},
+			want: nil,
+		},
+		{
+			name: "unmentioned task uses coordinator",
+			in: wakeRouteInput{
+				ActiveIDs: active,
+				Edges:     edges,
+			},
+			want: []string{"lead"},
+		},
+		{
+			name: "no relationship keeps first active fallback",
+			in: wakeRouteInput{
+				ActiveIDs: active,
+			},
+			want: []string{"lead"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := selectWakeAgentIDs(tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("got %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
