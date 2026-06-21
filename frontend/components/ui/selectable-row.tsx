@@ -29,6 +29,13 @@ export function selectableRowClass(selected = false, className?: string) {
   );
 }
 
+export function selectableRowIconClass(className?: string) {
+  return cn(
+    "flex h-7 w-7 flex-shrink-0 items-center justify-center border-2 border-black shadow-brutal-sm",
+    className,
+  );
+}
+
 export function SelectableRow({
   selected = false,
   onClick,

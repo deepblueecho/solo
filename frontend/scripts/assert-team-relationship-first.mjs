@@ -141,6 +141,12 @@ assert(
   'Dashboard, Tasks, and Teams list selections should share the same selected-row primitive',
 );
 assert(
+  selectableRow.includes('export function selectableRowIconClass') &&
+    channelList.includes('selectableRowIconClass') &&
+    tasksLeftColumn.includes('selectableRowIconClass'),
+  'Dashboard and Tasks channel rows should share the same selected-row icon primitive',
+);
+assert(
   button.includes('export function iconActionClass') &&
     channelView.includes('iconActionClass') &&
     dialog.includes('iconActionClass') &&
