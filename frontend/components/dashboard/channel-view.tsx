@@ -17,7 +17,7 @@ import { MemberList } from './member-list';
 import { AddAgentModal } from './add-agent-modal';
 import { ChannelSearch } from './channel-search';
 import { TaskBoard } from '@/components/tasks/task-board';
-import { Button } from '@/components/ui/button';
+import { Button, iconActionClass } from '@/components/ui/button';
 import { tabButtonClass } from '@/components/ui/tab-bar';
 import {
   Dialog,
@@ -586,7 +586,7 @@ export function ChannelView({
                 setIsMemberPopoverOpen(false);
                 setIsAddAgentModalOpen(true);
               }}
-              className="flex h-7 w-7 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-primary-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+              className={iconActionClass('shadow-brutal-sm')}
               aria-label={t('addAgentToChannel')}
             >
               <Plus className="h-3.5 w-3.5" />

@@ -142,6 +142,7 @@ assert(
 );
 assert(
   button.includes('export function iconActionClass') &&
+    channelView.includes('iconActionClass') &&
     dialog.includes('iconActionClass') &&
     detailPanel.includes('iconActionClass') &&
     createTaskModal.includes('iconActionClass'),
