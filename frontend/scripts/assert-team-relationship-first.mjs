@@ -16,6 +16,12 @@ const agentProfileTab = read('components/agents/agent-profile-tab.tsx');
 const relationshipEdge = read('components/relationships/relationship-edge.tsx');
 const relationshipNode = read('components/relationships/relationship-node.tsx');
 const teamsAgentWorkspace = read('components/teams/teams-agent-workspace.tsx');
+const selectableRow = read('components/ui/selectable-row.tsx');
+const channelList = read('components/dashboard/channel-list.tsx');
+const dmList = read('components/dashboard/dm-list.tsx');
+const tasksLeftColumn = read('components/tasks/tasks-left-column.tsx');
+const teamsAgentItem = read('components/teams/teams-agent-item.tsx');
+const teamsHumanItem = read('components/teams/teams-human-item.tsx');
 const navbar = read('components/ui/navbar.tsx');
 
 assert(
@@ -117,6 +123,15 @@ assert(
 assert(
   !teamsAgentWorkspace.includes('href={`/workspace?agent=${agentId}`}') && !navbar.includes("href: '/workspace'"),
   'workspace should not be exposed as a separate left-nav tab from Teams',
+);
+assert(
+  selectableRow.includes('export function selectableRowClass') &&
+    channelList.includes('selectableRowClass') &&
+    dmList.includes('selectableRowClass') &&
+    tasksLeftColumn.includes('selectableRowClass') &&
+    teamsAgentItem.includes('selectableRowClass') &&
+    teamsHumanItem.includes('selectableRowClass'),
+  'Dashboard, Tasks, and Teams list selections should share the same selected-row primitive',
 );
 assert(
   !exists('components/agents/agent-detail-panel.tsx') &&
