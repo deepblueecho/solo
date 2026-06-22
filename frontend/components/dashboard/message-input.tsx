@@ -598,7 +598,7 @@ export function MessageInput({
               aria-pressed={asTask}
             >
               <ClipboardList className="h-3.5 w-3.5" />
-              {asTask ? 'Cancel Task' : 'Create as Task'}
+              {asTask ? 'Message Mode' : 'Track as Task'}
             </button>
           </div>
         )}
@@ -656,7 +656,7 @@ export function MessageInput({
       </div>
       <p className="mt-1.5 text-center font-mono text-[10px] text-muted-foreground">
         {asTask
-          ? 'Enter to create task · Title can be empty (first 100 chars of message) · Toggle to cancel task mode'
+          ? 'Enter to create tracked work · stays linked to this conversation'
           : 'Enter to send · Shift+Enter for new line · @ to mention · Drag & drop files or Ctrl+V to paste images'}
       </p>
     </div>
