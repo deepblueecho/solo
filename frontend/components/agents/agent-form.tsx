@@ -20,6 +20,15 @@ import { t } from '@/lib/i18n';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogCloseButton,
+} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select } from '@/components/ui/select';
 import { EnvEditor } from '@/components/agents/env-editor';
@@ -136,6 +145,7 @@ export function AgentForm({
 
   // Role template selection state (SOLO-210-F)
   const [selectedTemplateKey, setSelectedTemplateKey] = useState<string | null>(null);
+  const [pendingTemplate, setPendingTemplate] = useState<RoleTemplate | null>(null);
 
   // v1.4: separate local state for complex editors, synced to form values
   const [envValues, setEnvValues] = useState<Record<string, string>>(
@@ -145,29 +155,31 @@ export function AgentForm({
     defaultValues?.custom_args || [],
   );
 
+  const applyTemplate = useCallback(
+    (template: RoleTemplate) => {
+      setValue('system_prompt', template.prompt);
+      setSelectedTemplateKey(template.key);
+      setPendingTemplate(null);
+    },
+    [setValue],
+  );
+
   const handleTemplateSelect = useCallback(
     (template: RoleTemplate) => {
-      if (selectedTemplateKey === template.key) {
-        setValue('system_prompt', template.prompt);
-        return;
-      }
-
       const isTextareaDirty =
+        selectedTemplateKey !== template.key &&
         currentSystemPrompt.trim() !== '' &&
         currentSystemPrompt !==
           ROLE_TEMPLATES.find((t) => t.key === selectedTemplateKey)?.prompt;
 
       if (isTextareaDirty) {
-        const confirmed = window.confirm(
-          t('agentFormTemplateWarning'),
-        );
-        if (!confirmed) return;
+        setPendingTemplate(template);
+        return;
       }
 
-      setValue('system_prompt', template.prompt);
-      setSelectedTemplateKey(template.key);
+      applyTemplate(template);
     },
-    [currentSystemPrompt, selectedTemplateKey, setValue],
+    [applyTemplate, currentSystemPrompt, selectedTemplateKey],
   );
 
   const handleEnvChange = useCallback(
@@ -198,6 +210,7 @@ export function AgentForm({
   );
 
   return (
+    <>
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
       {/* Name */}
       <div className="space-y-2">
@@ -371,10 +384,9 @@ export function AgentForm({
 
       {/* Submit */}
       <div className="flex items-center gap-3 pt-2">
-        <button
+        <Button
           type="submit"
           disabled={isSubmitting}
-          className="btn-brutal btn-brutal-primary"
         >
           {isSubmitting ? (
             <>
@@ -387,9 +399,35 @@ export function AgentForm({
               {submitLabel}
             </>
           )}
-        </button>
+        </Button>
       </div>
     </form>
+    <Dialog open={!!pendingTemplate} onOpenChange={(open) => { if (!open) setPendingTemplate(null); }}>
+      <DialogHeader>
+        <DialogTitle>{t('agentFormRoleTemplate')}</DialogTitle>
+        <DialogCloseButton onClick={() => setPendingTemplate(null)} />
+      </DialogHeader>
+      <DialogDescription>
+        {t('agentFormTemplateWarning')}
+      </DialogDescription>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setPendingTemplate(null)}
+        >
+          {t('cancel')}
+        </Button>
+        <Button
+          type="button"
+          variant="danger"
+          onClick={() => pendingTemplate && applyTemplate(pendingTemplate)}
+        >
+          {t('confirm')}
+        </Button>
+      </DialogFooter>
+    </Dialog>
+    </>
   );
 }
 

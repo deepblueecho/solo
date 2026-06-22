@@ -18,8 +18,8 @@ import { Trash2 } from 'lucide-react';
 import { AgentProfileTab } from '@/components/agents/agent-profile-tab';
 import { AgentRuntimeTab } from '@/components/agents/agent-runtime-tab';
 import { AgentSkillsTab } from '@/components/agents/agent-skills-tab';
-import { BrutalSeparator } from '@/components/ui/brutal-separator';
 import { Button } from '@/components/ui/button';
+import { detailSectionClass } from '@/components/ui/detail-section';
 import {
   Dialog,
   DialogHeader,
@@ -34,6 +34,8 @@ import { t } from '@/lib/i18n';
 
 interface TeamsAgentProfileProps {
   agentId: string;
+  redirectAfterDelete?: boolean;
+  showProfileHeader?: boolean;
   /**
    * Called after the delete API returns success. The parent owns the
    * canonical agent list (sidebar) and should refetch + clear its
@@ -42,7 +44,12 @@ interface TeamsAgentProfileProps {
   onAgentDeleted?: (deletedId: string) => void;
 }
 
-export function TeamsAgentProfile({ agentId, onAgentDeleted }: TeamsAgentProfileProps) {
+export function TeamsAgentProfile({
+  agentId,
+  redirectAfterDelete = true,
+  showProfileHeader = true,
+  onAgentDeleted,
+}: TeamsAgentProfileProps) {
   const router = useRouter();
   const { agents, deleteAgent } = useAgents();
   const { showToast } = useToast();
@@ -57,11 +64,13 @@ export function TeamsAgentProfile({ agentId, onAgentDeleted }: TeamsAgentProfile
       await deleteAgent(agentId);
       showToast(t('agentDeleteSuccess'), 'success');
       onAgentDeleted?.(agentId);
-      const remaining = agents.filter((a) => a.id !== agentId);
-      if (remaining.length > 0) {
-        router.replace(`/teams?agent=${remaining[0].id}&tab=profile`, { scroll: false });
-      } else {
-        router.replace('/teams', { scroll: false });
+      if (redirectAfterDelete) {
+        const remaining = agents.filter((a) => a.id !== agentId);
+        if (remaining.length > 0) {
+          router.replace(`/teams?agent=${remaining[0].id}&tab=profile`, { scroll: false });
+        } else {
+          router.replace('/teams', { scroll: false });
+        }
       }
     } catch {
       showToast(t('agentDeleteError'), 'error');
@@ -69,23 +78,27 @@ export function TeamsAgentProfile({ agentId, onAgentDeleted }: TeamsAgentProfile
       setDeleting(false);
       setConfirmOpen(false);
     }
-  }, [agentId, agents, deleteAgent, onAgentDeleted, router, showToast]);
+  }, [agentId, agents, deleteAgent, onAgentDeleted, redirectAfterDelete, router, showToast]);
 
   return (
-    <div className="space-y-6">
-      <AgentProfileTab agentId={agentId} />
-      <BrutalSeparator />
-      <AgentRuntimeTab agentId={agentId} />
-      <BrutalSeparator />
-      <AgentSkillsTab agentId={agentId} />
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <AgentProfileTab agentId={agentId} showHeader={showProfileHeader} />
+        <div className={detailSectionClass()}>
+          <AgentRuntimeTab agentId={agentId} />
+        </div>
+        <div className={detailSectionClass()}>
+          <AgentSkillsTab agentId={agentId} />
+        </div>
+      </div>
 
       {/* Danger zone — delete agent (soft delete: retains DM history) */}
-      <BrutalSeparator />
-      <div className="flex justify-end pt-2">
+      <div className="border-t-2 border-black p-4 bg-brutal-cream">
         <Button
           type="button"
           variant="danger"
           onClick={() => setConfirmOpen(true)}
+          className="w-full justify-center"
         >
           <Trash2 className="mr-2 h-4 w-4" />
           {t('agentDeleteButton')}
@@ -122,27 +135,5 @@ export function TeamsAgentProfile({ agentId, onAgentDeleted }: TeamsAgentProfile
         </DialogFooter>
       </Dialog>
     </div>
-  );
-}
-
-function Section({
-  header,
-  headerColor,
-  children,
-}: {
-  header: string;
-  headerColor: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <span
-        className={`inline-block ${headerColor} border-2 border-black px-2 py-0.5 font-heading text-[10px] font-black uppercase tracking-widest text-black shadow-brutal-sm`}
-        style={{ transform: 'rotate(-0.6deg)' }}
-      >
-        ★ {header}
-      </span>
-      <div className="mt-3">{children}</div>
-    </section>
   );
 }

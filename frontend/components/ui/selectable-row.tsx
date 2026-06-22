@@ -19,6 +19,23 @@ export interface SelectableRowProps
   trailing?: React.ReactNode;
 }
 
+export function selectableRowClass(selected = false, className?: string) {
+  return cn(
+    "group flex cursor-pointer items-center gap-2 border-2 px-3 py-1.5 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brutal-info focus-visible:ring-offset-2",
+    selected
+      ? "border-black bg-brutal-primary text-black shadow-brutal-sm"
+      : "border-transparent text-black hover:border-black",
+    className,
+  );
+}
+
+export function selectableRowIconClass(className?: string) {
+  return cn(
+    "flex h-7 w-7 flex-shrink-0 items-center justify-center border-2 border-black shadow-brutal-sm",
+    className,
+  );
+}
+
 export function SelectableRow({
   selected = false,
   onClick,
@@ -34,14 +51,7 @@ export function SelectableRow({
       type={type}
       onClick={onClick}
       aria-current={selected ? "true" : undefined}
-      className={cn(
-        "group flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
-        "border-2",
-        selected
-          ? "border-black bg-brutal-primary text-black shadow-brutal-sm"
-          : "border-transparent hover:border-black hover:bg-black/5",
-        className,
-      )}
+      className={selectableRowClass(selected, cn("w-full text-left", className))}
       {...props}
     >
       {leading != null && <span className="flex-shrink-0">{leading}</span>}

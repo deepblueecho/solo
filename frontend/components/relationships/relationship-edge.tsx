@@ -63,6 +63,7 @@ function RelationshipEdgeComponent({
             stroke: style.stroke,
             strokeWidth: 1.5,
             opacity: 0.35,
+            cursor: 'pointer',
           }}
           markerEnd={markerEnd}
         />
@@ -74,9 +75,11 @@ function RelationshipEdgeComponent({
         path={edgePath}
         style={{
           stroke: style.stroke,
-          strokeWidth: isCollaboration ? 2 : 2.5,
+          strokeWidth: selected ? 4 : (isCollaboration ? 2 : 2.5),
           strokeDasharray: isCollaboration ? '8,4' : 'none',
+          cursor: 'pointer',
         }}
+        interactionWidth={24}
         markerEnd={isCollaboration ? undefined : markerEnd}
       />
 
@@ -90,7 +93,9 @@ function RelationshipEdgeComponent({
             strokeWidth: 4,
             strokeDasharray: isCollaboration ? '8,4' : 'none',
             opacity: 0.25,
+            cursor: 'pointer',
           }}
+          interactionWidth={24}
         />
       )}
 
@@ -107,8 +112,9 @@ function RelationshipEdgeComponent({
           <span className={[
             'inline-block px-2 py-0.5 border-2 border-black',
             'font-heading text-[9px] font-bold uppercase tracking-wider',
+            'cursor-pointer hover:-translate-y-0.5 hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 transition-transform duration-100',
             selected
-              ? 'bg-brutal-accent text-black shadow-brutal-sm'
+              ? 'bg-brutal-primary text-black shadow-brutal-sm'
               : 'bg-white text-muted-foreground',
           ].join(' ')}>
             {relType.replace(/_/g, ' ')}

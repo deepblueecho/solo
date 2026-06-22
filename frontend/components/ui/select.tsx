@@ -187,7 +187,7 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
             'inline-flex w-full items-center justify-between gap-1',
             'bg-white text-black font-heading font-bold',
             'border-2 border-black shadow-brutal-sm',
-            'focus-visible:outline-none focus-visible:shadow-brutal',
+            'focus:bg-brutal-primary-light focus:shadow-brutal focus-visible:outline-none',
             'disabled:opacity-50 disabled:pointer-events-none',
             'rounded-none',
             SIZE_CLASSES[size],

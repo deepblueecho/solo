@@ -8,7 +8,7 @@
 'use client';
 
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
-import { cn } from '@/lib/utils';
+import { selectableRowClass } from '@/components/ui/selectable-row';
 import { t } from '@/lib/i18n';
 import type { Agent } from '@/lib/types';
 
@@ -22,12 +22,7 @@ export function TeamsAgentItem({ agent, isSelected, onSelect }: TeamsAgentItemPr
   return (
     <div
       onClick={() => onSelect(agent.id)}
-      className={cn(
-        'flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm transition-all',
-        isSelected
-          ? 'bg-brutal-primary text-black border-2 border-black shadow-brutal-sm'
-          : 'border-2 border-transparent hover:border-black',
-      )}
+      className={selectableRowClass(isSelected)}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {

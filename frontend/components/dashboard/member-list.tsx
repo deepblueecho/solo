@@ -8,6 +8,15 @@ import { useState } from 'react';
 import { Users, Bot, Circle, Plus, User as UserIcon, X } from 'lucide-react';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogCloseButton,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { t } from '@/lib/i18n';
 import type { ChannelMember } from '@/lib/types';
 
@@ -37,41 +46,44 @@ function MemberItem({ member, onRemove }: { member: ChannelMember; onRemove?: (i
     typing: t('typing'),
   }[member.status] || t('offline');
 
+  const handleRemove = () => {
+    onRemove?.(member.member_id);
+    setConfirming(false);
+  };
+
   return (
-    <div className="group flex items-center gap-2 border-2 border-transparent px-2 py-1.5 transition-colors hover:border-black hover:bg-brutal-primary-light">
+    <div className="group flex items-center gap-3 border-2 border-transparent bg-white p-2 transition-all hover:border-black hover:bg-brutal-primary-light hover:shadow-brutal-sm">
       {/* Icon / Avatar */}
       {isAgent ? (
-        <PixelAvatar agentId={member.member_id} size="sm" />
+        <PixelAvatar agentId={member.member_id} size="md" />
       ) : (
-        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center border-2 border-black bg-brutal-muted shadow-brutal-sm">
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center border-2 border-black bg-brutal-muted shadow-brutal-sm">
           <span className="font-heading text-[10px] font-bold text-black">
             {member.display_name?.charAt(0)?.toUpperCase() || '?'}
           </span>
         </div>
       )}
 
-      {/* Name */}
-      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-        {member.display_name}
-      </span>
-
-      {/* Badge + remove */}
-      <div className="ml-auto flex flex-shrink-0 items-center gap-1">
-        {isAgent && (
-          <span className="badge-brutal bg-brutal-primary text-black text-[10px]">
-            Agent
+      {/* Info */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-heading text-sm font-bold text-foreground">
+            {member.display_name}
           </span>
-        )}
+          <span className="flex-shrink-0 border-2 border-black bg-brutal-primary px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black">
+            {isAgent ? t('agent') : t('user')}
+          </span>
+        </div>
+        <div className="mt-0.5 flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+          <Circle className={`h-2 w-2 flex-shrink-0 ${statusColor}`} />
+          {statusLabel}
+        </div>
+      </div>
 
-        {isAgent && onRemove && (
-          confirming ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onRemove(member.member_id); }}
-              className="btn-brutal btn-brutal-sm bg-brutal-danger text-black border-2 border-black font-heading text-[10px] font-bold shadow-brutal-sm"
-            >
-              KICK
-            </button>
-          ) : (
+      {/* Remove */}
+      <div className="flex flex-shrink-0 items-center">
+        {isAgent && (
+          onRemove && (
             <button
               onClick={(e) => { e.stopPropagation(); setConfirming(true); }}
               className="flex-shrink-0 border-2 border-black bg-white px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-all shadow-brutal-sm hover:bg-brutal-danger hover:text-black"
@@ -83,10 +95,31 @@ function MemberItem({ member, onRemove }: { member: ChannelMember; onRemove?: (i
         )}
       </div>
 
-      {/* Status dot — always at rightmost, consistent X regardless of badge */}
-      <div className="flex-shrink-0" title={statusLabel} style={{ width: 8 }}>
-        <Circle className={`h-2 w-2 ${statusColor}`} />
-      </div>
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogHeader>
+          <DialogTitle>{t('removeAgent')}</DialogTitle>
+          <DialogCloseButton onClick={() => setConfirming(false)} />
+        </DialogHeader>
+        <DialogDescription>
+          Remove {member.display_name} from this channel?
+        </DialogDescription>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setConfirming(false)}
+          >
+            {t('cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={handleRemove}
+          >
+            {t('confirm')}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }
@@ -117,13 +150,16 @@ export function MemberList({ users, agents, isLoading, onAddAgent, onRemoveAgent
             {users.length + agents.length}
           </span>
         </div>
-        <button
+        <Button
+          type="button"
           onClick={onAddAgent}
-          className="btn-brutal flex h-6 w-6 items-center justify-center border-2 border-black font-heading font-bold"
+          variant="primary"
+          size="icon"
+          className="h-7 w-7"
           aria-label={t('addAgentToChannel')}
         >
           <Plus className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
       )}
 

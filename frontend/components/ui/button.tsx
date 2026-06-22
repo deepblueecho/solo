@@ -19,6 +19,8 @@ const buttonVariants = cva(
         primary: "btn-brutal-primary",
         // Dangerous action (destructive intent; white text on coral red)
         danger: "btn-brutal-danger",
+        // Successful action (save/confirm intent; green fill)
+        success: "btn-brutal-success",
         // Outlined: white fill, 2px black border (already on the base)
         outline: "bg-brutal-white text-brutal-black",
         // Ghost: transparent until hover, then yellow tint
@@ -46,6 +48,13 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {}
+
+export function iconActionClass(className?: string) {
+  return cn(
+    "flex h-7 w-7 items-center justify-center border-2 border-black bg-white hover:bg-brutal-primary-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all disabled:opacity-50",
+    className,
+  );
+}
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, ...props }, ref) => {

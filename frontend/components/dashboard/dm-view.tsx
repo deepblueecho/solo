@@ -19,6 +19,7 @@ import { MessageInput } from './message-input';
 import { TaskBoard } from '@/components/tasks/task-board';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
+import { tabButtonClass } from '@/components/ui/tab-bar';
 const ThreadPanel = lazy(() =>
   import('./thread-panel').then((m) => ({ default: m.ThreadPanel })),
 );
@@ -298,13 +299,7 @@ export function DMView({
               <button
                 type="button"
                 onClick={() => setViewTab('messages')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-heading font-bold border-2 transition-all',
-                  'active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
-                  viewTab === 'messages'
-                    ? 'bg-brutal-primary text-black border-black shadow-brutal-sm -translate-y-px'
-                    : 'text-muted-foreground hover:text-foreground border-transparent hover:border-black hover:bg-white hover:shadow-brutal-sm hover:-translate-y-px',
-                )}
+                className={tabButtonClass(viewTab === 'messages')}
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 {t('messages')}
@@ -312,13 +307,7 @@ export function DMView({
               <button
                 type="button"
                 onClick={() => setViewTab('tasks')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-heading font-bold border-2 transition-all',
-                  'active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
-                  viewTab === 'tasks'
-                    ? 'bg-brutal-primary text-black border-black shadow-brutal-sm -translate-y-px'
-                    : 'text-muted-foreground hover:text-foreground border-transparent hover:border-black hover:bg-white hover:shadow-brutal-sm hover:-translate-y-px',
-                )}
+                className={tabButtonClass(viewTab === 'tasks')}
               >
                 <ClipboardList className="h-3.5 w-3.5" />
                 {t('tasks')}

@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import type { RelationshipType } from '@/lib/types';
 import { t, type TranslationKey } from '@/lib/i18n';
 
@@ -89,20 +90,22 @@ export function TypeSelector({ fromName, toName, onSelect, onCancel }: TypeSelec
 
       {/* Confirm */}
       <div className="flex items-center justify-end gap-2">
-        <button
+        <Button
           type="button"
           onClick={onCancel}
-          className="btn-brutal-xs px-3 py-1.5"
+          variant="outline"
+          size="sm"
         >
           {t('cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={() => onSelect(selected)}
-          className="btn-brutal-xs px-3 py-1.5 bg-brutal-success text-black"
+          variant="success"
+          size="sm"
         >
           {t('confirm')}
-        </button>
+        </Button>
       </div>
     </div>
   );

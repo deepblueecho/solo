@@ -11,7 +11,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, ArrowLeftRight, Loader2 } from 'lucide-react';
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Select, type SelectOption } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { apiClient } from '@/lib/api-client';
 import { t } from '@/lib/i18n';
 import type { RelationshipType, Agent } from '@/lib/types';
@@ -183,16 +185,17 @@ export function CreateRelationshipModal({
             />
           </div>
 
-          <button
+          <Button
             type="button"
             onClick={handleSwapAgents}
             disabled={!fromAgentId && !toAgentId}
-            className="flex h-10 w-10 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-primary-light disabled:opacity-30"
+            variant="outline"
+            size="icon"
             aria-label="Swap from and to agents"
             title="Swap"
           >
             <ArrowLeftRight className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Relationship Type */}
@@ -235,14 +238,14 @@ export function CreateRelationshipModal({
           <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">
             {relType === 'assigns_to' ? 'Delegation Criteria' : 'Collaboration Criteria'}
           </label>
-          <textarea
+          <Textarea
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             placeholder={relType === 'assigns_to'
               ? `Delegate coding tasks with: clear requirement description, acceptance criteria, relevant file paths, existing patterns to follow.\n\nReport back with: implementation status, files changed, acceptance criteria checklist (pass/fail each), test results, and self-review concerns.`
               : `Coordinate on: API contract sync, shared component design, integration testing.\n\nKeep in sync: interface definitions, breaking changes, deployment order.`
             }
-            className="w-full min-h-[100px] px-3 py-2 border-2 border-black font-mono text-xs resize-y bg-white"
+            className="min-h-[100px] font-mono text-xs resize-y"
             rows={4}
           />
           <p className="mt-1 font-mono text-[10px] text-muted-foreground">
@@ -265,18 +268,22 @@ export function CreateRelationshipModal({
       </div>
 
       <DialogFooter>
-        <button
+        <Button
           type="button"
           onClick={() => onOpenChange(false)}
-          className="btn-brutal-sm px-4 py-1.5"
+          variant="outline"
+          size="sm"
+          className="px-4"
         >
           {t('cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit || !!cycleWarning}
-          className="btn-brutal-sm bg-brutal-success text-black px-4 py-1.5 disabled:opacity-50 disabled:pointer-events-none"
+          variant="success"
+          size="sm"
+          className="px-4"
         >
           {isSubmitting ? (
             <span className="flex items-center gap-1.5">
@@ -286,7 +293,7 @@ export function CreateRelationshipModal({
           ) : (
             t('create')
           )}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

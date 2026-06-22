@@ -23,11 +23,8 @@ import {
   Apple,
   MonitorDot,
   Server,
-  Globe,
   Cpu,
   ChevronDown,
-  ChevronUp,
-  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { t } from '@/lib/i18n';
@@ -40,6 +37,12 @@ import { BrutalAlert } from '@/components/ui/brutal-alert';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { useToast } from '@/components/ui/toast';
 import { EmptyState } from '@/components/ui/empty-state';
+import {
+  detailEditActionClass,
+  detailFieldLabelClass,
+  detailSectionClass,
+  detailSectionTitleClass,
+} from '@/components/ui/detail-section';
 import { useAgents } from '@/lib/hooks/use-agents';
 import { AgentForm, type AgentFormValues } from '@/components/agents/agent-form';
 import { NavBar } from '@/components/ui/navbar';
@@ -50,8 +53,6 @@ import {
   Dialog,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
   DialogCloseButton,
 } from '@/components/ui/dialog';
 import type { Computer } from '@/lib/types';
@@ -102,7 +103,7 @@ function AgentStatusDot({ status }: { status: string }) {
 
 export default function ComputersPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { computers, isLoading, error, updateComputer, deleteComputer, refetch } = useComputers();
+  const { computers, isLoading, error, updateComputer, refetch } = useComputers();
   const { createAgent } = useAgents();
   const { showToast } = useToast();
 
@@ -127,9 +128,6 @@ export default function ComputersPage() {
     }
   }, [isCreating, createAgent, showToast, refetch]);
 
-  // Expanded card state
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
   // Add computer dialog
   const [showAddDialog, setShowAddDialog] = useState(false);
 
@@ -138,12 +136,6 @@ export default function ComputersPage() {
   const [editName, setEditName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
-
-  // Delete confirmation state
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const deleteTargetName =
-    deleteTargetId ? computers.find((c) => c.id === deleteTargetId)?.name : null;
 
   // Selected computer (driven by ComputersLeftColumn)
   const [selectedComputerId, setSelectedComputerId] = useState<string | null>(null);
@@ -158,16 +150,14 @@ export default function ComputersPage() {
     if (!autoSelected && !isLoading && computers.length > 0 && !selectedComputerId) {
       const firstId = computers[0].id;
       setSelectedComputerId(firstId);
-      setExpandedId(firstId);
       setAutoSelected(true);
     }
   }, [autoSelected, isLoading, computers, selectedComputerId]);
 
-  // Left-column click: re-click clears selection; switching resets edit/expand
+  // Left-column click: re-click clears selection; switching resets edit
   const handleComputerClick = useCallback((id: string) => {
     setSelectedComputerId((prev) => (prev === id ? null : id));
     setEditingId(null);
-    setExpandedId(null);
   }, []);
 
   // Focus edit input when editing starts
@@ -177,11 +167,6 @@ export default function ComputersPage() {
       editInputRef.current.select();
     }
   }, [editingId]);
-
-  const handleToggleExpand = useCallback((id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
-    setEditingId(null);
-  }, []);
 
   const handleStartEdit = useCallback((computer: Computer) => {
     setEditingId(computer.id);
@@ -219,26 +204,6 @@ export default function ComputersPage() {
     [handleSaveName, handleCancelEdit],
   );
 
-  const handleDelete = useCallback(async () => {
-    if (!deleteTargetId) return;
-    setIsDeleting(true);
-    try {
-      await deleteComputer(deleteTargetId);
-      // If the deleted computer was selected, clear the selection so the
-      // left-column click can re-select it later (rather than the toggle
-      // seeing it as already-selected and clearing).
-      setSelectedComputerId((prev) => (prev === deleteTargetId ? null : prev));
-      setExpandedId(null);
-      showToast(t('computersRemoved'), 'success');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t('computersRemoveError');
-      showToast(message, 'error');
-    } finally {
-      setIsDeleting(false);
-      setDeleteTargetId(null);
-    }
-  }, [deleteTargetId, deleteComputer, showToast]);
-
   // Auth loading state
   if (authLoading || !isAuthenticated) {
     return (
@@ -265,11 +230,11 @@ export default function ComputersPage() {
         />
       </div>
 
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex flex-1 flex-col overflow-hidden bg-white">
         {/* Top bar (page label lives in the left column) */}
         <div className="flex flex-shrink-0 items-center h-14 border-b-2 border-black bg-brutal-cream px-4" />
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="w-full">
+        <div className="flex-1 overflow-y-auto bg-white">
+          <div className={cn('w-full', selectedComputer ? '' : 'px-6 py-6')}>
             {/* Error state */}
             {error && (
               <div className="mb-6 space-y-2">
@@ -335,18 +300,15 @@ export default function ComputersPage() {
               <ComputerCard
                 key={selectedComputer.id}
                 computer={selectedComputer}
-                isExpanded={expandedId === selectedComputer.id}
                 editingId={editingId}
                 editName={editName}
                 isSaving={isSaving}
                 editInputRef={editInputRef}
-                onToggleExpand={handleToggleExpand}
                 onStartEdit={handleStartEdit}
                 onCancelEdit={handleCancelEdit}
                 onSaveName={handleSaveName}
                 onEditKeyDown={handleEditKeyDown}
                 onEditNameChange={setEditName}
-                onDeleteClick={setDeleteTargetId}
                 onCreateAgent={() => setShowCreateAgent(true)}
                 agentVersion={agentVersion}
               />
@@ -379,18 +341,15 @@ export default function ComputersPage() {
 
 interface ComputerCardProps {
   computer: Computer;
-  isExpanded: boolean;
   editingId: string | null;
   editName: string;
   isSaving: boolean;
   editInputRef: React.RefObject<HTMLInputElement | null>;
-  onToggleExpand: (id: string) => void;
   onStartEdit: (computer: Computer) => void;
   onCancelEdit: () => void;
   onSaveName: (id: string) => void;
   onEditKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, id: string) => void;
   onEditNameChange: (name: string) => void;
-  onDeleteClick: (id: string) => void;
   onCreateAgent?: () => void;
   agentVersion?: number;
 }
@@ -399,32 +358,22 @@ function ComputerCard({
   onCreateAgent,
   agentVersion,
   computer,
-  isExpanded,
   editingId,
   editName,
   isSaving,
   editInputRef,
-  onToggleExpand,
   onStartEdit,
   onCancelEdit,
   onSaveName,
   onEditKeyDown,
   onEditNameChange,
-  onDeleteClick,
 }: ComputerCardProps) {
   const isOnline = computer.status === 'online';
   const osInfo = getOsIcon(computer.os);
 
   return (
-    <div className="transition-all duration-300">
-      {/* Card header — click to expand */}
-      <button
-        type="button"
-        className="w-full p-6 text-left"
-        onClick={() => onToggleExpand(computer.id)}
-        aria-expanded={isExpanded}
-        aria-label={`${computer.name} — ${isOnline ? t('online') : t('offline')}`}
-      >
+    <div className="bg-white">
+      <div className="border-b-2 border-black bg-white px-4 py-3">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center border-2 border-black bg-brutal-info shadow-brutal-sm">
             {osInfo.icon}
@@ -458,41 +407,13 @@ function ComputerCard({
             </p>
           </div>
         </div>
+      </div>
 
-        {/* Quick info — v3.3: inline chunky pill rows instead of bare muted text. */}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-cream px-1.5 py-0.5 font-mono text-[11px] text-black">
-            {osInfo.icon}
-            <span className="truncate max-w-[120px]">
-              {computer.hostname || osInfo.label}
-            </span>
-          </span>
-          {computer.ip && (
-            <span className="inline-flex items-center gap-1 border-2 border-black bg-brutal-cream px-1.5 py-0.5 font-mono text-[11px] text-black">
-              <Globe className="h-3 w-3" />
-              {computer.ip}
-            </span>
-          )}
-        </div>
-
-        {/* Expand indicator — v3.3: chunky 2px-bordered pill, not a thin chevron. */}
-        <div className="mt-3 flex justify-center">
-          <span className="inline-flex h-5 w-5 items-center justify-center border-2 border-black bg-white text-[10px] font-bold text-black">
-            {isExpanded ? '−' : '+'}
-          </span>
-        </div>
-      </button>
-
-      {/* Expanded detail panel */}
-      <div
-        className={cn(
-          'overflow-hidden transition-all duration-300 ease-in-out',
-          isExpanded ? 'max-h-[4000px] opacity-100' : 'max-h-0 opacity-0',
-        )}
-      >
-        <div className="border-t-2 border-black px-6 pb-6 pt-4 space-y-6">
+      {/* Detail panel */}
+      <div>
+        <div className="space-y-4 bg-white p-4">
           {/* Section: System Info */}
-          <section>
+          <section className={detailSectionClass()}>
             <SectionHeader label={t('computersSystemInfo')} />
             <div className="space-y-1 font-body text-sm">
               {computer.os && (
@@ -516,79 +437,81 @@ function ComputerCard({
             </div>
           </section>
 
-          {/* Section: Basic Info — separated by a full-width 2px divider
-              to match teams detail's tab-bar-style structure. */}
-          <hr className="border-t-2 border-black" />
-          <section>
+          <section className={detailSectionClass()}>
             <SectionHeader label={t('computersBasicInfo')} />
             <div className="space-y-1 font-body text-sm">
-            <InfoRow label={t('computersName')}>
-              {editingId === computer.id ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={editInputRef}
-                    type="text"
-                    value={editName}
-                    onChange={(e) => onEditNameChange(e.target.value)}
-                    onKeyDown={(e) => onEditKeyDown(e, computer.id)}
-                    className="input-brutal h-8 w-48 py-1 text-sm"
-                    disabled={isSaving}
-                  />
-                  <Button
-                    variant="default"
-                    size="icon"
-                    onClick={() => onSaveName(computer.id)}
-                    disabled={isSaving || !editName.trim()}
-                    aria-label={t('computersSaveName')}
-                    className="h-8 w-8"
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={onCancelEdit}
-                    disabled={isSaving}
-                    aria-label={t('computersCancelEdit')}
-                    className="h-8 w-8"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="font-bold">{computer.name}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onStartEdit(computer)}
-                    aria-label={t('computersEditName')}
-                    className="h-7 px-2 text-xs"
-                  >
-                    <Edit3 className="h-3 w-3" />
-                  </Button>
-                </div>
+              <InfoRow label={t('computersName')}>
+                {editingId === computer.id ? (
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <input
+                      ref={editInputRef}
+                      type="text"
+                      value={editName}
+                      onChange={(e) => onEditNameChange(e.target.value)}
+                      onKeyDown={(e) => onEditKeyDown(e, computer.id)}
+                      className="input-brutal h-8 w-full max-w-sm py-1 text-sm"
+                      disabled={isSaving}
+                    />
+                    <div className="flex flex-shrink-0 items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="success"
+                        size="sm"
+                        onClick={() => onSaveName(computer.id)}
+                        disabled={isSaving || !editName.trim()}
+                        aria-label={t('computersSaveName')}
+                        className="gap-1 text-[10px] uppercase tracking-wider"
+                      >
+                        <Check className="h-3 w-3" />
+                        {isSaving ? t('saving') : t('save')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onCancelEdit}
+                        disabled={isSaving}
+                        aria-label={t('computersCancelEdit')}
+                        className="gap-1 text-[10px] uppercase tracking-wider"
+                      >
+                        <X className="h-3 w-3" />
+                        {t('cancel')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-bold">{computer.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => onStartEdit(computer)}
+                      className={detailEditActionClass()}
+                      aria-label={t('computersEditName')}
+                    >
+                      <Edit3 className="h-3 w-3" />
+                      {t('edit')}
+                    </button>
+                  </div>
+                )}
+              </InfoRow>
+              <InfoRow label="ID">
+                <span className="font-mono text-xs">{computer.id}</span>
+              </InfoRow>
+              {computer.daemon_id && (
+                <InfoRow label="Daemon ID">
+                  <span className="font-mono text-xs">{computer.daemon_id}</span>
+                </InfoRow>
               )}
-            </InfoRow>
-            <InfoRow label="ID">
-              <span className="font-mono text-xs">{computer.id}</span>
-            </InfoRow>
-            {computer.daemon_id && (
-              <InfoRow label="Daemon ID">
-                <span className="font-mono text-xs">{computer.daemon_id}</span>
-              </InfoRow>
-            )}
-            {computer.daemon_url && (
-              <InfoRow label="Daemon URL">
-                <span className="font-mono text-xs">{computer.daemon_url}</span>
-              </InfoRow>
-            )}
-          </div>
+              {computer.daemon_url && (
+                <InfoRow label="Daemon URL">
+                  <span className="font-mono text-xs">{computer.daemon_url}</span>
+                </InfoRow>
+              )}
+            </div>
           </section>
 
           {/* Section: Status */}
-          <hr className="border-t-2 border-black" />
-          <section>
+          <section className={detailSectionClass()}>
             <SectionHeader label={t('computersStatus')} />
             <div className="space-y-1 font-body text-sm">
               <InfoRow label={t('computersCurrent')}>
@@ -611,12 +534,8 @@ function ComputerCard({
           </section>
 
           {/* Section: Connected Agents (v1.5) */}
-          <hr className="border-t-2 border-black" />
-          <section>
-            <SectionHeader label={t('computersConnectedAgents')} />
-            <div className="mt-3">
-              <ConnectedAgents key={agentVersion} computerId={isExpanded ? computer.id : null} onCreateAgent={onCreateAgent} />
-            </div>
+          <section className={detailSectionClass()}>
+            <ConnectedAgents key={agentVersion} computerId={computer.id} onCreateAgent={onCreateAgent} />
           </section>
 
         </div>
@@ -630,26 +549,58 @@ function ComputerCard({
 function ConnectedAgents({ computerId, onCreateAgent }: { computerId: string | null; onCreateAgent?: () => void }) {
   const { agents, isLoading, error } = useComputerAgents(computerId);
   const router = useRouter();
+  const [isOpen, setIsOpen] = useState(false);
 
   if (!computerId) {
     return <p className="font-body text-sm text-muted-foreground">{t('computersExpandCard')}</p>;
   }
 
+  const Header = (
+    <button
+      type="button"
+      onClick={() => setIsOpen((open) => !open)}
+      className="flex w-full items-center justify-between gap-2 text-left"
+    >
+      <span className={detailSectionTitleClass()}>
+        ★ {t('computersConnectedAgents')}
+        {!isLoading && !error && (
+          <span className="ml-1 inline-block border-2 border-black bg-white px-1 font-mono text-[9px] text-black">
+            {agents.length}
+          </span>
+        )}
+      </span>
+      <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
+    </button>
+  );
+
+  if (!isOpen) {
+    return Header;
+  }
+
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 py-2">
-        <Spinner size="sm" />
-        <span className="text-sm text-muted-foreground">{t('loading')}</span>
-      </div>
+      <>
+        {Header}
+        <div className="mt-3 flex items-center gap-2 py-2">
+          <Spinner size="sm" />
+          <span className="text-sm text-muted-foreground">{t('loading')}</span>
+        </div>
+      </>
     );
   }
 
   if (error) {
-    return <p className="font-body text-sm text-muted-foreground">{error}</p>;
+    return (
+      <>
+        {Header}
+        <p className="mt-3 font-body text-sm text-muted-foreground">{error}</p>
+      </>
+    );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {Header}
       <div className="flex items-center justify-between">
         <p className="font-body text-sm text-muted-foreground">
           {t('computersAgentCount', { n: agents.length })}
@@ -716,10 +667,7 @@ function StatusDot({ isOnline }: { isOnline: boolean }) {
 function SectionHeader({ label, className }: { label: string; className?: string }) {
   return (
     <h3 className={cn('mb-3', className)}>
-      <span
-        className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm"
-        style={{ transform: 'rotate(-0.8deg)' }}
-      >
+      <span className={detailSectionTitleClass()}>
         ★ {label}
       </span>
     </h3>
@@ -729,7 +677,7 @@ function SectionHeader({ label, className }: { label: string; className?: string
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 py-1.5">
-      <span className="inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black flex-shrink-0">
+      <span className={detailFieldLabelClass('flex-shrink-0')}>
         {label}
       </span>
       <div className="flex-1 min-w-0">{children}</div>

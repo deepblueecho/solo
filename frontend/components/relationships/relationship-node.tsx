@@ -16,7 +16,7 @@ export interface AgentNodeData {
   isActive?: boolean;
 }
 
-function RelationshipNodeComponent({ data }: NodeProps) {
+function RelationshipNodeComponent({ data, selected }: NodeProps) {
   const agentData = data as unknown as AgentNodeData;
   const isActive = agentData.isActive ?? false;
 
@@ -28,7 +28,10 @@ function RelationshipNodeComponent({ data }: NodeProps) {
       <Handle id="right" type="source" position={Position.Right} className="!w-3 !h-3 !border-2 !border-black !bg-white" />
 
       <div
-        className="px-4 py-3 border-4 border-black bg-white shadow-brutal min-w-[140px] cursor-pointer hover:-translate-y-0.5 hover:shadow-brutal-lg transition-transform duration-100"
+        className={[
+          'px-4 py-3 border-4 border-black min-w-[140px] cursor-pointer hover:-translate-y-0.5 hover:shadow-brutal-lg active:translate-x-0.5 active:translate-y-0.5 transition-transform duration-100',
+          selected ? 'bg-brutal-primary shadow-brutal-lg' : 'bg-white shadow-brutal',
+        ].join(' ')}
       >
         <div className="flex items-center gap-2.5">
           <PixelAvatar agentId={agentData.agentId} size="sm" />

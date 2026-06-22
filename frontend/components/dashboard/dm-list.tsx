@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plus, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
+import { selectableRowClass } from '@/components/ui/selectable-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { t } from '@/lib/i18n';
 import type { DMChannel } from '@/lib/types';
@@ -117,12 +118,7 @@ function DMItem({
           onSelect();
         }
       }}
-      className={cn(
-        'group flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm transition-all',
-        isSelected
-          ? 'bg-brutal-primary text-black border-2 border-black shadow-brutal-sm'
-          : 'text-black border-2 border-transparent hover:border-black',
-      )}
+      className={selectableRowClass(isSelected)}
       aria-current={isSelected ? 'true' : undefined}
     >
       <PixelAvatar

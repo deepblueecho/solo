@@ -174,7 +174,7 @@ export function CreateDMModal({
                 <div
                   key={`${participant.type}-${participant.id}`}
                   onClick={() => handleSelect(participant)}
-                  className="flex w-full items-center gap-3 border-2 border-transparent p-2 text-left transition-colors hover:border-black hover:bg-brutal-primary-light"
+                  className="flex w-full items-center gap-3 border-2 border-transparent bg-white p-2 text-left transition-all hover:border-black hover:bg-brutal-primary-light hover:shadow-brutal-sm"
                   role="option"
                   aria-selected={false}
                 >
@@ -198,9 +198,9 @@ export function CreateDMModal({
                       </span>
                       {/* Type tag */}
                       <span
-                        className={`flex-shrink-0 border-2 border-black px-1.5 py-0.5 text-[10px] font-bold ${
+                        className={`flex-shrink-0 border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider ${
                           isAgent
-                            ? 'bg-brutal-success-light text-black'
+                            ? 'bg-brutal-primary text-black'
                             : 'bg-brutal-info-light text-black'
                         }`}
                       >
@@ -230,7 +230,7 @@ export function CreateDMModal({
                   {/* Action button */}
                   <Button
                     size="sm"
-                    variant={existing ? 'ghost' : 'secondary'}
+                    variant={existing ? 'outline' : 'primary'}
                     disabled={isCreating}
                     className="flex-shrink-0"
                     onClick={(e) => {

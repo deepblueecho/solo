@@ -17,6 +17,8 @@ import {
   DialogTitle,
   DialogCloseButton,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { t } from '@/lib/i18n';
 import type { Agent } from '@/lib/types';
@@ -82,12 +84,10 @@ export function AddAgentModal({
 
       {/* Search */}
       <div className="mb-4">
-        <input
-          type="text"
+        <Input
           placeholder={t('searchAgent')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="input-brutal"
           autoFocus
         />
       </div>
@@ -99,14 +99,16 @@ export function AddAgentModal({
           <span className="font-mono text-xs flex-1 text-brutal-danger">
             {agentsError}
           </span>
-          <button
+          <Button
             type="button"
             onClick={refetch}
-            className="btn-brutal btn-brutal-sm flex-shrink-0"
+            size="sm"
+            variant="outline"
+            className="flex-shrink-0"
           >
             <RefreshCw className="mr-1 h-3 w-3" />
             {t('retry')}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -141,36 +143,49 @@ export function AddAgentModal({
         ) : (
           <div className="space-y-1">
             {filteredAgents.map((agent) => (
-              <button
+              <div
                 key={agent.id}
-                onClick={() => handleAdd(agent)}
-                disabled={addingId === agent.id}
-                className="flex w-full items-center gap-3 border-2 border-black bg-white p-2 text-left shadow-brutal-sm transition-all hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal-lg disabled:opacity-50"
+                className="flex w-full items-center gap-3 border-2 border-transparent bg-white p-2 text-left transition-all hover:border-black hover:bg-brutal-primary-light hover:shadow-brutal-sm"
               >
-                <PixelAvatar agentId={agent.id} size="sm" />
+                <PixelAvatar agentId={agent.id} size="md" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-heading text-sm font-bold text-foreground">
                       {agent.name}
                     </span>
-                    <Circle
-                      className={`h-2 w-2 flex-shrink-0 ${
-                        agent.is_active
-                          ? 'fill-brutal-success text-brutal-success'
-                          : 'fill-brutal-muted text-brutal-muted'
-                      }`}
-                    />
+                    <span className="flex-shrink-0 border-2 border-black bg-brutal-primary px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black">
+                      {t('agent')}
+                    </span>
                   </div>
-                  {agent.description && (
-                    <p className="truncate font-mono text-[11px] text-muted-foreground mt-0.5">
-                      {agent.description}
-                    </p>
-                  )}
+                  <div className="mt-0.5 flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Circle
+                        className={`h-2 w-2 flex-shrink-0 ${
+                          agent.is_active
+                            ? 'fill-brutal-success text-brutal-success'
+                            : 'fill-brutal-muted text-brutal-muted'
+                        }`}
+                      />
+                      {agent.is_active ? t('online') : t('offline')}
+                    </span>
+                    {agent.description && (
+                      <span className="truncate text-muted-foreground/70">
+                        {agent.description}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="btn-brutal btn-brutal-sm flex-shrink-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="primary"
+                  onClick={() => handleAdd(agent)}
+                  disabled={addingId === agent.id}
+                  className="flex-shrink-0"
+                >
                   {addingId === agent.id ? t('adding') : t('add')}
-                </span>
-              </button>
+                </Button>
+              </div>
             ))}
           </div>
         )}

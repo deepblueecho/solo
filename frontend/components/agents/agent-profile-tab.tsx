@@ -14,9 +14,14 @@ import { apiClient, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import {
+  detailEditActionClass,
+  detailFieldLabelClass,
+  detailSectionClass,
+  detailSectionTitleClass,
+} from '@/components/ui/detail-section';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { Decoration } from '@/components/ui/decoration';
-import { BrutalSeparator } from '@/components/ui/brutal-separator';
 import { useComputers } from '@/lib/hooks/use-computers';
 import { useComputerForAgent } from '@/lib/hooks/use-computer-for-agent';
 import { cn } from '@/lib/utils';
@@ -25,6 +30,7 @@ import type { Agent } from '@/lib/types';
 
 interface AgentProfileTabProps {
   agentId: string;
+  showHeader?: boolean;
 }
 
 // ---- Inline editable field component ----
@@ -68,9 +74,9 @@ function InlineTextField({
   if (editing) {
     return (
       <div className="space-y-1.5">
-        <span className="font-heading text-xs font-bold text-muted-foreground uppercase tracking-wider">
+        <div className="font-heading text-xs font-bold text-muted-foreground uppercase tracking-wider">
           {label}
-        </span>
+        </div>
         {multiline ? (
           <textarea
             value={draft}
@@ -89,23 +95,27 @@ function InlineTextField({
           />
         )}
         <div className="flex items-center gap-1.5">
-          <button
+          <Button
             type="button"
             onClick={handleSave}
             disabled={saving || draft === value}
-            className="btn-brutal btn-brutal-sm h-7 px-2 text-xs"
+            variant="success"
+            size="sm"
+            className="gap-1 text-[10px] uppercase tracking-wider"
           >
-            {saving ? '...' : <><Check className="mr-1 h-3 w-3" />{t('save')}</>}
-          </button>
-          <button
+            {saving ? t('saving') : <><Check className="h-3 w-3" />{t('save')}</>}
+          </Button>
+          <Button
             type="button"
             onClick={handleCancel}
             disabled={saving}
-            className="btn-flat h-7 text-xs"
+            variant="outline"
+            size="sm"
+            className="gap-1 text-[10px] uppercase tracking-wider"
           >
-            <X className="mr-1 h-3 w-3" />
+            <X className="h-3 w-3" />
             {t('cancel')}
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -113,12 +123,9 @@ function InlineTextField({
 
   return (
     <div className="space-y-1">
-      <span className="inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black">
-        {label}
-      </span>
-      <div className="flex items-center gap-2 group">
-        <span className="font-body text-sm text-foreground min-w-0 flex-1">
-          {value || <span className="italic text-muted-foreground">{placeholder || t('agentProfileNotSet')}</span>}
+      <div className="flex items-center justify-between gap-2">
+        <span className={detailFieldLabelClass()}>
+          {label}
         </span>
         <button
           type="button"
@@ -126,11 +133,17 @@ function InlineTextField({
             setDraft(value);
             setEditing(true);
           }}
-          className="flex h-6 w-6 items-center justify-center opacity-0 group-hover:opacity-100 border-2 border-black bg-white shadow-brutal-sm transition-opacity"
+          className={detailEditActionClass()}
           aria-label={t('agentProfileEdit', { label })}
         >
           <Pencil className="h-3 w-3" />
+          {t('edit')}
         </button>
+      </div>
+      <div className="flex items-center gap-2 group">
+        <span className="font-body text-sm text-foreground min-w-0 flex-1">
+          {value || <span className="italic text-muted-foreground">{placeholder || t('agentProfileNotSet')}</span>}
+        </span>
       </div>
     </div>
   );
@@ -213,7 +226,7 @@ function formatDate(iso: string): string {
 
 // ---- Component ----
 
-export function AgentProfileTab({ agentId }: AgentProfileTabProps) {
+export function AgentProfileTab({ agentId, showHeader = true }: AgentProfileTabProps) {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -305,51 +318,50 @@ export function AgentProfileTab({ agentId }: AgentProfileTabProps) {
 
   return (
     <div className="space-y-5">
-      {/* Avatar + Name — v3.3: framed avatar (2px border + cream
-          backdrop + sticker tilt) anchors the header; violet rotating
-          star sticker adds a complementary color accent. */}
-      <div className="relative">
-        <div className="flex items-center gap-3">
-          <div
-            className="border-2 border-black shadow-brutal-sm bg-brutal-cream"
-            style={{ transform: 'rotate(-2deg)' }}
-          >
-            <PixelAvatar agentId={agent.id} avatarUrl={agent.avatar_url} size="md" />
+      {showHeader && (
+        <>
+          {/* Avatar + Name — v3.3: framed avatar (2px border + cream
+              backdrop + sticker tilt) anchors the header; violet rotating
+              star sticker adds a complementary color accent. */}
+          <div className="relative">
+            <div className="flex items-center gap-3">
+              <div
+                className="border-2 border-black shadow-brutal-sm bg-brutal-cream"
+              >
+                <PixelAvatar agentId={agent.id} avatarUrl={agent.avatar_url} size="md" />
+              </div>
+              <div>
+                <h3 className="font-heading font-bold text-base text-foreground">{agent.name}</h3>
+                <p className="font-mono text-[11px] text-muted-foreground">{agent.model_provider || t('agentProfileNoRuntime')}</p>
+              </div>
+            </div>
+            <Decoration
+              shape="star"
+              color="violet"
+              size="sm"
+              animation="spin"
+              rotation={14}
+              className="absolute -top-3 -right-3"
+            />
           </div>
-          <div>
-            <h3 className="font-heading font-bold text-base text-foreground">{agent.name}</h3>
-            <p className="font-mono text-[11px] text-muted-foreground">{agent.model_provider || t('agentProfileNoRuntime')}</p>
-          </div>
-        </div>
-        <Decoration
-          shape="star"
-          color="violet"
-          size="sm"
-          animation="spin"
-          rotation={14}
-          className="absolute -top-3 -right-3"
-        />
-      </div>
 
-      <BrutalSeparator />
+        </>
+      )}
 
       {/* Status toggle */}
-      <StatusToggle
-        active={agent.is_active}
-        onToggle={(active) => handleUpdate('is_active', active)}
-      />
-
-      <BrutalSeparator />
+      <div className={detailSectionClass()}>
+        <StatusToggle
+          active={agent.is_active}
+          onToggle={(active) => handleUpdate('is_active', active)}
+        />
+      </div>
 
       {/* v3.3: Name field removed (the avatar/header above already
           shows the name). Description + System Prompt are grouped under
           a single `★ INFO` tilted sticker section. */}
-      <div className="space-y-2">
+      <div className={detailSectionClass('space-y-3')}>
         <h4>
-          <span
-            className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm"
-            style={{ transform: 'rotate(-0.8deg)' }}
-          >
+          <span className={detailSectionTitleClass()}>
             ★ {t('agentProfileInfo')}
           </span>
         </h4>
@@ -372,23 +384,18 @@ export function AgentProfileTab({ agentId }: AgentProfileTabProps) {
         </div>
       </div>
 
-      <BrutalSeparator />
-
       {/* Read-only metadata — v3.3: bare layout (no card-brutal wrapper)
           to match the chunky-sticker-title + naked-fields style of the
           Computers detail. Section header is a tilted primary chip. */}
-      <div className="space-y-2">
+      <div className={detailSectionClass('space-y-3')}>
         <h4>
-          <span
-            className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-primary px-2.5 py-1 font-heading text-[11px] font-black uppercase tracking-widest text-black shadow-brutal-sm"
-            style={{ transform: 'rotate(-0.8deg)' }}
-          >
+          <span className={detailSectionTitleClass()}>
             ★ {t('agentProfileMeta')}
           </span>
         </h4>
         <div className="space-y-1">
           <div className="flex items-center gap-3 py-1.5">
-            <span className="inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black flex-shrink-0">
+            <span className={detailFieldLabelClass('flex-shrink-0')}>
               ID
             </span>
             <span className="font-mono text-xs text-foreground">
@@ -396,19 +403,19 @@ export function AgentProfileTab({ agentId }: AgentProfileTabProps) {
             </span>
           </div>
           <div className="flex items-center gap-3 py-1.5">
-            <span className="inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black flex-shrink-0">
+            <span className={detailFieldLabelClass('flex-shrink-0')}>
               {t('agentProfileCreatedAt')}
             </span>
             <span className="font-mono text-xs text-foreground">{formatDate(agent.created_at)}</span>
           </div>
           <div className="flex items-center gap-3 py-1.5">
-            <span className="inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black flex-shrink-0">
+            <span className={detailFieldLabelClass('flex-shrink-0')}>
               {t('agentProfileCreatedBy')}
             </span>
             <span className="font-mono text-xs text-foreground">{agent.owner_id?.slice(0, 8) ?? '—'}</span>
           </div>
           <div className="flex items-center gap-3 py-1.5">
-            <span className="inline-block bg-brutal-primary-light border-2 border-black px-1.5 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-black flex-shrink-0">
+            <span className={detailFieldLabelClass('flex-shrink-0')}>
               Computer
             </span>
             {connectedComputer ? (

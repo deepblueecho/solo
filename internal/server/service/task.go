@@ -77,6 +77,7 @@ var (
 	ErrTaskHumanOnly         = errors.New("this task action is human-only")
 	ErrTaskNotSubmittable    = errors.New("task is not ready to submit")
 	ErrTaskNotReviewable     = errors.New("task is not in review")
+	ErrTaskHasOpenSubtasks   = errors.New("task has unfinished subtasks")
 	ErrTaskReasonRequired    = errors.New("reject reason is required")
 	ErrTaskLifecyclePatch    = errors.New("task lifecycle status changes must use lifecycle endpoints")
 )
@@ -172,19 +173,6 @@ func (s *TaskService) CreateTask(ctx context.Context, channelID, creatorID strin
 		if _, err := uuid.Parse(req.ParentTaskID); err != nil {
 			return nil, fmt.Errorf("invalid parent_task_id: %w", err)
 		}
-		var parentChannelID string
-		err := s.pool.QueryRow(ctx,
-			`SELECT channel_id FROM tasks WHERE id = $1`, req.ParentTaskID,
-		).Scan(&parentChannelID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf("parent task not found")
-			}
-			return nil, fmt.Errorf("lookup parent task: %w", err)
-		}
-		if parentChannelID != channelID {
-			return nil, fmt.Errorf("parent task is not in the same channel")
-		}
 		parentUUID, _ := uuid.Parse(req.ParentTaskID)
 		parentTaskID = parentUUID
 	} else {
@@ -210,31 +198,37 @@ func (s *TaskService) CreateTask(ctx context.Context, channelID, creatorID strin
 		msgID = req.MessageID
 	}
 
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO tasks (id, task_number, channel_id, creator_id, title, description, status, priority, due_date, message_id, parent_task_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-		id, nextNumber, chanID, creatorID, req.Title, nullableStr(req.Description),
-		TaskStatusTodo, req.Priority, req.DueDate, msgID, parentTaskID, now, now,
-	)
-	if err != nil {
-		// If unique constraint on (channel_id, task_number) is violated, retry once.
-		if isPgUniqueViolation(err) {
-			nextNumber2, err2 := s.nextTaskNumber(ctx, channelID)
-			if err2 != nil {
-				return nil, fmt.Errorf("retry next task number: %w", err2)
-			}
-			_, err = s.pool.Exec(ctx,
-				`INSERT INTO tasks (id, task_number, channel_id, creator_id, title, description, status, priority, due_date, message_id, parent_task_id, created_at, updated_at)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-				id, nextNumber2, chanID, creatorID, req.Title, nullableStr(req.Description),
-				TaskStatusTodo, req.Priority, req.DueDate, msgID, parentTaskID, now, now,
-			)
-			if err != nil {
+	if req.ParentTaskID != "" {
+		if err := s.createChildTask(ctx, channelID, req.ParentTaskID, id, nextNumber, chanID, creatorID, req, msgID, parentTaskID, now); err != nil {
+			return nil, err
+		}
+	} else {
+		_, err = s.pool.Exec(ctx,
+			`INSERT INTO tasks (id, task_number, channel_id, creator_id, title, description, status, priority, due_date, message_id, parent_task_id, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			id, nextNumber, chanID, creatorID, req.Title, nullableStr(req.Description),
+			TaskStatusTodo, req.Priority, req.DueDate, msgID, parentTaskID, now, now,
+		)
+		if err != nil {
+			// If unique constraint on (channel_id, task_number) is violated, retry once.
+			if isPgUniqueViolation(err) {
+				nextNumber2, err2 := s.nextTaskNumber(ctx, channelID)
+				if err2 != nil {
+					return nil, fmt.Errorf("retry next task number: %w", err2)
+				}
+				_, err = s.pool.Exec(ctx,
+					`INSERT INTO tasks (id, task_number, channel_id, creator_id, title, description, status, priority, due_date, message_id, parent_task_id, created_at, updated_at)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+					id, nextNumber2, chanID, creatorID, req.Title, nullableStr(req.Description),
+					TaskStatusTodo, req.Priority, req.DueDate, msgID, parentTaskID, now, now,
+				)
+				if err != nil {
+					return nil, err
+				}
+				nextNumber = nextNumber2
+			} else {
 				return nil, err
 			}
-			nextNumber = nextNumber2
-		} else {
-			return nil, err
 		}
 	}
 
@@ -276,6 +270,76 @@ func (s *TaskService) CreateTask(ctx context.Context, channelID, creatorID strin
 	)
 
 	return task, nil
+}
+
+func (s *TaskService) createChildTask(ctx context.Context, channelID, parentID, id string, taskNumber int, chanID interface{}, creatorID string, req TaskCreateRequest, msgID, parentTaskID interface{}, now time.Time) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var parentChannelID, parentStatus string
+	err = tx.QueryRow(ctx,
+		`SELECT channel_id::text, status FROM tasks WHERE id = $1 FOR UPDATE`, parentID,
+	).Scan(&parentChannelID, &parentStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("parent task not found")
+		}
+		return fmt.Errorf("lookup parent task: %w", err)
+	}
+	if parentChannelID != channelID {
+		return fmt.Errorf("parent task is not in the same channel")
+	}
+	if parentStatus == TaskStatusInReview || TerminalStatuses[parentStatus] {
+		return ErrTaskInvalidTransition
+	}
+
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO tasks (id, task_number, channel_id, creator_id, title, description, status, priority, due_date, message_id, parent_task_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		 ON CONFLICT ON CONSTRAINT unique_channel_task_number DO NOTHING`,
+		id, taskNumber, chanID, creatorID, req.Title, nullableStr(req.Description),
+		TaskStatusTodo, req.Priority, req.DueDate, msgID, parentTaskID, now, now,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		taskNumber, err = nextTaskNumberTx(ctx, tx, channelID)
+		if err != nil {
+			return fmt.Errorf("retry next task number: %w", err)
+		}
+		tag, err = tx.Exec(ctx,
+			`INSERT INTO tasks (id, task_number, channel_id, creator_id, title, description, status, priority, due_date, message_id, parent_task_id, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			id, taskNumber, chanID, creatorID, req.Title, nullableStr(req.Description),
+			TaskStatusTodo, req.Priority, req.DueDate, msgID, parentTaskID, now, now,
+		)
+	}
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("create child task affected no rows")
+	}
+	return tx.Commit(ctx)
+}
+
+func nextTaskNumberTx(ctx context.Context, tx pgx.Tx, channelID string) (int, error) {
+	var num int
+	if channelID != "" {
+		err := tx.QueryRow(ctx,
+			`SELECT COALESCE(MAX(task_number), 0) + 1 FROM tasks WHERE channel_id = $1`,
+			channelID,
+		).Scan(&num)
+		return num, err
+	}
+	err := tx.QueryRow(ctx,
+		`SELECT COALESCE(MAX(task_number), 0) + 1 FROM tasks WHERE channel_id IS NULL`,
+	).Scan(&num)
+	return num, err
 }
 
 // nextTaskNumber computes the next per-channel task number.
@@ -434,13 +498,47 @@ func (s *TaskService) SubmitTask(ctx context.Context, channelID, taskID, userID 
 	if err != nil {
 		return nil, err
 	}
-	if task.ClaimerID != userID {
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var status, claimerID string
+	err = tx.QueryRow(ctx,
+		`SELECT status, COALESCE(claimer_id::text, '') FROM tasks WHERE id = $1 AND channel_id = $2 FOR UPDATE`,
+		task.ID, channelID,
+	).Scan(&status, &claimerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrTaskNotFound
+		}
+		return nil, err
+	}
+	if claimerID != userID {
 		return nil, ErrTaskNotClaimer
 	}
-	if task.Status != TaskStatusInProgress {
+	if status != TaskStatusInProgress {
 		return nil, ErrTaskNotSubmittable
 	}
-	updated, err := s.setTaskStatus(ctx, channelID, task.ID, userID, TaskStatusInReview)
+	var openSubtasks int
+	if err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM tasks WHERE parent_task_id = $1 AND status NOT IN ('done', 'closed')`,
+		task.ID,
+	).Scan(&openSubtasks); err != nil {
+		return nil, err
+	}
+	if openSubtasks > 0 {
+		return nil, ErrTaskHasOpenSubtasks
+	}
+	if _, err := tx.Exec(ctx, `UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2`, TaskStatusInReview, task.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	updated, err := s.GetTask(ctx, channelID, task.ID, userID)
 	if err == nil && s.agentNotifier != nil {
 		if notifyErr := s.agentNotifier.NotifyReviewReady(ctx, updated.ID, userID); notifyErr != nil {
 			slog.Warn("notify review ready failed", "task_id", updated.ID, "err", notifyErr)

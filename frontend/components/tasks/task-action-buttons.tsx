@@ -63,7 +63,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
               placeholder="Reason"
-              className="w-full border-2 border-black bg-white px-2 py-1 font-body text-xs"
+              className="input-brutal h-8 w-full px-2 py-1 font-body text-xs"
             />
             <ActionButton
               disabled={disabled || reason.trim() === ''}

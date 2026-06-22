@@ -220,11 +220,12 @@ func (s *AgentService) TriggerAgentResponse(ctx context.Context, channelID, mess
 }
 
 func (s *AgentService) routeChannelTargets(ctx context.Context, agents []agentChannelInfo, mentionedAgentIDs []string, hasMentions bool) []agentChannelInfo {
-	if len(mentionedAgentIDs) > 0 {
-		return filterAgentsByID(agents, mentionedAgentIDs)
-	}
-	if hasMentions {
-		return nil
+	if len(mentionedAgentIDs) > 0 || hasMentions {
+		return filterAgentsByID(agents, selectWakeAgentIDs(wakeRouteInput{
+			ActiveIDs:    agentIDs(agents),
+			MentionedIDs: mentionedAgentIDs,
+			HasMention:   hasMentions,
+		}))
 	}
 	return s.chooseCoordinator(ctx, agents)
 }
@@ -277,25 +278,18 @@ func (s *AgentService) chooseCoordinator(ctx context.Context, agents []agentChan
 }
 
 func chooseCoordinatorFromEdges(agents []agentChannelInfo, edges []relationshipEdge) []agentChannelInfo {
-	if len(agents) <= 1 {
-		return agents
-	}
-	ids := make(map[string]bool, len(agents))
+	return filterAgentsByID(agents, selectWakeAgentIDs(wakeRouteInput{
+		ActiveIDs: agentIDs(agents),
+		Edges:     edges,
+	}))
+}
+
+func agentIDs(agents []agentChannelInfo) []string {
+	ids := make([]string, 0, len(agents))
 	for _, ag := range agents {
-		ids[ag.ID] = true
+		ids = append(ids, ag.ID)
 	}
-	hasParent := map[string]bool{}
-	for _, edge := range edges {
-		if ids[edge.from] && ids[edge.to] {
-			hasParent[edge.to] = true
-		}
-	}
-	for _, ag := range agents {
-		if !hasParent[ag.ID] {
-			return []agentChannelInfo{ag}
-		}
-	}
-	return agents[:1]
+	return ids
 }
 
 // --- Broadcast dispatch helpers ---
@@ -1041,7 +1035,10 @@ func (s *AgentService) TriggerAllAgentsForTask(ctx context.Context, channelID, t
 
 	if len(mentionedAgentIDs) > 0 {
 		s.claimWindow.OpenWindow(taskID, mentionedAgentIDs)
-		for _, ag := range filterAgentsByID(agents, mentionedAgentIDs) {
+		for _, ag := range filterAgentsByID(agents, selectWakeAgentIDs(wakeRouteInput{
+			ActiveIDs:    agentIDs(agents),
+			MentionedIDs: mentionedAgentIDs,
+		})) {
 			go s.TriggerAgentForTask(ctx, channelID, taskID, ag.ID, taskNumber, taskTitle, "", agentChain, mentionedAgentIDs)
 		}
 		return

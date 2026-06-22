@@ -393,6 +393,12 @@
   color: var(--color-brutal-white);
 }
 
+/* Success variant (green save/confirm action). */
+.btn-brutal-success {
+  background: var(--color-brutal-success);
+  color: var(--color-brutal-black);
+}
+
 /* Small variant: same translate rhythm as base, just smaller shadow. */
 .btn-brutal-sm {
   box-shadow: 3px 3px 0 0 var(--color-brutal-shadow);
@@ -634,6 +640,19 @@
 /* Remove default focus outline for mouse users */
 *:focus:not(:focus-visible) {
   outline: none;
+}
+
+.focus-brutal-compact:focus,
+.focus-brutal-compact:focus-visible {
+  background: var(--color-brutal-primary-light);
+  box-shadow: 5px 5px 0 0 var(--color-brutal-shadow);
+  outline: none !important;
+}
+
+.focus-brutal-plain:focus,
+.focus-brutal-plain:focus-visible {
+  box-shadow: none;
+  outline: none !important;
 }
 
 /* ============================================================

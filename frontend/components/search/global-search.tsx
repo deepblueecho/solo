@@ -202,11 +202,11 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     >
       <div
         ref={panelRef}
-        className="w-full max-w-2xl border-2 border-black bg-white shadow-brutal-lg"
+        className="w-full max-w-2xl border-2 border-black bg-brutal-cream shadow-brutal"
         role="search"
       >
         {/* Search header */}
-        <div className="flex items-center border-b-2 border-black px-4 py-0">
+        <div className="flex items-center border-b-2 border-black px-4 py-0 transition-colors focus-within:bg-brutal-primary-light">
           <Search className="mr-3 h-5 w-5 flex-shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
@@ -215,7 +215,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('searchPlaceholder')}
-            className="flex-1 bg-transparent py-3 text-lg font-body outline-none placeholder:text-muted-foreground"
+            className="focus-brutal-plain flex-1 bg-transparent py-3 text-lg font-body outline-none placeholder:text-muted-foreground"
             aria-label={t('searchKeyword')}
             autoComplete="off"
             spellCheck={false}
@@ -283,10 +283,10 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                     onClick={() => navigateToResult(result)}
                     onMouseEnter={() => setActiveIndex(index)}
                     className={cn(
-                      'flex w-full flex-col gap-1 border-b border-brutal-muted px-4 py-3 text-left transition-colors',
+                      'flex w-full flex-col gap-1 border-b-2 border-black bg-brutal-cream px-4 py-3 text-left transition-colors last:border-b-0',
                       index === activeIndex
                         ? 'bg-brutal-primary-light'
-                        : 'hover:bg-muted',
+                        : 'hover:bg-brutal-primary-light',
                     )}
                   >
                     {/* Meta: channel + sender + time */}

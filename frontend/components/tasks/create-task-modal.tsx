@@ -10,8 +10,16 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogCloseButton,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { CreateTaskInput } from '@/lib/types';
 import { t } from '@/lib/i18n';
 
@@ -40,7 +48,6 @@ export function CreateTaskModal({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
   const isSubmittingRef = useRef(false);
 
   // Reset form when modal opens
@@ -52,27 +59,6 @@ export function CreateTaskModal({
       // Focus input after a tick for animation
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [open]);
-
-  // Escape key to close
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open && !isSubmittingRef.current) {
-        onOpenChange(false);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onOpenChange]);
-
-  // Lock body scroll
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [open]);
 
   const handleSubmit = useCallback(async () => {
@@ -118,49 +104,25 @@ export function CreateTaskModal({
   if (!open) return null;
 
   const isDisabled = isSubmitting || isSubmittingRef.current;
+  const handleOpenChange = (next: boolean) => {
+    if (!isDisabled) onOpenChange(next);
+  };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={(e) => {
-        if (e.target === overlayRef.current && !isDisabled) onOpenChange(false);
-      }}
-      ref={overlayRef}
-    >
-      <div
-        className="mx-4 w-full max-w-md rounded-none border-brutal-thick bg-card shadow-brutal-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('createTask')}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-black px-5 py-3">
-          <h2 className="font-heading text-base font-bold text-foreground">
-            {t('createTask')}
-          </h2>
-          <button
-            type="button"
-            onClick={() => !isDisabled && onOpenChange(false)}
-            disabled={isDisabled}
-            className="flex h-7 w-7 items-center justify-center border-2 border-black bg-white hover:bg-brutal-primary-light transition-colors disabled:opacity-50"
-            aria-label={t('close')}
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogHeader>
+        <DialogTitle>{t('createTask')}</DialogTitle>
+        <DialogCloseButton onClick={() => handleOpenChange(false)} />
+      </DialogHeader>
 
-        {/* Body */}
-        <div className="px-5 py-4">
-          <label
-            htmlFor="task-create-title"
-            className="mb-2 block font-heading text-sm font-bold text-foreground"
-          >
+      <div className="space-y-4">
+        <div>
+          <Label htmlFor="task-create-title" className="mb-2 block">
             {t('taskTitle')}
-          </label>
-          <input
+          </Label>
+          <Input
             ref={inputRef}
             id="task-create-title"
-            type="text"
             value={title}
             onChange={(e) => {
               setTitle(e.target.value);
@@ -171,20 +133,15 @@ export function CreateTaskModal({
             disabled={isDisabled}
             aria-required="true"
             aria-invalid={!!validationError}
-            className={cn(
-              'input-brutal',
-              validationError && 'input-error',
-            )}
+            className={validationError ? 'input-error' : undefined}
           />
 
-          {/* Validation error */}
           {validationError && (
             <p className="mt-2 font-mono text-xs font-bold text-brutal-danger">
               {validationError}
             </p>
           )}
 
-          {/* Submit error (server) */}
           {submitError && (
             <div className="mt-3 border-2 border-brutal-danger bg-brutal-danger-light p-2.5">
               <p className="font-mono text-xs font-bold text-brutal-danger">
@@ -193,27 +150,27 @@ export function CreateTaskModal({
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-2 border-t-2 border-black px-5 py-3">
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            disabled={isDisabled}
-            className="btn-brutal btn-brutal-sm bg-white"
-          >
-            {t('cancel')}
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isDisabled}
-            className="btn-brutal btn-brutal-sm btn-brutal-primary"
-          >
-            {isDisabled ? t('submitting') : t('createTask')}
-          </button>
-        </div>
       </div>
-    </div>
+
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => handleOpenChange(false)}
+          disabled={isDisabled}
+        >
+          {t('cancel')}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSubmit}
+          disabled={isDisabled}
+        >
+          {isDisabled ? t('submitting') : t('createTask')}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   );
 }

@@ -10,10 +10,29 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { X, Trash2, Edit3, Check, AlertTriangle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { X, Trash2, Edit3, Check, MessageSquare } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
+import { Button, iconActionClass } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogCloseButton,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  detailEditActionClass,
+  detailFieldLabelClass,
+  detailSectionClass,
+  detailSectionTitleClass,
+} from '@/components/ui/detail-section';
+import { panelHeaderClass, panelTitleClass } from '@/components/ui/panel-header';
+import { TeamsAgentProfile } from '@/components/teams/teams-agent-profile';
+import { TeamsAgentWorkspace } from '@/components/teams/teams-agent-workspace';
+import { useDM } from '@/lib/hooks/use-dm';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { t } from '@/lib/i18n';
 import type { RelationshipType, Agent, AgentRelationship } from '@/lib/types';
@@ -43,6 +62,8 @@ interface RelationshipDetailPanelProps {
   onUpdate: () => void;
   /** Called after successful delete */
   onDelete: (id: string) => void;
+  /** Called after an agent is deleted from the embedded profile */
+  onAgentDeleted?: (id: string) => void;
 }
 
 export function RelationshipDetailPanel({
@@ -51,9 +72,14 @@ export function RelationshipDetailPanel({
   onClose,
   onUpdate,
   onDelete,
+  onAgentDeleted,
 }: RelationshipDetailPanelProps) {
   const router = useRouter();
+  const { createOrGetDM } = useDM();
   const [isEditing, setIsEditing] = useState(false);
+  const [agentTab, setAgentTab] = useState<'profile' | 'workspace'>('profile');
+  const [panelWidth, setPanelWidth] = useState(400);
+  const [hasUserResizedPanel, setHasUserResizedPanel] = useState(false);
   const [editType, setEditType] = useState<RelationshipType>(
     relationship?.rel_type ?? 'assigns_to',
   );
@@ -61,6 +87,7 @@ export function RelationshipDetailPanel({
   const [editInstruction, setEditInstruction] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isOpeningDM, setIsOpeningDM] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,71 +143,130 @@ export function RelationshipDetailPanel({
     }
   }, [relationship, onDelete, onClose]);
 
+  const handleMessageAgent = useCallback(async () => {
+    if (!agent) return;
+    setIsOpeningDM(true);
+    setError(null);
+    try {
+      const dm = await createOrGetDM({ agent_id: agent.id });
+      router.push(`/dashboard?dm=${dm.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to open message');
+    } finally {
+      setIsOpeningDM(false);
+    }
+  }, [agent, createOrGetDM, router]);
+
   // ---- Render agent detail ----
 
   if (agent) {
     const isActive = agent.isActive ?? (agent.is_active ?? false);
     return (
-      <div className="fixed right-0 top-14 h-[calc(100%-3.5rem)] w-80 border-l-4 border-black bg-white shadow-brutal-2xl z-40 flex flex-col animate-slide-in-from-right">
+      <div
+        className="fixed right-0 top-14 h-[calc(100%-3.5rem)] border-l-4 border-black bg-white shadow-brutal-2xl z-40 flex flex-col animate-slide-in-from-right"
+        style={{ width: panelWidth }}
+      >
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startWidth = panelWidth;
+            const onMove = (ev: MouseEvent) => {
+              setHasUserResizedPanel(true);
+              setPanelWidth(Math.max(280, Math.min(800, startWidth + startX - ev.clientX)));
+            };
+            const onUp = () => {
+              document.removeEventListener('mousemove', onMove);
+              document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          }}
+        />
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b-2 border-black bg-brutal-cream">
-          <h3 className="font-heading text-sm font-black uppercase tracking-wider">
+        <div className={panelHeaderClass()}>
+          <h3 className={panelTitleClass()}>
             {t('agentDetailTitle')}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center border-2 border-black bg-white hover:bg-brutal-primary-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+            className={iconActionClass()}
             aria-label={t('close')}
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Agent name badge */}
-          <div className="flex items-center gap-3 p-3 border-2 border-black bg-brutal-cream">
-            <PixelAvatar agentId={agent.id} avatarUrl={agent.avatar_url} size="md" />
-            <div className="min-w-0">
-              <div className="font-heading text-sm font-bold text-black truncate">
-                {agent.name}
-              </div>
-              <div className="font-mono text-[10px] font-bold uppercase tracking-wider mt-0.5">
-                {isActive ? (
-                  <span className="text-brutal-success">ONLINE</span>
-                ) : (
-                  <span className="text-brutal-muted">OFFLINE</span>
-                )}
-              </div>
+        <div className="flex items-center gap-3 border-b-2 border-black bg-white px-4 py-3">
+          <PixelAvatar agentId={agent.id} avatarUrl={agent.avatar_url} size="md" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-heading text-base font-bold text-black">
+              {agent.name}
+            </div>
+            <div className="font-mono text-[10px] font-bold uppercase tracking-wider">
+              {isActive ? (
+                <span className="text-brutal-success">ONLINE</span>
+              ) : (
+                <span className="text-brutal-muted">OFFLINE</span>
+              )}
             </div>
           </div>
+          <Button
+            type="button"
+            onClick={handleMessageAgent}
+            disabled={isOpeningDM}
+            variant="primary"
+            size="sm"
+            className="flex-shrink-0 gap-1.5 px-2.5 text-[10px] font-black uppercase tracking-wider"
+            aria-label={`${t('teamsMessage')} ${agent.name}`}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            <span>{t('teamsMessage')}</span>
+          </Button>
+        </div>
 
-          {/* Agent details */}
-          {agent.description && (
-            <div className="p-3 border-2 border-black bg-white">
-              <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                Description
-              </div>
-              <p className="font-sans text-sm text-black">{agent.description}</p>
-            </div>
-          )}
-
-          <div className="p-3 border-2 border-black bg-white">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-              Runtime_Type
-            </div>
-            <p className="font-mono text-xs text-black">{agent.model_provider || 'Not configured'}</p>
-          </div>
-
-          {/* Go to workspace */}
+        <div className="grid grid-cols-2 border-b-2 border-black">
           <button
             type="button"
-            onClick={() => router.push(`/teams?agent=${agent.id}&tab=profile`)}
-            className="w-full btn-brutal-sm bg-brutal-primary px-4 py-2 font-heading text-xs font-bold uppercase tracking-wider"
+            onClick={() => setAgentTab('profile')}
+            className={[
+              'border-r-2 border-black px-3 py-2 font-heading text-xs font-bold uppercase tracking-wider',
+              agentTab === 'profile' ? 'bg-brutal-primary text-black' : 'bg-white hover:bg-brutal-primary-light',
+            ].join(' ')}
           >
-            View Profile
+            Profile
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAgentTab('workspace');
+              if (!hasUserResizedPanel) setPanelWidth((width) => Math.max(width, 720));
+            }}
+            className={[
+              'px-3 py-2 font-heading text-xs font-bold uppercase tracking-wider',
+              agentTab === 'workspace' ? 'bg-brutal-primary text-black' : 'bg-white hover:bg-brutal-primary-light',
+            ].join(' ')}
+          >
+            Workspace
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-hidden">
+          {agentTab === 'profile' ? (
+            <TeamsAgentProfile
+              agentId={agent.id}
+              redirectAfterDelete={false}
+              showProfileHeader={false}
+              onAgentDeleted={(deletedId) => {
+                onAgentDeleted?.(deletedId);
+                onClose();
+              }}
+            />
+          ) : (
+            <TeamsAgentWorkspace agentId={agent.id} />
+          )}
         </div>
       </div>
     );
@@ -193,28 +279,45 @@ export function RelationshipDetailPanel({
   const colors = EDGE_COLORS[relationship.rel_type] || EDGE_COLORS.collaborates_with;
 
   return (
-    <div className="fixed right-0 top-14 h-[calc(100%-3.5rem)] w-80 border-l-4 border-black bg-white shadow-brutal-2xl z-40 flex flex-col animate-slide-in-from-right">
+    <div
+      className="fixed right-0 top-14 h-[calc(100%-3.5rem)] border-l-4 border-black bg-white shadow-brutal-2xl z-40 flex flex-col animate-slide-in-from-right"
+      style={{ width: panelWidth }}
+    >
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          const startX = e.clientX;
+          const startWidth = panelWidth;
+          const onMove = (ev: MouseEvent) => {
+            setPanelWidth(Math.max(280, Math.min(800, startWidth + startX - ev.clientX)));
+          };
+          const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        }}
+      />
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b-2 border-black bg-brutal-cream">
-        <h3 className="font-heading text-sm font-black uppercase tracking-wider">
+      <div className={panelHeaderClass()}>
+        <h3 className={panelTitleClass()}>
           {t('relationshipEditorEdgeDetail')}
         </h3>
         <button
           type="button"
           onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center border-2 border-black bg-white hover:bg-brutal-primary-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+          className={iconActionClass()}
           aria-label={t('close')}
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Type badge */}
+      <div className="border-b-2 border-black bg-white px-4 py-3">
         <div
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 border-2 border-black font-heading text-xs font-black uppercase tracking-wider"
-          style={{ backgroundColor: colors.bg }}
+          className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 border-2 border-black bg-brutal-primary font-heading text-xs font-black uppercase tracking-wider shadow-brutal-sm"
         >
           <svg width="16" height="8">
             <line x1="0" y1="4" x2="16" y2="4"
@@ -226,13 +329,12 @@ export function RelationshipDetailPanel({
           {relationship.rel_type.replace(/_/g, ' ')}
         </div>
 
-        {/* From → To */}
-        <div className="p-3 border-2 border-black bg-brutal-cream space-y-2">
-          <div>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <div className="min-w-0">
             <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               {t('relationshipEditorFrom')}
             </div>
-            <div className="font-heading text-sm font-bold text-black">
+            <div className="truncate font-heading text-base font-bold text-black">
               {relationship.from_agent_name || relationship.from_agent_id.slice(0, 8)}
             </div>
             {relationship.from_agent_active !== undefined && (
@@ -244,16 +346,14 @@ export function RelationshipDetailPanel({
               </span>
             )}
           </div>
-          <div className="flex justify-center py-1">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={colors.stroke} strokeWidth="2.5">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </div>
-          <div>
+          <svg width="30" height="24" viewBox="0 0 30 24" fill="none" stroke={colors.stroke} strokeWidth="2.5">
+            <path d="M4 12h20M17 5l7 7-7 7" />
+          </svg>
+          <div className="min-w-0 text-right">
             <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               {t('relationshipEditorTo')}
             </div>
-            <div className="font-heading text-sm font-bold text-black">
+            <div className="truncate font-heading text-base font-bold text-black">
               {relationship.to_agent_name || relationship.to_agent_id.slice(0, 8)}
             </div>
             {relationship.to_agent_active !== undefined && (
@@ -266,18 +366,21 @@ export function RelationshipDetailPanel({
             )}
           </div>
         </div>
+      </div>
 
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Instruction */}
-        <div className="p-3 border-2 border-black bg-white">
+        <div className={detailSectionClass()}>
           <div className="flex items-center justify-between mb-2">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              {relationship.rel_type === 'assigns_to' ? 'Delegation Criteria' : 'Collaboration Criteria'}
+            <div className={detailSectionTitleClass()}>
+              ★ {relationship.rel_type === 'assigns_to' ? 'Delegation Criteria' : 'Collaboration Criteria'}
             </div>
             {!isEditingInstruction ? (
               <button
                 type="button"
                 onClick={() => { setIsEditingInstruction(true); setEditInstruction(relationship.instruction || ''); }}
-                className="flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-black"
+                className={detailEditActionClass()}
               >
                 <Edit3 className="h-3 w-3" />
                 {t('edit')}
@@ -294,15 +397,17 @@ export function RelationshipDetailPanel({
                   ? 'Delegate coding tasks with: clear requirement description...\n\nReport back with: implementation status, files changed...'
                   : 'Coordinate on: API contract sync, shared component design...\n\nKeep in sync: interface definitions, breaking changes...'
                 }
-                className="w-full min-h-[80px] px-3 py-2 border-2 border-black font-mono text-xs resize-y bg-white"
+                className="input-brutal min-h-[80px] w-full resize-y px-3 py-2 font-mono text-xs"
                 rows={4}
               />
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={handleSaveInstruction}
                   disabled={isSaving}
-                  className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-brutal-success text-black font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-success-light disabled:opacity-50"
+                  variant="success"
+                  size="sm"
+                  className="gap-1 text-[10px] uppercase tracking-wider"
                 >
                   {isSaving ? (
                     <span>{t('saving')}</span>
@@ -312,18 +417,20 @@ export function RelationshipDetailPanel({
                       {t('save')}
                     </>
                   )}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => setIsEditingInstruction(false)}
-                  className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-muted-light"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-[10px] uppercase tracking-wider"
                 >
                   {t('cancel')}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
-            <div className="font-mono text-[11px] text-black whitespace-pre-wrap leading-relaxed">
+            <div className="font-body text-sm text-black whitespace-pre-wrap leading-relaxed">
               {relationship.instruction || (
                 <span className="text-muted-foreground italic">
                   {relationship.rel_type === 'assigns_to'
@@ -336,16 +443,16 @@ export function RelationshipDetailPanel({
         </div>
 
         {/* Type edit (in-place) */}
-        <div className="p-3 border-2 border-black bg-white">
+        <div className={detailSectionClass()}>
           <div className="flex items-center justify-between mb-2">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              {t('relationshipEditorType')}
+            <div className={detailSectionTitleClass()}>
+              ★ {t('relationshipEditorType')}
             </div>
             {!isEditing ? (
               <button
                 type="button"
                 onClick={() => { setIsEditing(true); setEditType(relationship.rel_type); }}
-                className="flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-black"
+                className={detailEditActionClass()}
               >
                 <Edit3 className="h-3 w-3" />
                 {t('edit')}
@@ -363,11 +470,13 @@ export function RelationshipDetailPanel({
                 className="w-full"
               />
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-brutal-success text-black font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-success-light disabled:opacity-50"
+                  variant="success"
+                  size="sm"
+                  className="gap-1 text-[10px] uppercase tracking-wider"
                 >
                   {isSaving ? (
                     <span>{t('saving')}</span>
@@ -377,18 +486,20 @@ export function RelationshipDetailPanel({
                       {t('save')}
                     </>
                   )}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="flex items-center gap-1 px-3 py-1.5 border-2 border-black bg-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-muted-light"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-[10px] uppercase tracking-wider"
                 >
                   {t('cancel')}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
-            <div className="font-mono text-xs font-bold text-black">
+            <div className="font-mono text-xs text-black">
               {relationship.rel_type.replace(/_/g, ' ')}
             </div>
           )}
@@ -396,8 +507,8 @@ export function RelationshipDetailPanel({
 
         {/* Channel info */}
         {relationship.channel_id && (
-          <div className="p-3 border-2 border-black bg-brutal-cream">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+          <div className={detailSectionClass()}>
+            <div className={detailFieldLabelClass('mb-2')}>
               Channel
             </div>
             <div className="font-mono text-xs text-black">
@@ -410,9 +521,9 @@ export function RelationshipDetailPanel({
 
         {/* Weight */}
         {relationship.weight !== undefined && relationship.weight !== null && (
-          <div className="p-3 border-2 border-black bg-brutal-cream">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-              Weight
+          <div className={detailSectionClass()}>
+            <div className={detailSectionTitleClass('mb-2')}>
+              ★ Weight
             </div>
             <div className="font-mono text-xs text-black">{relationship.weight}</div>
           </div>
@@ -420,11 +531,11 @@ export function RelationshipDetailPanel({
 
         {/* Created at */}
         {relationship.created_at && (
-          <div className="p-3 border-2 border-black bg-brutal-cream">
-            <div className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-              Created
+          <div className={detailSectionClass()}>
+            <div className={detailSectionTitleClass('mb-2')}>
+              ★ Created
             </div>
-            <div className="font-mono text-[10px] text-black">
+            <div className="font-mono text-xs text-black">
               {new Date(relationship.created_at).toLocaleString()}
             </div>
           </div>
@@ -438,43 +549,44 @@ export function RelationshipDetailPanel({
 
       {/* Delete action */}
       <div className="border-t-2 border-black p-4 bg-brutal-cream">
-        {!showDeleteConfirm ? (
-          <button
-            type="button"
-            onClick={() => setShowDeleteConfirm(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-brutal-danger bg-white text-brutal-danger font-heading text-xs font-bold uppercase tracking-wider hover:bg-brutal-danger-light active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all shadow-brutal-sm"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {t('relationshipEditorDelete')}
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex items-start gap-2 px-3 py-2 border-2 border-brutal-danger bg-brutal-danger-light">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-brutal-danger" />
-              <p className="font-heading text-[10px] font-bold uppercase tracking-wider text-brutal-danger">
-                {t('relationshipEditorDeleteConfirm')}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="flex-1 px-3 py-1.5 border-2 border-brutal-danger bg-brutal-danger text-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-red-600 disabled:opacity-50"
-              >
-                {isDeleting ? t('deleting') : t('confirm')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 px-3 py-1.5 border-2 border-black bg-white font-heading text-[10px] font-bold uppercase tracking-wider hover:bg-brutal-muted-light"
-              >
-                {t('cancel')}
-              </button>
-            </div>
-          </div>
-        )}
+        <Button
+          type="button"
+          onClick={() => setShowDeleteConfirm(true)}
+          variant="danger"
+          className="w-full justify-center"
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          {t('relationshipEditorDelete')}
+        </Button>
       </div>
+
+      <Dialog open={showDeleteConfirm} onOpenChange={(open) => !isDeleting && setShowDeleteConfirm(open)}>
+        <DialogHeader>
+          <DialogTitle>{t('relationshipEditorDelete')}</DialogTitle>
+          <DialogCloseButton onClick={() => setShowDeleteConfirm(false)} />
+        </DialogHeader>
+        <DialogDescription>
+          {t('relationshipEditorDeleteConfirm')}
+        </DialogDescription>
+        <DialogFooter>
+          <Button
+            type="button"
+            onClick={() => setShowDeleteConfirm(false)}
+            disabled={isDeleting}
+            variant="outline"
+          >
+            {t('cancel')}
+          </Button>
+          <Button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            variant="danger"
+          >
+            {isDeleting ? t('deleting') : t('confirm')}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }

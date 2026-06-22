@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, X, Hash } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
 import { t } from '@/lib/i18n';
 import type { SearchResult, SearchResponse } from '@/lib/types';
@@ -143,20 +144,22 @@ export function ChannelSearch({ channelId, channelName, onResultClick }: Channel
     <div ref={containerRef} className="relative flex items-center">
       {/* Search trigger button */}
       {!open ? (
-        <button
+        <Button
           type="button"
           onClick={handleOpen}
-          className="flex h-8 w-8 items-center justify-center border-2 border-black bg-white shadow-brutal-sm hover:bg-brutal-cream transition-colors"
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0"
           aria-label={t('channelSearch', { channel: channelName })}
           title={t('channelSearch', { channel: channelName })}
         >
           <Search className="h-4 w-4 text-muted-foreground" />
-        </button>
+        </Button>
       ) : (
         /* Search dropdown */
-        <div className="absolute right-0 top-full z-50 mt-1 w-80 border-2 border-black bg-white shadow-brutal">
+        <div className="absolute right-0 top-full z-50 mt-1 w-80 border-2 border-black bg-brutal-cream shadow-brutal">
           {/* Search input */}
-          <div className="flex items-center gap-2 border-b-2 border-black px-3 py-2">
+          <div className="flex items-center gap-2 border-b-2 border-black px-3 py-2 transition-colors focus-within:bg-brutal-primary-light">
             <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
             <input
               ref={inputRef}
@@ -165,7 +168,7 @@ export function ChannelSearch({ channelId, channelName, onResultClick }: Channel
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t('channelSearchPlaceholder', { channel: channelName })}
-              className="flex-1 border-none bg-transparent font-body text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="focus-brutal-plain flex-1 border-none bg-transparent font-body text-sm text-foreground outline-none placeholder:text-muted-foreground"
               aria-label={t('search')}
             />
             {searching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
@@ -218,13 +221,13 @@ export function ChannelSearch({ channelId, channelName, onResultClick }: Channel
 
             {/* Results list */}
             {results.length > 0 && (
-              <ul className="py-1" role="listbox" aria-label={t('searchResults')}>
+              <ul role="listbox" aria-label={t('searchResults')}>
                 {results.map((result) => (
                   <li key={result.id}>
                     <button
                       type="button"
                       onClick={() => handleResultClick(result.id)}
-                      className="w-full border-b-2 border-black px-4 py-3 text-left transition-colors hover:bg-brutal-primary last:border-b-0"
+                      className="w-full border-b-2 border-black bg-brutal-cream px-4 py-3 text-left transition-colors hover:bg-brutal-primary-light last:border-b-0"
                       role="option"
                       aria-label={t('jumpToMessage', { name: result.sender_name })}
                     >
