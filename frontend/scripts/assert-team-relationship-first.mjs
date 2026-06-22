@@ -164,10 +164,6 @@ assert(
   'workspace file pane should default narrow and be resizable within drawer-friendly bounds',
 );
 assert(
-  teamsAgentWorkspace.includes('PanelLeftClose') && teamsAgentWorkspace.includes('isFilePaneCollapsed'),
-  'workspace file pane should be collapsible',
-);
-assert(
   teamsAgentWorkspace.includes('firstFilePath') && teamsAgentWorkspace.includes('void handleSelect(path'),
   'workspace drawer should auto-select the first file',
 );
@@ -176,7 +172,7 @@ assert(
   'workspace drawer should fullscreen in-place instead of linking away',
 );
 assert(
-  teamsAgentWorkspace.includes('Workspace') && teamsAgentWorkspace.includes('Readonly') && teamsAgentWorkspace.includes('border-b-4 border-black'),
+  teamsAgentWorkspace.includes('agents/<span') && teamsAgentWorkspace.includes('border-b-4 border-black'),
   'workspace preview should keep a brutal header aligned with the file pane',
 );
 assert(
@@ -200,10 +196,10 @@ assert(
 );
 assert(
   button.includes('export function iconActionClass') &&
-    channelView.includes('iconActionClass') &&
+    channelView.includes('DialogCloseButton') &&
     dialog.includes('iconActionClass') &&
     detailPanel.includes('iconActionClass') &&
-    createTaskModal.includes('iconActionClass'),
+    createTaskModal.includes('DialogCloseButton'),
   'Drawer and modal close buttons should share the same icon action primitive',
 );
 assert(

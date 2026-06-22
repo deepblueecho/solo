@@ -52,6 +52,11 @@ import { useCliDetection } from '@/lib/hooks/use-cli-detection';
 const NODE_TYPES = { agentNode: RelationshipNode };
 const EDGE_TYPES = { relationship: RelationshipEdge };
 
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+}
+
 // ---- Helpers ----
 
 interface UndoEntry {
@@ -503,6 +508,7 @@ export function RelationshipWorkspace({
         }
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        if (isEditableTarget(e.target)) return;
         e.preventDefault();
         if (e.shiftKey) redo(); else undo();
       }
