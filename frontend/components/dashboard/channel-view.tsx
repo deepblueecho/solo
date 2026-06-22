@@ -469,6 +469,21 @@ export function ChannelView({
                   const result = await sendMessage(content, _mentionedAgentIds, true, attachmentIds);
                   if (result && result.task_number !== undefined) {
                     showToast(t('taskCreatedToast', { n: result.task_number }), 'success');
+                    const parentMessage: Message = {
+                      id: result.id,
+                      channel_id: channel.id,
+                      user_id: 'user-1',
+                      display_name: t('selfRef'),
+                      content,
+                      created_at: new Date().toISOString(),
+                      status: 'sent' as const,
+                      sender_type: 'user' as const,
+                      task_number: result.task_number,
+                    };
+                    setThreadMessage(parentMessage);
+                    setThreadTask(null);
+                    onThreadChange?.(result.id);
+                    refetchTasks();
                   }
                 } else {
                   const result = await sendMessage(content, _mentionedAgentIds, undefined, attachmentIds);

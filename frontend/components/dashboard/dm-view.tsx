@@ -374,7 +374,24 @@ export function DMView({
               <MessageInput
                 onSend={async (content, mentionedAgentIds, asTask, _taskTitle, attachmentIds) => {
                   const result = await sendMessage(content, mentionedAgentIds, asTask, attachmentIds);
-                  if (asTask && result?.task_number) onTaskCreated?.();
+                  if (asTask && result?.task_number) {
+                    onTaskCreated?.();
+                    const parentMessage: Message = {
+                      id: result.id,
+                      channel_id: dm.id,
+                      user_id: 'user-1',
+                      display_name: t('selfRef'),
+                      content,
+                      created_at: new Date().toISOString(),
+                      status: 'sent' as const,
+                      sender_type: 'user' as const,
+                      task_number: result.task_number,
+                    };
+                    setThreadMessage(parentMessage);
+                    setThreadTask(null);
+                    onThreadChange?.(result.id);
+                    refetchTasks?.();
+                  }
                   return result;
                 }}
                 members={members}
