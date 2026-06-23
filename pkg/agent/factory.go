@@ -18,7 +18,7 @@ import (
 //   - "kimi"     — Kimi CLI via ACP protocol
 //   - "kiro"     — Kiro CLI via ACP protocol
 //   - "copilot"  — GitHub Copilot CLI via JSONL
-//   - "opencode" — OpenCode CLI via stream-json
+//   - "opencode" — OpenCode CLI via ACP protocol
 //   - "openclaw" — OpenClaw Agent CLI via ACP protocol
 //   - "hermes"   — Hermes CLI via ACP protocol
 //   - "pi"       — Pi CLI via JSON event stream

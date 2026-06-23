@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-// OpenCodeBackend implements Backend by spawning `opencode run --format json`
-// and reading streaming JSON events from stdout.
+// OpenCodeBackend implements Backend by spawning `opencode acp --pure`
+// and communicating through ACP over stdin/stdout.
 type OpenCodeBackend struct {
 	executablePath string
 	logger         *slog.Logger
@@ -63,7 +63,6 @@ func (b *OpenCodeBackend) Execute(ctx context.Context, req *ExecuteRequest, opts
 		Stop:     func() error { stopOnce.Do(func() { b.Close(ps) }); return nil },
 	}, nil
 }
-
 
 // ── Persistent Backend (v1.5, ACP) ────────────────────────────────────────────
 
@@ -167,8 +166,8 @@ func (b *OpenCodeBackend) Start(ctx context.Context, req *ExecuteRequest, opts *
 	}
 
 	if _, err := cl.request(ctx, "initialize", map[string]any{
-		"protocolVersion": 1,
-		"clientInfo":       map[string]any{"name": "solo-agent-sdk", "version": "1.0.0"},
+		"protocolVersion":    1,
+		"clientInfo":         map[string]any{"name": "solo-agent-sdk", "version": "1.0.0"},
 		"clientCapabilities": map[string]any{},
 	}); err != nil {
 		runner.close()
@@ -301,19 +300,19 @@ func (b *OpenCodeBackend) Send(ctx context.Context, ps *PersistentSession, messa
 
 	state.client.setCallbacks(
 		func(chunk OutputChunk) {
-		if chunk.Type == string(MessageText) && chunk.Content != "" {
-			outputMu.Lock()
-			output.WriteString(chunk.Content)
-			outputMu.Unlock()
-		}
-		trySend(msgCh, chunk)
-	},
+			if chunk.Type == string(MessageText) && chunk.Content != "" {
+				outputMu.Lock()
+				output.WriteString(chunk.Content)
+				outputMu.Unlock()
+			}
+			trySend(msgCh, chunk)
+		},
 		func(pr acpPromptResult) {
-		select {
-		case turnDone <- pr:
-		default:
-		}
-	},
+			select {
+			case turnDone <- pr:
+			default:
+			}
+		},
 	)
 
 	startTime := time.Now()
