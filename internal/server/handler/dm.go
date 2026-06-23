@@ -1147,16 +1147,24 @@ func (h *DMHandler) ConvertMessageToTask(w http.ResponseWriter, r *http.Request)
 		DoneSubtaskCount: task.DoneSubtaskCount,
 	})
 
-	// Broadcast system message
 	// Broadcast message.updated so the original message gets task badge fields
-	if task.MessageID != "" {
+	if h.hub != nil && task.MessageID != "" {
+		h.hub.BroadcastToChannel(dmID, ws.Envelope(ws.EventMessageUpdated, ws.MessageUpdatedPayload{
+			ID:                 task.MessageID,
+			ChannelID:          dmID,
+			TaskNumber:         task.TaskNumber,
+			TaskStatus:         task.Status,
+			TaskClaimerName:    task.ClaimerName,
+			TaskClaimerDeleted: task.ClaimerDeleted,
+			UpdatedAt:          task.UpdatedAt.Format(time.RFC3339),
+		}))
 	}
 
 	// Trigger DM agent participant for auto-claim
 	if h.agentSvc != nil {
 		go h.agentSvc.TriggerAllAgentsForTask(context.Background(), dmID, task.ID, task.TaskNumber, task.Title, nil, nil)
 	}
-	}
+}
 
 // --- DM Task handlers (SOLO v1.2 Phase 2) ---
 
@@ -1451,7 +1459,11 @@ func (h *DMHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		DoneSubtaskCount: task.DoneSubtaskCount,
 	})
 
-		// Broadcast message.updated for task badge (align with channel behavior)
+	if req.Status != nil && *req.Status != "" {
+		h.broadcastDMTaskThreadSystemMessage(r.Context(), dmID, task.MessageID, task.TaskNumber, task.Title, "状态已更新为 "+formatStatusDisplay(*req.Status))
+	} else {
+		h.broadcastDMTaskThreadSystemMessage(r.Context(), dmID, task.MessageID, task.TaskNumber, task.Title, i18n.Active.SysTaskUpdated)
+	}
 }
 
 // ClaimTask handles POST /api/v1/dm/{dmID}/tasks/{taskID}/claim
@@ -1525,48 +1537,7 @@ func (h *DMHandler) ClaimTask(w http.ResponseWriter, r *http.Request) {
 		DoneSubtaskCount: task.DoneSubtaskCount,
 	})
 
-	// Broadcast message.updated for task badge
-
-	// Persist claim system message to the task's thread.
-	if task.MessageID != "" {
-		threadSvc := service.NewThreadService(h.pool)
-		threadID, _, tErr := threadSvc.GetOrCreateThread(r.Context(), dmID, task.MessageID)
-		if tErr == nil {
-			claimMsgID := uuid.New().String()
-			claimNow := time.Now()
-			claimContent := fmt.Sprintf("📋 <@%s> claimed #%d %s", userID, task.TaskNumber, task.Title)
-			_, _ = h.pool.Exec(r.Context(),
-				`INSERT INTO messages (id, channel_id, sender_type, sender_id, content, content_type, thread_id, created_at, updated_at)
-				 VALUES ($1, $2, 'system', '00000000-0000-0000-0000-000000000000', $3, 'system', $4, $5, $5)`,
-				claimMsgID, dmID, claimContent, threadID, claimNow,
-			)
-			// Read reply_count for thread.message.new (align with task.go Claim)
-			var replyCount int
-			h.pool.QueryRow(r.Context(),
-				`SELECT reply_count FROM threads WHERE id = $1`, threadID,
-			).Scan(&replyCount)
-			// Broadcast to thread subscribers so ThreadPanel updates in real-time
-			threadMsgPayload := ws.ThreadMessageNewPayload{
-				Message: ws.ThreadMessageItem{
-					ID:          claimMsgID,
-					ChannelID:   dmID,
-					ThreadID:    threadID,
-					SenderType:  "system",
-					SenderID:    "system",
-					SenderName:  "Solo",
-					Content:     claimContent,
-					ContentType: "system",
-					CreatedAt:   claimNow.UTC().Format(time.RFC3339),
-				},
-				Thread: ws.ThreadMetadataItem{
-					ThreadID:    threadID,
-					ReplyCount:  replyCount,
-					LastReplyAt: claimNow.UTC().Format(time.RFC3339),
-				},
-			}
-			h.hub.BroadcastToThread(threadID, ws.Envelope(ws.EventThreadMessageNew, threadMsgPayload))
-					}
-	}
+	h.broadcastDMTaskThreadSystemMessage(r.Context(), dmID, task.MessageID, task.TaskNumber, task.Title, fmt.Sprintf("claimed by <@%s>", userID))
 }
 
 // UnclaimTask handles DELETE /api/v1/dm/{dmID}/tasks/{taskID}/claim
@@ -1638,47 +1609,7 @@ func (h *DMHandler) UnclaimTask(w http.ResponseWriter, r *http.Request) {
 		DoneSubtaskCount: task.DoneSubtaskCount,
 	})
 
-	// Broadcast message.updated for task badge (align with task.go Unclaim)
-
-	// Persist unclaim system message to the task's thread (align with ClaimTask).
-	if task.MessageID != "" {
-		threadSvc := service.NewThreadService(h.pool)
-		threadID, _, tErr := threadSvc.GetOrCreateThread(r.Context(), dmID, task.MessageID)
-		if tErr == nil {
-			unclaimMsgID := uuid.New().String()
-			unclaimNow := time.Now()
-			unclaimContent := fmt.Sprintf("📋 <@%s> released #%d %s", userID, task.TaskNumber, task.Title)
-			_, _ = h.pool.Exec(r.Context(),
-				`INSERT INTO messages (id, channel_id, sender_type, sender_id, content, content_type, thread_id, created_at, updated_at)
-				 VALUES ($1, $2, 'system', '00000000-0000-0000-0000-000000000000', $3, 'system', $4, $5, $5)`,
-				unclaimMsgID, dmID, unclaimContent, threadID, unclaimNow,
-			)
-			var replyCount int
-			h.pool.QueryRow(r.Context(),
-				`SELECT reply_count FROM threads WHERE id = $1`, threadID,
-			).Scan(&replyCount)
-			// Broadcast to thread subscribers
-			threadMsgPayload := ws.ThreadMessageNewPayload{
-				Message: ws.ThreadMessageItem{
-					ID:          unclaimMsgID,
-					ChannelID:   dmID,
-					ThreadID:    threadID,
-					SenderType:  "system",
-					SenderID:    "system",
-					SenderName:  "Solo",
-					Content:     unclaimContent,
-					ContentType: "system",
-					CreatedAt:   unclaimNow.UTC().Format(time.RFC3339),
-				},
-				Thread: ws.ThreadMetadataItem{
-					ThreadID:    threadID,
-					ReplyCount:  replyCount,
-					LastReplyAt: unclaimNow.UTC().Format(time.RFC3339),
-				},
-			}
-			h.hub.BroadcastToThread(threadID, ws.Envelope(ws.EventThreadMessageNew, threadMsgPayload))
-					}
-	}
+	h.broadcastDMTaskThreadSystemMessage(r.Context(), dmID, task.MessageID, task.TaskNumber, task.Title, fmt.Sprintf("released by <@%s>", userID))
 }
 
 // --- DM task helpers ---
@@ -1722,22 +1653,38 @@ func (h *DMHandler) notifyInboxForDMParticipants(ctx context.Context, dmID, send
 	}
 }
 
-// broadcastDMTaskSystemMessage sends a system message to the DM channel via WebSocket.
-func (h *DMHandler) broadcastDMTaskSystemMessage(dmID string, taskNumber int, title, action string) {
-	if h.hub == nil {
+func (h *DMHandler) broadcastDMTaskThreadSystemMessage(ctx context.Context, dmID, messageID string, taskNumber int, title, action string) {
+	if h.hub == nil || h.pool == nil || messageID == "" {
 		return
 	}
-	msg := ws.MessageNewPayload{
-		ID:          uuid.New().String(),
-		ChannelID:   dmID,
-		SenderType:  "system",
-		SenderID:    "system",
-		SenderName:  "Solo",
-		Content:     fmt.Sprintf("📋 Task #%d %s: %s", taskNumber, action, title),
-		ContentType: "system",
-		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+	threadID, _, err := service.NewThreadService(h.pool).GetOrCreateThread(ctx, dmID, messageID)
+	if err != nil {
+		slog.Error("failed to resolve DM task thread for system message", "dm_id", dmID, "message_id", messageID, "error", err)
+		return
 	}
-	h.hub.BroadcastToChannel(dmID, ws.Envelope(ws.EventMessageNew, msg))
+	msgID := uuid.New().String()
+	now := time.Now()
+	content := formatSystemMessage(taskNumber, title, action)
+	if _, err := h.pool.Exec(ctx,
+		`INSERT INTO messages (id, channel_id, sender_type, sender_id, content, content_type, thread_id, created_at, updated_at)
+		 VALUES ($1, $2, 'system', '00000000-0000-0000-0000-000000000000', $3, 'system', $4, $5, $5)`,
+		msgID, dmID, content, threadID, now,
+	); err != nil {
+		slog.Error("failed to persist DM task system message", "dm_id", dmID, "thread_id", threadID, "error", err)
+		return
+	}
+	var replyCount int
+	_ = h.pool.QueryRow(ctx, `SELECT reply_count FROM threads WHERE id = $1`, threadID).Scan(&replyCount)
+	h.hub.BroadcastToThread(threadID, ws.Envelope(ws.EventThreadMessageNew, ws.ThreadMessageNewPayload{
+		Message: ws.ThreadMessageItem{
+			ID: msgID, ChannelID: dmID, ThreadID: threadID,
+			SenderType: "system", SenderID: "system", SenderName: "Solo",
+			Content: content, ContentType: "system", CreatedAt: now.UTC().Format(time.RFC3339),
+		},
+		Thread: ws.ThreadMetadataItem{
+			ThreadID: threadID, ReplyCount: replyCount, LastReplyAt: now.UTC().Format(time.RFC3339),
+		},
+	}))
 }
 
 // DeleteTask handles DELETE /api/v1/dm/{dmID}/tasks/{taskID}
@@ -1787,8 +1734,7 @@ func (h *DMHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Broadcast system message
-	h.broadcastDMTaskSystemMessage(dmID, task.TaskNumber, task.Title, i18n.Active.SysTaskDeleted)
+	h.broadcastDMTaskThreadSystemMessage(r.Context(), dmID, task.MessageID, task.TaskNumber, task.Title, i18n.Active.SysTaskDeleted)
 
 	// Broadcast task.deleted event
 	ws.BroadcastTaskDeleted(h.hub, ws.TaskDeletedPayload{

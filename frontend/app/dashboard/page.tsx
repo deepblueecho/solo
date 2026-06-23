@@ -106,8 +106,6 @@ function DashboardContent() {
     loadMoreError: dmLoadMoreError,
     loadMore: dmLoadMore,
     cancelMessage: dmCancelMessage,
-    editMessage: dmEditMessage,
-    deleteMessage: dmDeleteMessage,
   } = useDM(dmFromUrl);
 
   const { showToast } = useToast();
@@ -350,8 +348,6 @@ function DashboardContent() {
           loadMoreError={dmLoadMoreError}
           loadMore={dmLoadMore}
           cancelMessage={dmCancelMessage}
-          editMessage={dmEditMessage}
-          deleteMessage={dmDeleteMessage}
           onAsTask={handleDMAsTask}
           refetch={refetchDMs}
           tasks={dmTasks}

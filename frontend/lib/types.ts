@@ -78,6 +78,13 @@ export interface Agent {
   updated_at: string;
 }
 
+export interface AgentDetailTarget {
+  id: string;
+  name: string;
+  avatar_url?: string | null;
+  is_active?: boolean;
+}
+
 /** v1.4: runtime type is dynamic, driven by backend registry (claude, codex, opencode, etc.) */
 export type AgentModelProvider = string;
 

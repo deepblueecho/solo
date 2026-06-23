@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { t } from '@/lib/i18n';
-import type { ChannelMember } from '@/lib/types';
+import type { AgentDetailTarget, ChannelMember } from '@/lib/types';
 
 interface MemberListProps {
   users: ChannelMember[];
@@ -26,11 +26,20 @@ interface MemberListProps {
   isLoading: boolean;
   onAddAgent: () => void;
   onRemoveAgent?: (memberId: string) => void;
+  onAgentClick?: (agent: AgentDetailTarget) => void;
   showHeader?: boolean;
   canAddAgent?: boolean;
 }
 
-function MemberItem({ member, onRemove }: { member: ChannelMember; onRemove?: (id: string) => void }) {
+function MemberItem({
+  member,
+  onRemove,
+  onAgentClick,
+}: {
+  member: ChannelMember;
+  onRemove?: (id: string) => void;
+  onAgentClick?: (agent: AgentDetailTarget) => void;
+}) {
   const isAgent = member.member_type === 'agent';
   const [confirming, setConfirming] = useState(false);
   const statusColor = {
@@ -56,7 +65,16 @@ function MemberItem({ member, onRemove }: { member: ChannelMember; onRemove?: (i
     <div className="group flex items-center gap-3 border-2 border-transparent bg-white p-2 transition-all hover:border-black hover:bg-brutal-primary-light hover:shadow-brutal-sm">
       {/* Icon / Avatar */}
       {isAgent ? (
-        <PixelAvatar agentId={member.member_id} size="md" />
+        <PixelAvatar
+          agentId={member.member_id}
+          size="md"
+          onClick={onAgentClick ? () => onAgentClick?.({
+            id: member.member_id,
+            name: member.display_name,
+            is_active: member.status !== 'offline',
+          }) : undefined}
+          ariaLabel={t('viewAgentDetail', { name: member.display_name })}
+        />
       ) : (
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center border-2 border-black bg-brutal-muted shadow-brutal-sm">
           <span className="font-heading text-[10px] font-bold text-black">
@@ -138,7 +156,7 @@ function MemberListSkeleton() {
   );
 }
 
-export function MemberList({ users, agents, isLoading, onAddAgent, onRemoveAgent, showHeader = true, canAddAgent = true }: MemberListProps) {
+export function MemberList({ users, agents, isLoading, onAddAgent, onRemoveAgent, onAgentClick, showHeader = true, canAddAgent = true }: MemberListProps) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Section header */}
@@ -197,7 +215,12 @@ export function MemberList({ users, agents, isLoading, onAddAgent, onRemoveAgent
                   </span>
                 </div>
                 {agents.map((member) => (
-                  <MemberItem key={`agent-${member.member_id}`} member={member} onRemove={onRemoveAgent} />
+                  <MemberItem
+                    key={`agent-${member.member_id}`}
+                    member={member}
+                    onRemove={onRemoveAgent}
+                    onAgentClick={onAgentClick}
+                  />
                 ))}
               </div>
             )}

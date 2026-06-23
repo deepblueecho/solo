@@ -35,7 +35,7 @@ import { TeamsAgentWorkspace } from '@/components/teams/teams-agent-workspace';
 import { useDM } from '@/lib/hooks/use-dm';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { t } from '@/lib/i18n';
-import type { RelationshipType, Agent, AgentRelationship } from '@/lib/types';
+import type { RelationshipType, AgentRelationship, AgentDetailTarget } from '@/lib/types';
 
 // ---- Edge style config ----
 
@@ -55,7 +55,7 @@ interface RelationshipDetailPanelProps {
   /** The relationship to display (null when showing a node) */
   relationship: AgentRelationship | null;
   /** The agent to display (null when showing a relationship) */
-  agent: (Agent & { isActive?: boolean }) | null;
+  agent: (AgentDetailTarget & { isActive?: boolean }) | null;
   /** Called to close the panel */
   onClose: () => void;
   /** Called after successful update */
@@ -64,6 +64,8 @@ interface RelationshipDetailPanelProps {
   onDelete: (id: string) => void;
   /** Called after an agent is deleted from the embedded profile */
   onAgentDeleted?: (id: string) => void;
+  /** Render inside an existing right-side slot instead of as a fixed drawer. */
+  embedded?: boolean;
 }
 
 export function RelationshipDetailPanel({
@@ -73,6 +75,7 @@ export function RelationshipDetailPanel({
   onUpdate,
   onDelete,
   onAgentDeleted,
+  embedded = false,
 }: RelationshipDetailPanelProps) {
   const router = useRouter();
   const { createOrGetDM } = useDM();
@@ -163,29 +166,33 @@ export function RelationshipDetailPanel({
     const isActive = agent.isActive ?? (agent.is_active ?? false);
     return (
       <div
-        className="fixed right-0 top-14 h-[calc(100%-3.5rem)] border-l-4 border-black bg-white shadow-brutal-2xl z-40 flex flex-col animate-slide-in-from-right"
-        style={{ width: panelWidth }}
+        className={embedded
+          ? 'flex h-full flex-col border-l-2 border-r-2 border-b-2 border-black bg-white shadow-brutal-sm animate-slide-in-from-right'
+          : 'fixed right-0 top-14 h-[calc(100%-3.5rem)] border-l-4 border-black bg-white shadow-brutal-2xl z-40 flex flex-col animate-slide-in-from-right'}
+        style={embedded ? undefined : { width: panelWidth }}
       >
-        <div
-          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            const startX = e.clientX;
-            const startWidth = panelWidth;
-            const onMove = (ev: MouseEvent) => {
-              setHasUserResizedPanel(true);
-              setPanelWidth(Math.max(280, Math.min(800, startWidth + startX - ev.clientX)));
-            };
-            const onUp = () => {
-              document.removeEventListener('mousemove', onMove);
-              document.removeEventListener('mouseup', onUp);
-            };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-          }}
-        />
+        {!embedded && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startWidth = panelWidth;
+              const onMove = (ev: MouseEvent) => {
+                setHasUserResizedPanel(true);
+                setPanelWidth(Math.max(280, Math.min(800, startWidth + startX - ev.clientX)));
+              };
+              const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+          />
+        )}
         {/* Header */}
-        <div className={panelHeaderClass()}>
+        <div className={panelHeaderClass(embedded ? 'h-14 flex-shrink-0' : undefined)}>
           <h3 className={panelTitleClass()}>
             {t('agentDetailTitle')}
           </h3>
@@ -280,28 +287,32 @@ export function RelationshipDetailPanel({
 
   return (
     <div
-      className="fixed right-0 top-14 h-[calc(100%-3.5rem)] border-l-4 border-black bg-white shadow-brutal-2xl z-40 flex flex-col animate-slide-in-from-right"
-      style={{ width: panelWidth }}
+      className={embedded
+        ? 'flex h-full flex-col border-l-2 border-r-2 border-b-2 border-black bg-white shadow-brutal-sm animate-slide-in-from-right'
+        : 'fixed right-0 top-14 h-[calc(100%-3.5rem)] border-l-4 border-black bg-white shadow-brutal-2xl z-40 flex flex-col animate-slide-in-from-right'}
+      style={embedded ? undefined : { width: panelWidth }}
     >
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
-        onMouseDown={(e) => {
-          e.preventDefault();
-          const startX = e.clientX;
-          const startWidth = panelWidth;
-          const onMove = (ev: MouseEvent) => {
-            setPanelWidth(Math.max(280, Math.min(800, startWidth + startX - ev.clientX)));
-          };
-          const onUp = () => {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-          };
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-        }}
-      />
+      {!embedded && (
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startWidth = panelWidth;
+            const onMove = (ev: MouseEvent) => {
+              setPanelWidth(Math.max(280, Math.min(800, startWidth + startX - ev.clientX)));
+            };
+            const onUp = () => {
+              document.removeEventListener('mousemove', onMove);
+              document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          }}
+        />
+      )}
       {/* Header */}
-      <div className={panelHeaderClass()}>
+      <div className={panelHeaderClass(embedded ? 'h-14 flex-shrink-0' : undefined)}>
         <h3 className={panelTitleClass()}>
           {t('relationshipEditorEdgeDetail')}
         </h3>
