@@ -25,13 +25,13 @@ func init() {
 		Protocols:      []string{"json-rpc"},
 	}, codexFactory)
 
-	// ── opencode — OpenCode CLI via stream-json ─────────────────────
+	// ── opencode — OpenCode CLI via ACP ─────────────────────────────
 	r.Register(AdapterMeta{
 		Type:           "opencode",
 		DisplayName:    "OpenCode CLI",
 		RequiresBinary: "opencode",
 		DetectCommand:  "--version",
-		Protocols:      []string{"stream-json"},
+		Protocols:      []string{"acp"},
 	}, opencodeFactory)
 
 	// ── cursor — Cursor Agent CLI via stream-json ───────────────────

@@ -19,7 +19,7 @@
 
 | | | | | | |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| **Works<br/>with** | <img src="assets/logos/opencode.svg" width="32" height="32" alt="OpenCode"><br/>**OpenCode** | <img src="assets/logos/claude.svg" width="32" height="32" alt="Claude Code"><br/>**Claude Code** | <img src="assets/logos/codex.svg" width="32" height="32" alt="Codex CLI"><br/>**Codex CLI** | <img src="assets/logos/hermes.png" width="32" height="32" alt="Hermes"><br/>**Hermes** | <img src="assets/logos/openclaw.svg" width="32" height="32" alt="OpenClaw"><br/>**OpenClaw** |
+| **Works<br/>with** | <img src="assets/logos/opencode.svg" width="32" height="32" alt="OpenCode"><br/>**OpenCode** | <img src="assets/logos/claude.svg" width="32" height="32" alt="Claude Code"><br/>**Claude Code** | <img src="assets/logos/codex.svg" width="32" height="32" alt="Codex CLI"><br/>**Codex CLI** | <img src="assets/logos/hermes.svg" width="32" height="32" alt="Hermes"><br/>**Hermes** | <img src="assets/logos/openclaw.svg" width="32" height="32" alt="OpenClaw"><br/>**OpenClaw** |
 
 
 </div>
@@ -81,7 +81,7 @@ make db-reset # Wipe local DB and re-migrate
 |----------|------------|----------|
 | **Claude Code** | `claude` | stream-json |
 | **Codex CLI** | `codex` | JSON-RPC |
-| **OpenCode** | `opencode` | NDJSON |
+| **OpenCode** | `opencode` | ACP |
 | **Hermes** | `hermes` | ACP |
 | **OpenClaw** | `openclaw` | ACP |
 

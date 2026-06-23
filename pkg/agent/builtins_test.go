@@ -61,6 +61,19 @@ func TestBuiltins_ListMeta(t *testing.T) {
 	}
 }
 
+func TestBuiltins_OpenCodeProtocol(t *testing.T) {
+	for _, meta := range GlobalRegistry().ListMeta() {
+		if meta.Type != "opencode" {
+			continue
+		}
+		if len(meta.Protocols) != 1 || meta.Protocols[0] != "acp" {
+			t.Fatalf("opencode Protocols = %v, want [acp]", meta.Protocols)
+		}
+		return
+	}
+	t.Fatal("opencode backend metadata not found")
+}
+
 // ── Unknown type produces an error ────────────────────────────────────────────
 
 func TestBuiltins_UnknownTypeError(t *testing.T) {
@@ -196,4 +209,3 @@ func TestBuiltins_FactoryReceivesConfig(t *testing.T) {
 		t.Errorf("expected ExecPath /explicit/codex, got %q", cb3.executablePath)
 	}
 }
-
