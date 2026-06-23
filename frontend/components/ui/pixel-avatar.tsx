@@ -54,9 +54,11 @@ interface PixelAvatarProps {
   avatarUrl?: string | null;
   size?: 'sm' | 'md';
   className?: string;
+  onClick?: () => void;
+  ariaLabel?: string;
 }
 
-export function PixelAvatar({ agentId, avatarUrl, size = 'sm', className }: PixelAvatarProps) {
+export function PixelAvatar({ agentId, avatarUrl, size = 'sm', className, onClick, ariaLabel }: PixelAvatarProps) {
   const index = useMemo(
     () => getPixelAvatarIndex(agentId, avatarUrl),
     [agentId, avatarUrl],
@@ -64,27 +66,49 @@ export function PixelAvatar({ agentId, avatarUrl, size = 'sm', className }: Pixe
   const pattern = PATTERNS[index];
   const [color1, color2] = COLOR_PAIRS[index];
   const sizeClass = size === 'sm' ? 'pixel-avatar-sm' : 'pixel-avatar-md';
+  const classes = cn(
+    'flex items-center justify-center border-2 border-black shadow-brutal-sm bg-white p-0',
+    onClick && 'cursor-pointer hover:bg-brutal-primary-light',
+    sizeClass,
+    className,
+  );
+  const label = ariaLabel ?? `Pixel avatar ${index}`;
+  const grid = (
+    <div className="pixel-avatar-grid">
+      {pattern.map((cell, i) => (
+        <div
+          key={i}
+          className="pixel-avatar-cell"
+          style={{
+            backgroundColor: cell === 1 ? color1 : cell === 2 ? color2 : 'transparent',
+          }}
+        />
+      ))}
+    </div>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        className={classes}
+        aria-label={label}
+      >
+        {grid}
+      </button>
+    );
+  }
 
   return (
     <div
-      className={cn(
-        'flex items-center justify-center border-2 border-black shadow-brutal-sm bg-white',
-        sizeClass,
-        className,
-      )}
-      aria-label={`Pixel avatar ${index}`}
+      className={classes}
+      aria-label={label}
     >
-      <div className="pixel-avatar-grid">
-        {pattern.map((cell, i) => (
-          <div
-            key={i}
-            className="pixel-avatar-cell"
-            style={{
-              backgroundColor: cell === 1 ? color1 : cell === 2 ? color2 : 'transparent',
-            }}
-          />
-        ))}
-      </div>
+      {grid}
     </div>
   );
 }

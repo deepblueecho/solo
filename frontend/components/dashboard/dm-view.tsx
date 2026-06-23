@@ -18,6 +18,7 @@ import { useStreamingMessages } from '@/lib/hooks/use-streaming-messages';
 import { MessageList } from './message-list';
 import { MessageInput } from './message-input';
 import { TaskBoard } from '@/components/tasks/task-board';
+import { RelationshipDetailPanel } from '@/components/relationships/relationship-detail-panel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { tabButtonClass } from '@/components/ui/tab-bar';
@@ -25,7 +26,7 @@ const ThreadPanel = lazy(() =>
   import('./thread-panel').then((m) => ({ default: m.ThreadPanel })),
 );
 import { t } from '@/lib/i18n';
-import type { DMChannel, ChannelMember, Message, Task } from '@/lib/types';
+import type { AgentDetailTarget, DMChannel, ChannelMember, Message, Task } from '@/lib/types';
 
 interface DMViewProps {
   dm: DMChannel;
@@ -35,8 +36,6 @@ interface DMViewProps {
   sendMessage: (content: string, mentionedAgentIds?: string[], asTask?: boolean, attachmentIds?: string[]) => Promise<{ id: string; task_number?: number } | null>;
   retryMessage: (messageId: string, content: string) => Promise<void>;
   cancelMessage?: (messageId: string) => void;
-  editMessage?: (messageId: string, content: string) => Promise<void>;
-  deleteMessage?: (messageId: string) => Promise<void>;
   onAsTask?: (message: Message) => void;
   hasMore: boolean;
   isLoadingMore: boolean;
@@ -82,8 +81,6 @@ export function DMView({
   sendMessage,
   retryMessage,
   cancelMessage,
-  editMessage,
-  deleteMessage,
   onAsTask,
   hasMore,
   isLoadingMore,
@@ -113,6 +110,9 @@ export function DMView({
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
   const [scrollMsgKey, setScrollMsgKey] = useState(0);
+  const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentDetailTarget | null>(null);
+  const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
+  const rightPanelOpen = activeRightPanel !== null;
 
   useEffect(() => {
     if (searchParams.get('dm') !== dm.id) return;
@@ -133,6 +133,11 @@ export function DMView({
     },
     [dm.id, router, searchParams],
   );
+
+  const openAgentDetail = useCallback((agent: AgentDetailTarget) => {
+    setSelectedAgentDetail(agent);
+    setActiveRightPanel('agent');
+  }, []);
 
   // Handle initialScrollToMessageId: scroll to a specific message on mount or URL change.
   // Waits for isLoading to become false so the message DOM exists.
@@ -156,6 +161,7 @@ export function DMView({
     const found = messages.find((m) => m.id === initialThreadMessageId);
     if (found) {
       setThreadMessage(found);
+      setActiveRightPanel('thread');
       const task = tasks?.find((t) => t.message_id === initialThreadMessageId || t.id === initialThreadMessageId);
       if (task) setThreadTask(task);
     }
@@ -233,7 +239,13 @@ export function DMView({
     setThreadMessage(null);
     setThreadTask(null);
     onThreadChange?.(null);
-  }, [onThreadChange]);
+    setActiveRightPanel(selectedAgentDetail ? 'agent' : null);
+  }, [onThreadChange, selectedAgentDetail]);
+
+  const handleAgentDetailClose = useCallback(() => {
+    setSelectedAgentDetail(null);
+    setActiveRightPanel(threadMessage ? 'thread' : null);
+  }, [threadMessage]);
 
   const handleMessageClick = useCallback(
     (message: Message) => {
@@ -244,6 +256,7 @@ export function DMView({
         display_name: task?.creator_name || message.display_name,
       });
       setThreadTask(task ?? null);
+      setActiveRightPanel('thread');
       onThreadChange?.(message.id);
     },
     [tasks, refetchTasks, onThreadChange],
@@ -276,6 +289,7 @@ export function DMView({
         });
       }
       setThreadTask(task);
+      setActiveRightPanel('thread');
       onThreadChange?.(task.message_id);
     },
     [messages, refetchTasks, onThreadChange],
@@ -283,20 +297,18 @@ export function DMView({
 
   const handleAsTask = useCallback(
     async (message: Message) => {
+      if (onAsTask) {
+        await onAsTask(message);
+        return;
+      }
       if (!onConvertToTask) return;
       try {
-        const task = await onConvertToTask(dm.id, message.id);
-        setThreadMessage({
-          ...message,
-          display_name: task?.creator_name || message.display_name,
-        });
-        setThreadTask(task);
-        onThreadChange?.(message.id);
+        await onConvertToTask(dm.id, message.id);
       } catch {
         // handled silently
       }
     },
-    [dm.id, onConvertToTask, onThreadChange],
+    [dm.id, onAsTask, onConvertToTask],
   );
 
   const handleViewThreadInDM = useCallback(() => {
@@ -324,6 +336,14 @@ export function DMView({
             <PixelAvatar
               agentId={dm.other_agent?.id ?? dm.other_user?.id ?? dm.id}
               size="md"
+              avatarUrl={dm.other_agent?.avatar_url ?? null}
+              onClick={dm.other_agent ? () => openAgentDetail({
+                id: dm.other_agent!.id,
+                name: dm.other_agent!.name,
+                avatar_url: dm.other_agent!.avatar_url,
+                is_active: dm.other_agent!.is_active,
+              }) : undefined}
+              ariaLabel={dm.other_agent ? t('viewAgentDetail', { name }) : undefined}
             />
             {/* Name + status */}
             <div className="flex items-center gap-2 min-w-0">
@@ -395,8 +415,6 @@ export function DMView({
                 error={error}
                 onRetry={(id, content) => retryMessage(id, content)}
                 onCancel={cancelMessage}
-                onEdit={editMessage}
-                onDelete={deleteMessage}
                 onAsTask={handleAsTask}
                 onReply={handleMessageClick}
                 hasMore={hasMore}
@@ -406,6 +424,7 @@ export function DMView({
                 scrollToMessageId={scrollToMessageId}
                 scrollKey={scrollMsgKey}
                 members={members}
+                onAgentClick={openAgentDetail}
               />
             )}
 
@@ -468,10 +487,10 @@ export function DMView({
       {/* ThreadPanel — always mounted for smooth width transition */}
       <div
         className="flex-shrink-0 bg-brutal-cream overflow-hidden relative transition-[width] duration-100 ease-linear border-l-2 border-transparent"
-        style={{ width: threadMessage ? threadPanelWidth : 0, borderLeftColor: threadMessage ? '#000' : 'transparent' }}
+        style={{ width: rightPanelOpen ? threadPanelWidth : 0, borderLeftColor: rightPanelOpen ? '#000' : 'transparent' }}
       >
         {/* Resize handle — only interactive when panel is open */}
-        {threadMessage && (
+        {rightPanelOpen && (
           <div
             className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
             onMouseDown={(e) => {
@@ -491,7 +510,7 @@ export function DMView({
             }}
           />
         )}
-        {threadMessage && (
+        {activeRightPanel === 'thread' && threadMessage && (
           <Suspense
             fallback={
               <div className="flex h-full w-[400px] items-center justify-center">
@@ -506,8 +525,20 @@ export function DMView({
               replyCount={threadMessage.reply_count ?? 0}
               onViewInChannel={handleViewThreadInDM}
               onViewTask={handleViewThreadTask}
+              onAgentClick={openAgentDetail}
             />
           </Suspense>
+        )}
+        {activeRightPanel === 'agent' && selectedAgentDetail && (
+          <RelationshipDetailPanel
+            relationship={null}
+            agent={selectedAgentDetail}
+            onClose={handleAgentDetailClose}
+            onUpdate={() => {}}
+            onDelete={() => {}}
+            onAgentDeleted={handleAgentDetailClose}
+            embedded
+          />
         )}
       </div>
     </div>

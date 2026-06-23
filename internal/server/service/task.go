@@ -666,6 +666,12 @@ func (s *TaskService) ConvertMessageToTask(ctx context.Context, channelID, messa
 		return nil, err
 	}
 
+	if existing, err := s.GetTask(ctx, channelID, messageID, userID); err == nil {
+		return existing, nil
+	} else if err != ErrTaskNotFound {
+		return nil, err
+	}
+
 	// Get message content for the task title
 	var content string
 	err := s.pool.QueryRow(ctx,

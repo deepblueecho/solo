@@ -33,7 +33,7 @@ import { useMentions } from '@/lib/hooks/use-mentions';
 import { useWebSocket } from '@/lib/ws-context';
 import { MentionDropdown, type DropdownAnchor } from './mention-dropdown';
 import { t } from '@/lib/i18n';
-import type { Message, ChannelMember, Task, TaskStatus } from '@/lib/types';
+import type { AgentDetailTarget, Message, ChannelMember, Task, TaskStatus } from '@/lib/types';
 
 interface ThreadPanelProps {
   parentMessage: Message;
@@ -50,11 +50,20 @@ interface ThreadPanelProps {
   onViewInChannel?: () => void;
   onViewTask?: () => void;
   showViewTask?: boolean;
+  onAgentClick?: (agent: AgentDetailTarget) => void;
 }
 
 // ---- Parent message display ----
 
-function ParentMessageBlock({ message, task }: { message: Message; task?: Task }) {
+function ParentMessageBlock({
+  message,
+  task,
+  onAgentClick,
+}: {
+  message: Message;
+  task?: Task;
+  onAgentClick?: (agent: AgentDetailTarget) => void;
+}) {
   const isAgent = message.sender_type === 'agent';
   const displayName = task?.creator_name || message.display_name;
   const time = new Date(message.created_at).toLocaleString('en-US', {
@@ -65,7 +74,16 @@ function ParentMessageBlock({ message, task }: { message: Message; task?: Task }
   return (
     <div className={`flex gap-3 px-6 py-4 border-b-2 border-black ${isAgent ? 'border-l-2 border-l-brutal-primary' : ''}`}>
       {isAgent ? (
-        <PixelAvatar agentId={message.user_id || message.id} size="md" />
+        <PixelAvatar
+          agentId={message.user_id || message.id}
+          size="md"
+          onClick={onAgentClick ? () => onAgentClick?.({
+            id: message.user_id,
+            name: displayName,
+            is_active: message.sender_active,
+          }) : undefined}
+          ariaLabel={t('viewAgentDetail', { name: displayName })}
+        />
       ) : (
         <Avatar
           name={displayName}
@@ -163,7 +181,17 @@ const mdComponents = {
 
 // ---- Reply item ----
 
-function ReplyItem({ message, validNames = [], isHighlighted }: { message: { id: string; display_name?: string; content: string; created_at: string; status?: string; sender_type?: string }; validNames?: string[]; isHighlighted?: boolean }) {
+function ReplyItem({
+  message,
+  validNames = [],
+  isHighlighted,
+  onAgentClick,
+}: {
+  message: { id: string; display_name?: string; sender_id?: string; sender_active?: boolean; content: string; created_at: string; status?: string; sender_type?: string };
+  validNames?: string[];
+  isHighlighted?: boolean;
+  onAgentClick?: (agent: AgentDetailTarget) => void;
+}) {
   const isFailed = message.status === 'failed';
   const isSending = message.status === 'sending';
   const isStreaming = message.status === 'streaming';
@@ -184,7 +212,16 @@ function ReplyItem({ message, validNames = [], isHighlighted }: { message: { id:
       )}
     >
       {isAgent ? (
-        <PixelAvatar agentId={message.id} size="sm" />
+        <PixelAvatar
+          agentId={message.sender_id || message.id}
+          size="sm"
+          onClick={onAgentClick ? () => onAgentClick?.({
+            id: message.sender_id || message.id,
+            name: message.display_name || 'Agent',
+            is_active: message.sender_active,
+          }) : undefined}
+          ariaLabel={t('viewAgentDetail', { name: message.display_name || 'Agent' })}
+        />
       ) : (
         <Avatar
           name={message.display_name || '?'}
@@ -601,6 +638,7 @@ export function ThreadPanel({
   onViewInChannel,
   onViewTask,
   showViewTask,
+  onAgentClick,
 }: ThreadPanelProps) {
   const router = useRouter();
   const {
@@ -777,7 +815,11 @@ export function ThreadPanel({
           ) : null}
 
           {/* Parent message */}
-          <ParentMessageBlock message={parentMessage} task={task} />
+          <ParentMessageBlock
+            message={parentMessage}
+            task={task}
+            onAgentClick={onAgentClick}
+          />
 
           {/* Reply list */}
           {(() => {
@@ -798,6 +840,7 @@ export function ThreadPanel({
                     message={reply}
                     validNames={validNames}
                     isHighlighted={highlightedMessageId === reply.id}
+                    onAgentClick={onAgentClick}
                   />
                 ))}
               </div>

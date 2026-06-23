@@ -910,11 +910,5 @@
 }
 
 .tasknum-highlight {
-  display: inline-block;
-  background: var(--color-brutal-info);
-  color: #000;
   font-weight: 700;
-  padding: 0 0.25rem;
-  border: 2px solid var(--color-brutal-black);
-  box-shadow: 2px 2px 0 0 var(--color-brutal-shadow);
 }

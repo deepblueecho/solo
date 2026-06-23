@@ -44,7 +44,7 @@ import {
 import { AgentMessage } from './agent-message';
 import { StreamingMessage } from './streaming-message';
 import { MessageAttachments } from './message-attachments';
-import type { Channel, ChannelMember, Message, Task, TaskStatus } from '@/lib/types';
+import type { AgentDetailTarget, ChannelMember, Message } from '@/lib/types';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { t } from '@/lib/i18n';
 // SOLO-island PR2: TypingIndicator removed — AgentIsland (mounted at the
@@ -70,6 +70,7 @@ interface MessageListProps {
   scrollKey?: number;
   /** Channel members for @mention whitelist in agent messages. */
   members?: ChannelMember[];
+  onAgentClick?: (agent: AgentDetailTarget) => void;
 }
 
 // ---- Task header config (SOLO-225-F) ----
@@ -690,6 +691,7 @@ export function MessageList({
   scrollToMessageId,
   scrollKey,
   members = [],
+  onAgentClick,
 }: MessageListProps) {
   const validNames = buildValidNames(members);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -886,7 +888,11 @@ export function MessageList({
         <div className="py-4 space-y-1">
           {messages.map((message) =>
             message.status === 'streaming' ? (
-              <StreamingMessage key={message.id} message={message} />
+              <StreamingMessage
+                key={message.id}
+                message={message}
+                onAgentClick={onAgentClick}
+              />
             ) : message.sender_type === 'agent' ? (
               <AgentMessage
                 key={message.id}
@@ -894,6 +900,7 @@ export function MessageList({
                 onReply={onReply}
                 validNames={validNames}
                 isHighlighted={highlightedMessageId === message.id}
+                onAgentClick={onAgentClick}
               />
             ) : (
               <MessageItem

@@ -94,9 +94,11 @@ export function RelationshipWorkspace({
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [detailRel, setDetailRel] = useState<AgentRelationship | null>(null);
   const [detailAgent, setDetailAgent] = useState<Agent | null>(null);
+  const [detailPanelWidth, setDetailPanelWidth] = useState(400);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [redoStack, setRedoStack] = useState<UndoEntry[]>([]);
   const edgeToRelationshipMap = useRef<Map<string, AgentRelationship>>(new Map());
+  const detailPanelOpen = !!detailRel || !!detailAgent;
 
   // ---- Fetch data ----
 
@@ -646,8 +648,9 @@ export function RelationshipWorkspace({
     <div className="flex h-screen">
       <NavBar />
 
+      <div className="flex min-w-0 flex-1 overflow-hidden">
       {/* Main editor area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Toolbar */}
         <div className="flex items-center gap-2 h-14 px-4 border-b-2 border-black bg-brutal-cream">
           <h1 className="font-heading text-lg font-bold uppercase tracking-wider mr-auto">
@@ -910,19 +913,6 @@ export function RelationshipWorkspace({
             </div>
           </Dialog>
 
-          {/* Detail panel */}
-          {(detailRel || detailAgent) && (
-            <RelationshipDetailPanel
-              key={detailAgent ? `agent-${detailAgent.id}` : `relationship-${detailRel?.id}`}
-              relationship={detailRel}
-              agent={detailAgent}
-              onClose={closeDetailPanel}
-              onUpdate={handleDetailUpdate}
-              onDelete={handleDetailDelete}
-              onAgentDeleted={handleAgentDeleted}
-            />
-          )}
-
           {/* Empty state overlay */}
           {agents.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -951,6 +941,44 @@ export function RelationshipWorkspace({
             </span>
           ))}
         </div>
+      </div>
+      <div
+        className="flex-shrink-0 bg-brutal-cream overflow-hidden relative transition-[width] duration-100 ease-linear border-l-2 border-transparent"
+        style={{ width: detailPanelOpen ? detailPanelWidth : 0, borderLeftColor: detailPanelOpen ? '#000' : 'transparent' }}
+      >
+        {detailPanelOpen && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startWidth = detailPanelWidth;
+              const onMove = (ev: MouseEvent) => {
+                const newWidth = Math.max(280, Math.min(800, startWidth + startX - ev.clientX));
+                setDetailPanelWidth(newWidth);
+              };
+              const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+          />
+        )}
+        {detailPanelOpen && (
+          <RelationshipDetailPanel
+            key={detailAgent ? `agent-${detailAgent.id}` : `relationship-${detailRel?.id}`}
+            relationship={detailRel}
+            agent={detailAgent}
+            onClose={closeDetailPanel}
+            onUpdate={handleDetailUpdate}
+            onDelete={handleDetailDelete}
+            onAgentDeleted={handleAgentDeleted}
+            embedded
+          />
+        )}
+      </div>
       </div>
     </div>
   );

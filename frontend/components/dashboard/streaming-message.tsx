@@ -13,11 +13,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
-import type { Message } from '@/lib/types';
+import type { AgentDetailTarget, Message } from '@/lib/types';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 
 interface StreamingMessageProps {
   message: Message;
+  onAgentClick?: (agent: AgentDetailTarget) => void;
 }
 
 /** Detect if a code block is unclosed (odd number of ``` markers) */
@@ -88,7 +89,7 @@ function TypingDots() {
   );
 }
 
-export function StreamingMessage({ message }: StreamingMessageProps) {
+export function StreamingMessage({ message, onAgentClick }: StreamingMessageProps) {
   const time = new Date(message.created_at).toLocaleString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
@@ -119,7 +120,17 @@ export function StreamingMessage({ message }: StreamingMessageProps) {
       aria-label={t('streaming')}
       data-streaming="true"
     >
-      <PixelAvatar agentId={message.user_id} size="md" className="mt-0.5 flex-shrink-0" />
+      <PixelAvatar
+        agentId={message.user_id}
+        size="md"
+        className="mt-0.5 flex-shrink-0"
+        onClick={onAgentClick ? () => onAgentClick?.({
+          id: message.user_id,
+          name: message.display_name,
+          is_active: message.sender_active,
+        }) : undefined}
+        ariaLabel={t('viewAgentDetail', { name: message.display_name })}
+      />
 
       <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex items-baseline gap-2">

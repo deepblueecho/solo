@@ -17,6 +17,7 @@ import { MessageInput } from './message-input';
 import { MemberList } from './member-list';
 import { AddAgentModal } from './add-agent-modal';
 import { TaskBoard } from '@/components/tasks/task-board';
+import { RelationshipDetailPanel } from '@/components/relationships/relationship-detail-panel';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { tabButtonClass } from '@/components/ui/tab-bar';
@@ -30,7 +31,7 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { WizardCard } from '@/components/onboarding/wizard-card';
 import { t } from '@/lib/i18n';
-import type { Channel, Message, Task } from '@/lib/types';
+import type { AgentDetailTarget, Channel, Message, Task } from '@/lib/types';
 
 // SOLO-63-F: Lazy-load ThreadPanel (only rendered when a thread is open)
 const ThreadPanel = lazy(() =>
@@ -85,8 +86,6 @@ export function ChannelView({
     sendMessage,
     retryMessage,
     cancelMessage,
-    editMessage,
-    deleteMessage,
     hasMore,
     isLoadingMore,
     loadMoreError,
@@ -110,6 +109,10 @@ export function ChannelView({
 
   const [threadMessage, setThreadMessage] = useState<Message | null>(null);
   const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
+  const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentDetailTarget | null>(null);
+  const [threadTask, setThreadTask] = useState<Task | null>(null);
+  const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
+  const rightPanelOpen = activeRightPanel !== null;
 
   // ---- Thread panel width ----
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
@@ -127,6 +130,11 @@ export function ChannelView({
   const [isMemberPopoverOpen, setIsMemberPopoverOpen] = useState(false);
 
   const { showToast } = useToast();
+
+  const openAgentDetail = useCallback((agent: AgentDetailTarget) => {
+    setSelectedAgentDetail(agent);
+    setActiveRightPanel('agent');
+  }, []);
 
   const {
     tasks: channelTasks,
@@ -302,9 +310,6 @@ export function ChannelView({
     };
   }, [channel.id, onEvent, updateMemberStatus]);
 
-  // ---- Task associated with the open thread (for metadata bar) ----
-  const [threadTask, setThreadTask] = useState<Task | null>(null);
-
   // ---- Handle initialThreadMessageId: watch messages list for the target ----
   useEffect(() => {
     if (!initialThreadMessageId || !channel) return;
@@ -313,6 +318,7 @@ export function ChannelView({
     const found = messages.find((m) => m.id === initialThreadMessageId);
     if (found) {
       setThreadMessage(found);
+      setActiveRightPanel('thread');
       // Try to find the associated task for the metadata bar
       const task = channelTasks.find((t) => t.message_id === initialThreadMessageId);
       if (task) setThreadTask(task);
@@ -359,6 +365,7 @@ export function ChannelView({
           display_name: task.creator_name || existingMsg.display_name,
         });
         setThreadTask(task);
+        setActiveRightPanel('thread');
         onThreadChange?.(task.message_id);
         return;
       }
@@ -379,6 +386,7 @@ export function ChannelView({
         task_status: task.status,
         task_claimer_name: task.claimer_name || task.assignee_name,
       });
+      setActiveRightPanel('thread');
       onThreadChange?.(task.message_id);
     },
     [channel.id, messages, onThreadChange],
@@ -388,13 +396,21 @@ export function ChannelView({
     setThreadMessage(null);
     setThreadTask(null);
     onThreadChange?.(null);
-  }, [onThreadChange]);
+    setActiveRightPanel(selectedAgentDetail ? 'agent' : null);
+  }, [onThreadChange, selectedAgentDetail]);
+
+  const handleAgentDetailClose = useCallback(() => {
+    setSelectedAgentDetail(null);
+    setActiveRightPanel(threadMessage ? 'thread' : null);
+  }, [threadMessage]);
 
   // v1.5: Wrap onReply to also sync thread state to URL + pull latest task data
   const handleReply = useCallback(
     (message: Message) => {
       refetchTasks();
+      setThreadTask(null);
       setThreadMessage(message);
+      setActiveRightPanel('thread');
       onThreadChange?.(message.id);
     },
     [refetchTasks, onThreadChange],
@@ -534,8 +550,6 @@ export function ChannelView({
               onRetry={(id, content) => retryMessage(id, content)}
               onCancel={(id) => cancelMessage(id)}
               onReply={handleReply}
-              onEdit={(id, content) => editMessage(id, content)}
-              onDelete={(id) => deleteMessage(id)}
               onAsTask={handleAsTaskOpen}
               hasMore={hasMore}
               isLoadingMore={isLoadingMore}
@@ -544,6 +558,7 @@ export function ChannelView({
               scrollToMessageId={scrollToMessageId}
               scrollKey={scrollMsgKey}
               members={members}
+              onAgentClick={openAgentDetail}
             />
             <MessageInput
               onSend={async (content, _mentionedAgentIds, asTask, taskTitle, attachmentIds) => {
@@ -643,10 +658,10 @@ export function ChannelView({
       {/* Thread panel (lazy-loaded, SOLO-63-F) — always mounted for smooth width transition */}
       <div
         className="flex-shrink-0 bg-brutal-cream overflow-hidden relative transition-[width] duration-100 ease-linear border-l-2 border-transparent"
-        style={{ width: threadMessage ? threadPanelWidth : 0, borderLeftColor: threadMessage ? 'var(--color-border, #000)' : 'transparent' }}
+        style={{ width: rightPanelOpen ? threadPanelWidth : 0, borderLeftColor: rightPanelOpen ? 'var(--color-border, #000)' : 'transparent' }}
       >
         {/* Resize handle — only interactive when panel is open */}
-        {threadMessage && (
+        {rightPanelOpen && (
           <div
             className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
             onMouseDown={(e) => {
@@ -666,7 +681,7 @@ export function ChannelView({
             }}
           />
         )}
-        {threadMessage && (
+        {activeRightPanel === 'thread' && threadMessage && (
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center">
@@ -683,8 +698,20 @@ export function ChannelView({
               onMarkRead={handleThreadMarkRead}
               onViewInChannel={handleViewThreadInChannel}
               onViewTask={handleViewThreadTask}
+              onAgentClick={openAgentDetail}
             />
           </Suspense>
+        )}
+        {activeRightPanel === 'agent' && selectedAgentDetail && (
+          <RelationshipDetailPanel
+            relationship={null}
+            agent={selectedAgentDetail}
+            onClose={handleAgentDetailClose}
+            onUpdate={() => {}}
+            onDelete={() => {}}
+            onAgentDeleted={handleAgentDetailClose}
+            embedded
+          />
         )}
       </div>
 
@@ -738,6 +765,7 @@ export function ChannelView({
               setIsAddAgentModalOpen(true);
             }}
             onRemoveAgent={(memberId) => removeMember('agent', memberId)}
+            onAgentClick={openAgentDetail}
             showHeader={false}
             canAddAgent={canAddAgents}
           />

@@ -12,7 +12,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { MessageSquare } from 'lucide-react';
-import type { Message } from '@/lib/types';
+import type { AgentDetailTarget, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { highlightSpecials } from '@/lib/utils/highlight';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
@@ -24,6 +24,7 @@ interface AgentMessageProps {
   /** Lowercased display_names that may receive highlight. Empty = no @mentions highlighted. */
   validNames?: string[];
   isHighlighted?: boolean;
+  onAgentClick?: (agent: AgentDetailTarget) => void;
 }
 
 /** Fenced code block renderer — black bg, Space Mono, green text */
@@ -53,7 +54,7 @@ function CodeBlock({
 
 /** Wrap @mentions and #task-numbers in HTML spans, protecting code fences */
 
-export function AgentMessage({ message, onReply, validNames = [], isHighlighted }: AgentMessageProps) {
+export function AgentMessage({ message, onReply, validNames = [], isHighlighted, onAgentClick }: AgentMessageProps) {
   const time = new Date(message.created_at).toLocaleString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -70,7 +71,17 @@ export function AgentMessage({ message, onReply, validNames = [], isHighlighted 
       )}
       role="listitem"
     >
-      <PixelAvatar agentId={message.user_id} size="md" className="mt-0.5 flex-shrink-0" />
+      <PixelAvatar
+        agentId={message.user_id}
+        size="md"
+        className="mt-0.5 flex-shrink-0"
+        onClick={onAgentClick ? () => onAgentClick?.({
+          id: message.user_id,
+          name: message.display_name,
+          is_active: message.sender_active,
+        }) : undefined}
+        ariaLabel={t('viewAgentDetail', { name: message.display_name })}
+      />
 
       <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex items-baseline gap-2">

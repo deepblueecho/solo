@@ -594,53 +594,12 @@ func (h *TaskHandler) Claim(w http.ResponseWriter, r *http.Request) {
 		DoneSubtaskCount: task.DoneSubtaskCount,
 	})
 
-	// Claim notification goes to thread only — channel badge update via message.updated below.
-
-	// Persist claim system message to the task's thread so the discussion
-	// history includes the claim event.
+	// Claim notification goes to thread only.
 	if task.MessageID != "" {
 		threadSvc := service.NewThreadService(h.pool)
 		threadID, _, tErr := threadSvc.GetOrCreateThread(r.Context(), channelID, task.MessageID)
 		if tErr == nil {
-			claimMsgID := uuid.New().String()
-			claimNow := time.Now()
-			claimContent := fmt.Sprintf("📋 @%s claimed #%d %s", task.ClaimerName, task.TaskNumber, task.Title)
-			_, _ = h.pool.Exec(r.Context(),
-				`INSERT INTO messages (id, channel_id, sender_type, sender_id, content, content_type, thread_id, created_at, updated_at)
-				 VALUES ($1, $2, 'system', '00000000-0000-0000-0000-000000000000', $3, 'system', $4, $5, $5)`,
-				claimMsgID, channelID, claimContent, threadID, claimNow,
-			)
-			// Broadcast claim message to thread subscribers only
-			// Also broadcast to thread subscribers via thread.message.new
-			var replyCount int
-			h.pool.QueryRow(r.Context(),
-				`SELECT reply_count FROM threads WHERE id = $1`, threadID,
-			).Scan(&replyCount)
-			threadMsgPayload := ws.ThreadMessageNewPayload{
-				Message: ws.ThreadMessageItem{
-					ID:          claimMsgID,
-					ChannelID:   channelID,
-					ThreadID:    threadID,
-					SenderType:  "system",
-					SenderID:    "system",
-					SenderName:  "Solo",
-					Content:     claimContent,
-					ContentType: "system",
-					CreatedAt:   claimNow.UTC().Format(time.RFC3339),
-				},
-				Thread: ws.ThreadMetadataItem{
-					ThreadID:    threadID,
-					ReplyCount:  replyCount,
-					LastReplyAt: claimNow.UTC().Format(time.RFC3339),
-				},
-			}
-			h.hub.BroadcastToThread(threadID, ws.Envelope(ws.EventThreadMessageNew, threadMsgPayload))
-
-			slog.Debug("persisted claim system message to task thread",
-				"task_id", task.ID,
-				"thread_id", threadID,
-				"message_id", claimMsgID,
-			)
+			h.broadcastSystemMessage(task.ChannelID, threadID, task.TaskNumber, task.Title, fmt.Sprintf("claimed by @%s", task.ClaimerName))
 		}
 	}
 }
@@ -715,31 +674,9 @@ func (h *TaskHandler) Unclaim(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Broadcast message.updated so the frontend TaskBadge updates in real-time
-
-	// Persist and broadcast unclaim notification to thread
+	// Unclaim notification goes to thread only.
 	if threadID != "" {
-		msgID := uuid.New().String()
-		now := time.Now()
-		content := fmt.Sprintf("📋 @%s released #%d %s", task.ClaimerName, task.TaskNumber, task.Title)
-		_, _ = h.pool.Exec(context.Background(),
-			`INSERT INTO messages (id, channel_id, thread_id, sender_type, sender_id, content, content_type, created_at, updated_at)
-			 VALUES ($1, $2, $3, 'system', '00000000-0000-0000-0000-000000000000', $4, 'system', $5, $5)`,
-			msgID, task.ChannelID, threadID, content, now,
-		)
-		var replyCount int
-		_ = h.pool.QueryRow(context.Background(), `SELECT reply_count FROM threads WHERE id = $1`, threadID).Scan(&replyCount)
-		threadMsgPayload := ws.ThreadMessageNewPayload{
-			Message: ws.ThreadMessageItem{
-				ID: msgID, ChannelID: task.ChannelID, ThreadID: threadID,
-				SenderType: "system", SenderID: "system", SenderName: "Solo",
-				Content: content, ContentType: "system", CreatedAt: now.UTC().Format(time.RFC3339),
-			},
-			Thread: ws.ThreadMetadataItem{
-				ThreadID: threadID, ReplyCount: replyCount, LastReplyAt: now.UTC().Format(time.RFC3339),
-			},
-		}
-		h.hub.BroadcastToThread(threadID, ws.Envelope(ws.EventThreadMessageNew, threadMsgPayload))
+		h.broadcastSystemMessage(task.ChannelID, threadID, task.TaskNumber, task.Title, fmt.Sprintf("released by @%s", task.ClaimerName))
 	}
 }
 
@@ -970,6 +907,17 @@ func (h *TaskHandler) ConvertToTask(w http.ResponseWriter, r *http.Request) {
 
 	// Broadcast message.updated for the original message so the frontend
 	// knows it now has task fields (task_number, task_status, etc.).
+	if h.hub != nil {
+		h.hub.BroadcastToChannel(task.ChannelID, ws.Envelope(ws.EventMessageUpdated, ws.MessageUpdatedPayload{
+			ID:                 task.MessageID,
+			ChannelID:          task.ChannelID,
+			TaskNumber:         task.TaskNumber,
+			TaskStatus:         task.Status,
+			TaskClaimerName:    task.ClaimerName,
+			TaskClaimerDeleted: task.ClaimerDeleted,
+			UpdatedAt:          task.UpdatedAt.Format(time.RFC3339),
+		}))
+	}
 
 	// Broadcast task.created event
 	dueDate := ""
@@ -993,9 +941,6 @@ func (h *TaskHandler) ConvertToTask(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   resp.CreatedAt,
 		UpdatedAt:   resp.UpdatedAt,
 	})
-
-	// Broadcast system message
-	h.broadcastSystemMessageWithID(task.ChannelID, threadID, task.TaskNumber, task.Title, i18n.Active.SysTaskCreatedFromMsg, uuid.New().String(), time.Now(), true)
 }
 
 // --- System message helpers ---
