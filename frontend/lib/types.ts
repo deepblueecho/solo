@@ -365,6 +365,7 @@ export interface InboxItem {
   parent_sender_type?: string | null;
   parent_sender_id?: string | null;
   parent_content?: string | null;
+  parent_task_number?: number;
 }
 
 export interface UnreadCount {

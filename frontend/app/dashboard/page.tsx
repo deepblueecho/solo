@@ -212,24 +212,26 @@ function DashboardContent() {
   // ---- Thread URL management ----
   const handleChannelThreadChange = useCallback(
     (threadId: string | null) => {
-      if (threadId && channelFromUrl) {
-        router.push(`/dashboard?channel=${channelFromUrl}&thread=${threadId}`);
-      } else if (channelFromUrl) {
-        router.push(`/dashboard?channel=${channelFromUrl}`);
-      }
+      if (!channelFromUrl) return;
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('channel', channelFromUrl);
+      if (threadId) params.set('thread', threadId);
+      else params.delete('thread');
+      router.push(`/dashboard?${params.toString()}`);
     },
-    [router, channelFromUrl],
+    [router, channelFromUrl, searchParams],
   );
 
   const handleDMThreadChange = useCallback(
     (threadId: string | null) => {
-      if (threadId && dmFromUrl) {
-        router.push(`/dashboard?dm=${dmFromUrl}&thread=${threadId}`);
-      } else if (dmFromUrl) {
-        router.push(`/dashboard?dm=${dmFromUrl}`);
-      }
+      if (!dmFromUrl) return;
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('dm', dmFromUrl);
+      if (threadId) params.set('thread', threadId);
+      else params.delete('thread');
+      router.push(`/dashboard?${params.toString()}`);
     },
-    [router, dmFromUrl],
+    [router, dmFromUrl, searchParams],
   );
 
   // ---- create channel modal ----
@@ -261,6 +263,9 @@ function DashboardContent() {
 
   const handleDeleteChannel = useCallback(
     async (channelId: string) => {
+      const channel = channels.find((c) => c.id === channelId);
+      if (channel?.name.startsWith('all-')) return;
+
       if (viewMode === 'channel' && selectedChannelId === channelId) {
         // If the deleted channel is currently selected, navigate away
         const remaining = channels.filter((c) => c.id !== channelId);

@@ -27,6 +27,7 @@ interface MemberListProps {
   onAddAgent: () => void;
   onRemoveAgent?: (memberId: string) => void;
   showHeader?: boolean;
+  canAddAgent?: boolean;
 }
 
 function MemberItem({ member, onRemove }: { member: ChannelMember; onRemove?: (id: string) => void }) {
@@ -137,7 +138,7 @@ function MemberListSkeleton() {
   );
 }
 
-export function MemberList({ users, agents, isLoading, onAddAgent, onRemoveAgent, showHeader = true }: MemberListProps) {
+export function MemberList({ users, agents, isLoading, onAddAgent, onRemoveAgent, showHeader = true, canAddAgent = true }: MemberListProps) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Section header */}
@@ -150,16 +151,18 @@ export function MemberList({ users, agents, isLoading, onAddAgent, onRemoveAgent
             {users.length + agents.length}
           </span>
         </div>
-        <Button
-          type="button"
-          onClick={onAddAgent}
-          variant="primary"
-          size="icon"
-          className="h-7 w-7"
-          aria-label={t('addAgentToChannel')}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
+        {canAddAgent && (
+          <Button
+            type="button"
+            onClick={onAddAgent}
+            variant="success"
+            size="icon"
+            className="h-7 w-7"
+            aria-label={t('addAgentToChannel')}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
       )}
 

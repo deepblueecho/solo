@@ -8,6 +8,7 @@ import { useInboxUnread } from '@/lib/hooks/use-inbox-unread';
 import { InboxItem } from './inbox-item';
 import { Button } from '@/components/ui/button';
 import { TabBar } from '@/components/ui/tab-bar';
+import { apiClient } from '@/lib/api-client';
 import type { TabBarTab } from '@/components/ui/tab-bar';
 import type { InboxItem as InboxItemType, Message } from '@/lib/types';
 import { t } from '@/lib/i18n';
@@ -35,6 +36,14 @@ function typeFilterToKey(tf: string[]) {
   return tf[0];
 }
 
+async function resolveThreadTaskNumber(source: { type: 'channel' | 'dm'; id: string }, messageId: string) {
+  const path = source.type === 'dm'
+    ? `/api/v1/dm/${source.id}/tasks`
+    : `/api/v1/tasks?channel_id=${source.id}`;
+  const tasks = await apiClient.get<Array<{ message_id?: string; task_number?: number }>>(path);
+  return tasks.find((task) => task.message_id === messageId)?.task_number;
+}
+
 export function InboxView() {
   const router = useRouter();
   const { items, hasMore, isLoading, isLoadingMore, loadMore, markRead, markAllRead, clearAll, typeFilter, setTypeFilter, senderFilter, setSenderFilter } = useInbox();
@@ -52,6 +61,7 @@ export function InboxView() {
 
   const [threadMessage, setThreadMessage] = useState<Message | null>(null);
   const [threadTargetMessageId, setThreadTargetMessageId] = useState<string | undefined>(undefined);
+  const [threadSource, setThreadSource] = useState<{ type: 'channel' | 'dm'; id: string } | null>(null);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
 
   const handleItemClick = useCallback(
@@ -62,18 +72,23 @@ export function InboxView() {
 
       switch (item.type) {
         case 'thread_reply':
-          if (item.channel_id && item.thread_id) {
+          if ((item.channel_id || item.dm_id) && item.thread_id) {
+            const source = item.channel_id
+              ? { type: 'channel' as const, id: item.channel_id }
+              : { type: 'dm' as const, id: item.dm_id as string };
             const isAgent = item.parent_sender_type === 'agent';
             setThreadTargetMessageId(item.message_id);
+            setThreadSource(source);
             setThreadMessage({
               id: item.thread_id,
-              channel_id: item.channel_id,
+              channel_id: source.id,
               user_id: item.parent_sender_id || '',
               display_name: item.parent_sender_name || '',
               content: item.parent_content || '',
               created_at: item.created_at,
               status: 'sent',
               sender_type: isAgent ? 'agent' : 'user',
+              task_number: item.parent_task_number || undefined,
             });
           }
           break;
@@ -85,6 +100,8 @@ export function InboxView() {
         case 'mention':
           if (item.channel_id) {
             router.push(`/dashboard?channel=${item.channel_id}&message=${item.message_id}`);
+          } else if (item.dm_id) {
+            router.push(`/dashboard?dm=${item.dm_id}&message=${item.message_id}`);
           }
           break;
       }
@@ -95,7 +112,22 @@ export function InboxView() {
   const handleThreadClose = useCallback(() => {
     setThreadMessage(null);
     setThreadTargetMessageId(undefined);
+    setThreadSource(null);
   }, []);
+
+  const handleViewThreadInSource = useCallback(() => {
+    if (!threadMessage || !threadSource) return;
+    const key = threadSource.type === 'dm' ? 'dm' : 'channel';
+    router.push(`/dashboard?${key}=${threadSource.id}&message=${threadMessage.id}&thread=${threadMessage.id}`);
+  }, [router, threadMessage, threadSource]);
+
+  const handleViewTaskInSource = useCallback(async () => {
+    if (!threadMessage || !threadSource) return;
+    const key = threadSource.type === 'dm' ? 'dm' : 'channel';
+    const taskNumber = threadMessage.task_number ?? await resolveThreadTaskNumber(threadSource, threadMessage.id);
+    const task = taskNumber ? `&task=${taskNumber}` : '';
+    router.push(`/dashboard?${key}=${threadSource.id}&tab=tasks${task}&thread=${threadMessage.id}`);
+  }, [router, threadMessage, threadSource]);
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -234,6 +266,9 @@ export function InboxView() {
               onClose={handleThreadClose}
               targetMessageId={threadTargetMessageId}
               replyCount={0}
+              onViewInChannel={handleViewThreadInSource}
+              onViewTask={handleViewTaskInSource}
+              showViewTask
             />
           </Suspense>
         )}

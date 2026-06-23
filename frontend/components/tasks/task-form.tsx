@@ -203,7 +203,7 @@ export function TaskForm({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="btn-brutal btn-brutal-primary px-6"
+          className="btn-brutal btn-brutal-success px-6"
         >
           {isSubmitting ? t('submitting') : submitLabel}
         </button>
