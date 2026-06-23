@@ -4,8 +4,9 @@
 
 'use client';
 
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
-import { Users, Loader2, ClipboardList, MessageSquare, Eye, Plus } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Users, Loader2, SquareCheckBig, MessageSquare, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMessages } from '@/lib/hooks/use-messages';
 import { useChannelMembers } from '@/lib/hooks/use-channel-members';
@@ -15,10 +16,11 @@ import { MessageList } from './message-list';
 import { MessageInput } from './message-input';
 import { MemberList } from './member-list';
 import { AddAgentModal } from './add-agent-modal';
-import { ChannelSearch } from './channel-search';
 import { TaskBoard } from '@/components/tasks/task-board';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import { tabButtonClass } from '@/components/ui/tab-bar';
+import { filterTaskTree } from '@/lib/task-filters';
 import {
   Dialog,
   DialogHeader,
@@ -35,7 +37,6 @@ const ThreadPanel = lazy(() =>
   import('./thread-panel').then((m) => ({ default: m.ThreadPanel })),
 );
 
-import { AgentViewPanel } from './agent-view-panel';
 
 interface ChannelViewProps {
   channel: Channel;
@@ -75,6 +76,8 @@ export function ChannelView({
   onAgentViewWidthChange,
   agentViewFocusedAgentId,
 }: ChannelViewProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     messages,
     isLoading,
@@ -111,21 +114,10 @@ export function ChannelView({
   // ---- Thread panel width ----
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
 
-  // ---- Agent View panel state (SOLO-island PR3) ----
-  // Controlled by the parent (dashboard) so the AgentIsland can summon
-  // the panel from outside this component. The Eye button in the channel
-  // header toggles via the same callback; the parent owns the actual
-  // state. This component is treated as "always rendered with a parent
-  // controller" — if you need to mount it standalone, wrap a small
-  // component that owns the boolean state.
-  const showAgentView = !!agentViewVisible;
-  const effectiveAgentViewWidth = agentViewWidth ?? 320;
-  const toggleAgentView = () => {
-    onAgentViewVisibleChange?.(!showAgentView);
-  };
-
   // ---- Tasks tab state (SOLO-128-F) ----
-  const [channelViewTab, setChannelViewTab] = useState<'messages' | 'tasks'>('messages');
+  const [channelViewTab, setChannelViewTab] = useState<'messages' | 'tasks'>(
+    searchParams.get('tab') === 'tasks' ? 'tasks' : 'messages',
+  );
 
   // ---- Channel search state (SOLO-237-F) ----
   const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
@@ -143,6 +135,85 @@ export function ChannelView({
     convertMessageToTask,
     refetch: refetchTasks,
   } = useTasks({ channel_id: channel.id });
+
+  const [taskFilterAssignee, setTaskFilterAssignee] = useState('');
+  const [taskFilterCreator, setTaskFilterCreator] = useState('');
+  const [taskFilterNumber, setTaskFilterNumber] = useState('');
+
+  useEffect(() => {
+    if (searchParams.get('channel') !== channel.id) return;
+    setChannelViewTab(searchParams.get('tab') === 'tasks' ? 'tasks' : 'messages');
+    setTaskFilterAssignee(searchParams.get('assignee') || '');
+    setTaskFilterCreator(searchParams.get('creator') || '');
+    setTaskFilterNumber(searchParams.get('task') || '');
+  }, [channel.id, searchParams]);
+
+  const pushDashboardTaskUrl = useCallback(
+    (next: { tab?: 'messages' | 'tasks'; assignee?: string; creator?: string; task?: string }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('channel', channel.id);
+      const tab = next.tab ?? channelViewTab;
+      if (tab === 'tasks') params.set('tab', 'tasks');
+      else params.delete('tab');
+      const assignee = next.assignee ?? taskFilterAssignee;
+      const creator = next.creator ?? taskFilterCreator;
+      const task = next.task ?? taskFilterNumber;
+      if (assignee) params.set('assignee', assignee);
+      else params.delete('assignee');
+      if (creator) params.set('creator', creator);
+      else params.delete('creator');
+      if (task) params.set('task', task);
+      else params.delete('task');
+      router.push(`/dashboard?${params.toString()}`);
+    },
+    [channel.id, channelViewTab, router, searchParams, taskFilterAssignee, taskFilterCreator, taskFilterNumber],
+  );
+
+  const filteredChannelTasks = useMemo(
+    () => filterTaskTree(channelTasks, {
+      assignee: taskFilterAssignee,
+      creator: taskFilterCreator,
+      taskNumber: taskFilterNumber,
+    }),
+    [channelTasks, taskFilterAssignee, taskFilterCreator, taskFilterNumber],
+  );
+
+  const taskAssigneeOptions = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string }>();
+    for (const task of channelTasks) {
+      const id = task.claimer_id || task.assignee_id;
+      const name = task.claimer_name || task.assignee_name || (id ? id.slice(0, 8) : '');
+      if (id && !seen.has(id)) seen.set(id, { id, name });
+    }
+    return Array.from(seen.values());
+  }, [channelTasks]);
+
+  const taskCreatorOptions = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string }>();
+    for (const task of channelTasks) {
+      const name = task.creator_name || task.creator_id.slice(0, 8);
+      if (!seen.has(task.creator_id)) seen.set(task.creator_id, { id: task.creator_id, name });
+    }
+    return Array.from(seen.values());
+  }, [channelTasks]);
+
+  const taskNumberOptions = useMemo(() => {
+    return channelTasks
+      .filter((task) => task.task_number != null)
+      .sort((a, b) => (a.task_number ?? 0) - (b.task_number ?? 0))
+      .map((task) => ({
+        value: String(task.task_number),
+        label: `#${task.task_number} ${task.title}`,
+      }));
+  }, [channelTasks]);
+
+  const hasChannelTaskFilters = !!(taskFilterAssignee || taskFilterCreator || taskFilterNumber);
+  const clearChannelTaskFilters = useCallback(() => {
+    setTaskFilterAssignee('');
+    setTaskFilterCreator('');
+    setTaskFilterNumber('');
+    pushDashboardTaskUrl({ tab: 'tasks', assignee: '', creator: '', task: '' });
+  }, [pushDashboardTaskUrl]);
 
   // Refetch tasks when switching to tasks tab
   useEffect(() => {
@@ -336,7 +407,24 @@ export function ChannelView({
     }
   }, [threadMessage, markMessageThreadRead]);
 
+  const handleViewThreadInChannel = useCallback(() => {
+    if (!threadMessage) return;
+    setChannelViewTab('messages');
+    setScrollToMessageId(threadMessage.id);
+    setScrollMsgKey((k) => k + 1);
+    router.push(`/dashboard?channel=${channel.id}&message=${threadMessage.id}`);
+  }, [channel.id, router, threadMessage]);
+
+  const handleViewThreadTask = useCallback(() => {
+    const taskNumber = threadTask?.task_number ?? threadMessage?.task_number;
+    if (!threadMessage || taskNumber == null) return;
+    setChannelViewTab('tasks');
+    setTaskFilterNumber(String(taskNumber));
+    router.push(`/dashboard?channel=${channel.id}&tab=tasks&task=${taskNumber}&thread=${threadMessage.id}`);
+  }, [channel.id, router, threadMessage, threadTask]);
+
   const existingAgentIds = agents.map((a) => a.member_id);
+  const canAddAgents = !channel.name.startsWith('all-');
 
   // ---- Task quick-create handler (SOLO-128-F) ----
 
@@ -381,7 +469,10 @@ export function ChannelView({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setChannelViewTab('messages')}
+                onClick={() => {
+                  setChannelViewTab('messages');
+                  pushDashboardTaskUrl({ tab: 'messages', assignee: '', creator: '', task: '' });
+                }}
                 className={tabButtonClass(channelViewTab === 'messages')}
               >
                 <MessageSquare className="h-3.5 w-3.5" />
@@ -389,39 +480,30 @@ export function ChannelView({
               </button>
               <button
                 type="button"
-                onClick={() => setChannelViewTab('tasks')}
+                onClick={() => {
+                  setChannelViewTab('tasks');
+                  pushDashboardTaskUrl({ tab: 'tasks' });
+                }}
                 className={tabButtonClass(channelViewTab === 'tasks')}
               >
-                <ClipboardList className="h-3.5 w-3.5" />
+                <SquareCheckBig className="h-3.5 w-3.5" />
                 {t('tasks')}
               </button>
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
-            <button
-              type="button"
-              onClick={toggleAgentView}
-              className={cn(
-                'flex h-8 w-8 items-center justify-center border-2 border-black shadow-brutal-sm transition-colors',
-                showAgentView
-                  ? 'bg-brutal-primary text-black'
-                  : 'bg-white hover:bg-brutal-cream',
-              )}
-              aria-label="Agent View"
-              title="Agent View"
-            >
-              <Eye className="h-4 w-4" />
-            </button>
-            {/* SOLO-237-F: Channel-internal search */}
-            {channelViewTab === 'messages' && (
-              <ChannelSearch
-                channelId={channel.id}
-                channelName={channel.name}
-                onResultClick={(msgId) => {
-                  setScrollToMessageId(msgId);
-                  setScrollMsgKey((k) => k + 1);
-                }}
-              />
+            {canAddAgents && (
+              <Button
+                type="button"
+                onClick={() => setIsAddAgentModalOpen(true)}
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label={t('addAgentToChannel')}
+                title={t('addAgentToChannel')}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             )}
             <Button
               type="button"
@@ -469,21 +551,7 @@ export function ChannelView({
                   const result = await sendMessage(content, _mentionedAgentIds, true, attachmentIds);
                   if (result && result.task_number !== undefined) {
                     showToast(t('taskCreatedToast', { n: result.task_number }), 'success');
-                    const parentMessage: Message = {
-                      id: result.id,
-                      channel_id: channel.id,
-                      user_id: 'user-1',
-                      display_name: t('selfRef'),
-                      content,
-                      created_at: new Date().toISOString(),
-                      status: 'sent' as const,
-                      sender_type: 'user' as const,
-                      task_number: result.task_number,
-                    };
-                    setThreadMessage(parentMessage);
-                    setThreadTask(null);
-                    onThreadChange?.(result.id);
-                    refetchTasks();
+                    router.push(`/dashboard?channel=${channel.id}&tab=tasks&task=${result.task_number}&thread=${result.id}`);
                   }
                 } else {
                   const result = await sendMessage(content, _mentionedAgentIds, undefined, attachmentIds);
@@ -501,12 +569,66 @@ export function ChannelView({
         {/* Tasks tab (SOLO-128-F) */}
         {channelViewTab === 'tasks' && (
           <div className="flex flex-1 flex-col overflow-hidden bg-brutal-cream">
+            <div className="border-b-2 border-black bg-brutal-cream px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Select
+                  value={taskFilterAssignee}
+                  onChange={(value) => {
+                    setTaskFilterAssignee(value);
+                    pushDashboardTaskUrl({ tab: 'tasks', assignee: value });
+                  }}
+                  options={[
+                    { value: '', label: t('allAssignees') },
+                    ...taskAssigneeOptions.map((a) => ({ value: a.id, label: a.name })),
+                  ]}
+                  size="sm"
+                  className="w-36"
+                  aria-label={t('filterByClaimer')}
+                />
+                <Select
+                  value={taskFilterCreator}
+                  onChange={(value) => {
+                    setTaskFilterCreator(value);
+                    pushDashboardTaskUrl({ tab: 'tasks', creator: value });
+                  }}
+                  options={[
+                    { value: '', label: t('allCreators') },
+                    ...taskCreatorOptions.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                  size="sm"
+                  className="w-36"
+                  aria-label={t('filterByCreator')}
+                />
+                <Select
+                  value={taskFilterNumber}
+                  onChange={(value) => {
+                    setTaskFilterNumber(value);
+                    pushDashboardTaskUrl({ tab: 'tasks', task: value });
+                  }}
+                  options={[
+                    { value: '', label: 'All tasks' },
+                    ...taskNumberOptions,
+                  ]}
+                  size="sm"
+                  className="w-40"
+                  aria-label="Filter by task number"
+                />
+                {hasChannelTaskFilters && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearChannelTaskFilters}
+                    className="flex items-center gap-1"
+                  >
+                    <X className="h-3 w-3" />
+                    {t('clearFilter')}
+                  </Button>
+                )}
+              </div>
+            </div>
             <div className="flex-1 overflow-y-auto px-4 py-4">
-              <h3 className="mb-4 font-heading text-sm font-bold text-foreground">
-                  {t('channelTasks', { channel: channel.name })}
-                </h3>
               <TaskBoard
-                tasks={channelTasks}
+                tasks={filteredChannelTasks}
                 isLoading={tasksLoading}
                 error={tasksError}
                 onTaskClick={handleTaskClickInTab}
@@ -517,18 +639,6 @@ export function ChannelView({
           </div>
         )}
       </div>
-
-      {/* Agent View panel — SOLO-island PR3: controlled by parent, so the
-          AgentIsland (mounted at the dashboard root) can summon it. */}
-      {showAgentView && (
-        <AgentViewPanel
-          channelId={channel.id}
-          width={effectiveAgentViewWidth}
-          onWidthChange={onAgentViewWidthChange ?? (() => {})}
-          focusedAgentId={agentViewFocusedAgentId}
-          onClose={() => onAgentViewVisibleChange?.(false)}
-        />
-      )}
 
       {/* Thread panel (lazy-loaded, SOLO-63-F) — always mounted for smooth width transition */}
       <div
@@ -571,6 +681,8 @@ export function ChannelView({
               replyCount={threadMessage.reply_count ?? 0}
               task={threadTask ?? undefined}
               onMarkRead={handleThreadMarkRead}
+              onViewInChannel={handleViewThreadInChannel}
+              onViewTask={handleViewThreadTask}
             />
           </Suspense>
         )}
@@ -598,19 +710,21 @@ export function ChannelView({
             </div>
           </DialogTitle>
           <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              onClick={() => {
-                setIsMemberPopoverOpen(false);
-                setIsAddAgentModalOpen(true);
-              }}
-              variant="primary"
-              size="icon"
-              className="h-7 w-7"
-              aria-label={t('addAgentToChannel')}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
+            {canAddAgents && (
+              <Button
+                type="button"
+                onClick={() => {
+                  setIsMemberPopoverOpen(false);
+                  setIsAddAgentModalOpen(true);
+                }}
+                variant="success"
+                size="icon"
+                className="h-7 w-7"
+                aria-label={t('addAgentToChannel')}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            )}
             <DialogCloseButton onClick={() => setIsMemberPopoverOpen(false)} />
           </div>
         </DialogHeader>
@@ -625,6 +739,7 @@ export function ChannelView({
             }}
             onRemoveAgent={(memberId) => removeMember('agent', memberId)}
             showHeader={false}
+            canAddAgent={canAddAgents}
           />
         </div>
       </Dialog>

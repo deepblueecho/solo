@@ -26,7 +26,7 @@ import {
   MessageSquare,
   Pencil,
   Trash2,
-  ClipboardList,
+  SquareCheckBig,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { buildValidNames } from '@/lib/utils/highlight';
@@ -74,32 +74,32 @@ interface MessageListProps {
 
 // ---- Task header config (SOLO-225-F) ----
 
-const TASK_HEADER_CONFIG: Record<string, { label: string; borderClass: string; bgClass: string; badgeClass: string; lightClass: string }> = {
+const TASK_HEADER_CONFIG: Record<string, { label: string; accentClass: string; bgClass: string; badgeClass: string; lightClass: string }> = {
   todo: {
     label: t('statusTodo'),
-    borderClass: 'border-2 border-black',
-    bgClass: '',
+    accentClass: 'border-l-brutal-warning',
+    bgClass: 'bg-brutal-warning-light/20',
     badgeClass: 'bg-brutal-warning text-black border-2 border-black',
     lightClass: 'bg-brutal-warning-light',
   },
   in_progress: {
     label: t('statusInProgress'),
-    borderClass: 'border-2 border-black',
-    bgClass: '',
+    accentClass: 'border-l-brutal-info',
+    bgClass: 'bg-brutal-info-light/20',
     badgeClass: 'bg-brutal-info text-black border-2 border-black',
     lightClass: 'bg-brutal-info-light',
   },
   in_review: {
     label: t('statusPendingReview'),
-    borderClass: 'border-2 border-black',
-    bgClass: '',
+    accentClass: 'border-l-brutal-violet',
+    bgClass: 'bg-brutal-violet-light/20',
     badgeClass: 'bg-brutal-violet text-black border-2 border-black',
     lightClass: 'bg-brutal-violet-light',
   },
   done: {
     label: t('statusDone'),
-    borderClass: 'border-2 border-black',
-    bgClass: '',
+    accentClass: 'border-l-brutal-success',
+    bgClass: 'bg-brutal-success-light/20',
     badgeClass: 'bg-brutal-success text-black border-2 border-black',
     lightClass: 'bg-brutal-success-light',
   },
@@ -243,7 +243,8 @@ const MessageItem = memo(function MessageItem({
         isFailed && 'bg-brutal-danger-light/30',
         isEditing && 'border-l-[3px] border-l-brutal-primary bg-brutal-primary-light/30',
         isHighlighted && 'bg-brutal-info-light ring-2 ring-black',
-        isTaskMessage && headerConfig?.borderClass,
+        isTaskMessage && 'border-l-4',
+        isTaskMessage && headerConfig?.accentClass,
         isTaskMessage && headerConfig?.bgClass,
         isTaskMessage && 'cursor-pointer',
       )}
@@ -280,7 +281,7 @@ const MessageItem = memo(function MessageItem({
         {/* SOLO-225-F: Task header row — above sender name + timestamp */}
         {isTaskMessage && headerConfig && (
           <div className="flex items-center gap-2 mb-1.5">
-            <ClipboardList className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+            <SquareCheckBig className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
             <span className="font-mono text-xs font-bold">
               #{message.task_number}
             </span>
@@ -289,15 +290,7 @@ const MessageItem = memo(function MessageItem({
                 {message.task_title}
               </span>
             )}
-            <span
-              className={cn(
-                'inline-flex items-center ml-auto flex-shrink-0',
-                'border-2 border-black',
-                'font-mono text-[10px] font-bold uppercase tracking-wider',
-                'px-1.5 py-px',
-                headerConfig.badgeClass,
-              )}
-            >
+            <span className={cn('badge-brutal ml-auto flex-shrink-0', headerConfig.badgeClass)}>
               {headerConfig.label}
             </span>
           </div>
@@ -346,7 +339,7 @@ const MessageItem = memo(function MessageItem({
                 type="button"
                 onClick={handleSaveEdit}
                 disabled={isSaving || !editContent.trim()}
-                className="btn-brutal btn-brutal-sm btn-brutal-primary"
+                className="btn-brutal btn-brutal-sm btn-brutal-success"
               >
                 {isSaving ? t('savingMessage') : t('saveMessage')}
               </button>
@@ -501,7 +494,7 @@ const MessageItem = memo(function MessageItem({
               aria-label={t('convertToTask')}
               title={t('convertToTask')}
             >
-              <ClipboardList className="h-3.5 w-3.5" />
+              <SquareCheckBig className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -839,7 +832,7 @@ export function MessageList({
   if (isLoading) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="py-4 space-y-1">
+        <div className="pt-4 space-y-1">
           <MessageSkeleton />
           <MessageSkeleton />
           <MessageSkeleton />

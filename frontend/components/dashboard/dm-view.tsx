@@ -11,7 +11,8 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
-import { AlertCircle, RefreshCw, MessageSquare, Circle, ClipboardList } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { AlertCircle, RefreshCw, MessageSquare, Circle, SquareCheckBig } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStreamingMessages } from '@/lib/hooks/use-streaming-messages';
 import { MessageList } from './message-list';
@@ -99,15 +100,39 @@ export function DMView({
   initialThreadMessageId,
   initialScrollToMessageId,
 }: DMViewProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const name = getDisplayName(dm);
   const isAgent = isAgentDM(dm);
   const deleted = isAgentDeleted(dm);
-  const [viewTab, setViewTab] = useState<'messages' | 'tasks'>('messages');
+  const [viewTab, setViewTab] = useState<'messages' | 'tasks'>(
+    searchParams.get('tab') === 'tasks' ? 'tasks' : 'messages',
+  );
   const [threadMessage, setThreadMessage] = useState<Message | null>(null);
   const [threadTask, setThreadTask] = useState<Task | null>(null);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
   const [scrollMsgKey, setScrollMsgKey] = useState(0);
+
+  useEffect(() => {
+    if (searchParams.get('dm') !== dm.id) return;
+    setViewTab(searchParams.get('tab') === 'tasks' ? 'tasks' : 'messages');
+  }, [dm.id, searchParams]);
+
+  const selectTab = useCallback(
+    (tab: 'messages' | 'tasks') => {
+      setViewTab(tab);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('dm', dm.id);
+      if (tab === 'tasks') params.set('tab', 'tasks');
+      else {
+        params.delete('tab');
+        params.delete('task');
+      }
+      router.push(`/dashboard?${params.toString()}`);
+    },
+    [dm.id, router, searchParams],
+  );
 
   // Handle initialScrollToMessageId: scroll to a specific message on mount or URL change.
   // Waits for isLoading to become false so the message DOM exists.
@@ -274,6 +299,21 @@ export function DMView({
     [dm.id, onConvertToTask, onThreadChange],
   );
 
+  const handleViewThreadInDM = useCallback(() => {
+    if (!threadMessage) return;
+    setViewTab('messages');
+    setScrollToMessageId(threadMessage.id);
+    setScrollMsgKey((k) => k + 1);
+    router.push(`/dashboard?dm=${dm.id}&message=${threadMessage.id}`);
+  }, [dm.id, router, threadMessage]);
+
+  const handleViewThreadTask = useCallback(() => {
+    const taskNumber = threadTask?.task_number ?? threadMessage?.task_number;
+    if (!threadMessage || taskNumber == null) return;
+    setViewTab('tasks');
+    router.push(`/dashboard?dm=${dm.id}&tab=tasks&task=${taskNumber}&thread=${threadMessage.id}`);
+  }, [dm.id, router, threadMessage, threadTask]);
+
   return (
     <div className="flex flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -298,7 +338,7 @@ export function DMView({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setViewTab('messages')}
+                onClick={() => selectTab('messages')}
                 className={tabButtonClass(viewTab === 'messages')}
               >
                 <MessageSquare className="h-3.5 w-3.5" />
@@ -306,10 +346,10 @@ export function DMView({
               </button>
               <button
                 type="button"
-                onClick={() => setViewTab('tasks')}
+                onClick={() => selectTab('tasks')}
                 className={tabButtonClass(viewTab === 'tasks')}
               >
-                <ClipboardList className="h-3.5 w-3.5" />
+                <SquareCheckBig className="h-3.5 w-3.5" />
                 {t('tasks')}
               </button>
             </div>
@@ -376,21 +416,7 @@ export function DMView({
                   const result = await sendMessage(content, mentionedAgentIds, asTask, attachmentIds);
                   if (asTask && result?.task_number) {
                     onTaskCreated?.();
-                    const parentMessage: Message = {
-                      id: result.id,
-                      channel_id: dm.id,
-                      user_id: 'user-1',
-                      display_name: t('selfRef'),
-                      content,
-                      created_at: new Date().toISOString(),
-                      status: 'sent' as const,
-                      sender_type: 'user' as const,
-                      task_number: result.task_number,
-                    };
-                    setThreadMessage(parentMessage);
-                    setThreadTask(null);
-                    onThreadChange?.(result.id);
-                    refetchTasks?.();
+                    router.push(`/dashboard?dm=${dm.id}&tab=tasks&task=${result.task_number}&thread=${result.id}`);
                   }
                   return result;
                 }}
@@ -418,7 +444,7 @@ export function DMView({
             <div className="flex-shrink-0 border-b-2 border-black bg-brutal-cream px-6 py-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-body text-sm text-muted-foreground">
-                  <ClipboardList className="h-4 w-4" />
+                  <SquareCheckBig className="h-4 w-4" />
                   <span>
                     {t('dmTasks', { name })}
                   </span>
@@ -478,6 +504,8 @@ export function DMView({
               task={threadTask ?? undefined}
               onClose={handleThreadClose}
               replyCount={threadMessage.reply_count ?? 0}
+              onViewInChannel={handleViewThreadInDM}
+              onViewTask={handleViewThreadTask}
             />
           </Suspense>
         )}

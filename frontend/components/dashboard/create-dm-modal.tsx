@@ -230,7 +230,7 @@ export function CreateDMModal({
                   {/* Action button */}
                   <Button
                     size="sm"
-                    variant={existing ? 'outline' : 'primary'}
+                    variant={existing ? 'outline' : 'success'}
                     disabled={isCreating}
                     className="flex-shrink-0"
                     onClick={(e) => {

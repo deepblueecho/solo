@@ -308,7 +308,7 @@ export function AgentForm({
       {/* Role Template Selector (SOLO-210-F) */}
       <div className="space-y-3">
         <Label>{t('agentFormRoleTemplate')}</Label>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
+        <div className="flex flex-wrap gap-2">
           {ROLE_TEMPLATES.map((template) => {
             const isSelected = selectedTemplateKey === template.key;
             return (
@@ -317,17 +317,14 @@ export function AgentForm({
                 type="button"
                 onClick={() => handleTemplateSelect(template)}
                 className={cn(
-                  'flex flex-col items-start gap-0.5 border-2 border-black px-2.5 py-2 text-left transition-all',
+                  'border-2 border-black px-3 py-2 text-left transition-all',
                   isSelected
                     ? 'bg-brutal-primary shadow-brutal-sm translate-x-0.5 translate-y-0.5'
                     : 'bg-white shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal',
                 )}
               >
-                <span className="font-heading text-xs font-bold leading-tight">
+                <span className="font-heading text-xs font-bold leading-tight whitespace-nowrap">
                   {template.name}
-                </span>
-                <span className="font-mono text-[9px] leading-tight text-muted-foreground">
-                  {template.desc}
                 </span>
               </button>
             );
@@ -345,9 +342,6 @@ export function AgentForm({
           aria-label="System Prompt"
           {...register('system_prompt')}
         />
-        <p className="font-mono text-[11px] text-muted-foreground">
-          {t('agentFormSystemPromptHelp')}
-        </p>
       </div>
 
       {/* v1.4: Custom Environment Variables */}
@@ -356,9 +350,6 @@ export function AgentForm({
           <Terminal className="h-4 w-4" />
           <Label>{t('agentFormEnv')}</Label>
         </div>
-        <p className="font-mono text-[11px] text-muted-foreground">
-          {t('agentFormEnvHelp')}
-        </p>
         <EnvEditor
           value={envValues}
           onChange={handleEnvChange}
@@ -372,9 +363,6 @@ export function AgentForm({
           <Wrench className="h-4 w-4" />
           <Label>{t('agentFormCustomArgs')}</Label>
         </div>
-        <p className="font-mono text-[11px] text-muted-foreground">
-          {t('agentFormCustomArgsHelp')}
-        </p>
         <ArgsEditor
           value={argsValues}
           onChange={handleArgsChange}
@@ -386,6 +374,7 @@ export function AgentForm({
       <div className="flex items-center gap-3 pt-2">
         <Button
           type="submit"
+          variant="success"
           disabled={isSubmitting}
         >
           {isSubmitting ? (

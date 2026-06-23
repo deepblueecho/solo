@@ -34,6 +34,7 @@ type InboxItem struct {
 	ParentSenderType *string   `json:"parent_sender_type"`
 	ParentSenderID   *string   `json:"parent_sender_id"`
 	ParentContent    *string   `json:"parent_content"`
+	ParentTaskNumber int       `json:"parent_task_number,omitempty"`
 }
 
 type UnreadCount struct {
@@ -46,7 +47,7 @@ type UnreadCount struct {
 const listInboxQuery = `
 	SELECT id, item_type, channel_id, channel_name, thread_id, dm_id,
 	       sender_name, sender_avatar, content_preview, is_mention, created_at,
-	       is_unread, parent_sender_name, parent_sender_type, parent_sender_id, parent_content
+	       is_unread, parent_sender_name, parent_sender_type, parent_sender_id, parent_content, parent_task_number
 	FROM (
 		-- Thread replies
 		SELECT m.id,
@@ -67,11 +68,13 @@ const listInboxQuery = `
 		       COALESCE(pu.display_name, pa.name) AS parent_sender_name,
 		       pm.sender_type AS parent_sender_type,
 		       pm.sender_id::text AS parent_sender_id,
-		       pm.content AS parent_content
+		       pm.content AS parent_content,
+		       COALESCE(pt.task_number, 0) AS parent_task_number
 		FROM messages m
 		JOIN threads t ON m.thread_id = t.id
 		JOIN channels c ON t.channel_id = c.id AND c.type != 'dm'
 		LEFT JOIN messages pm ON pm.id = t.root_message_id
+		LEFT JOIN tasks pt ON pt.message_id = pm.id
 		LEFT JOIN users pu ON pm.sender_type = 'user' AND pm.sender_id = pu.id
 		LEFT JOIN agents pa ON pm.sender_type = 'agent' AND pm.sender_id = pa.id
 		LEFT JOIN users u ON m.sender_type = 'user' AND m.sender_id = u.id
@@ -112,7 +115,8 @@ const listInboxQuery = `
 		       NULL::text AS parent_sender_name,
 		       NULL::text AS parent_sender_type,
 		       NULL::text AS parent_sender_id,
-		       NULL::text AS parent_content
+		       NULL::text AS parent_content,
+		       0 AS parent_task_number
 		FROM messages m
 		JOIN channels c ON m.channel_id = c.id AND c.type = 'dm'
 		JOIN dm_members dm ON dm.channel_id = c.id AND dm.member_id = $1
@@ -147,7 +151,8 @@ const listInboxQuery = `
 		       NULL::text AS parent_sender_name,
 		       NULL::text AS parent_sender_type,
 		       NULL::text AS parent_sender_id,
-		       NULL::text AS parent_content
+		       NULL::text AS parent_content,
+		       0 AS parent_task_number
 		FROM messages m
 		JOIN user_mentions um ON um.message_id = m.id AND um.mentioned_user_id = $1
 		JOIN channels c ON m.channel_id = c.id AND c.type != 'dm'
@@ -192,7 +197,7 @@ func (s *InboxService) List(ctx context.Context, userID string, before time.Time
 		if err := rows.Scan(&item.ID, &item.Type, &item.ChannelID, &item.ChannelName,
 			&item.ThreadID, &item.DMID, &item.SenderName, &item.SenderAvatar,
 			&item.ContentPreview, &item.IsMention, &item.CreatedAt, &item.IsUnread,
-			&item.ParentSenderName, &item.ParentSenderType, &item.ParentSenderID, &item.ParentContent); err != nil {
+			&item.ParentSenderName, &item.ParentSenderType, &item.ParentSenderID, &item.ParentContent, &item.ParentTaskNumber); err != nil {
 			return nil, false, fmt.Errorf("scan inbox item: %w", err)
 		}
 		item.MessageID = item.ID

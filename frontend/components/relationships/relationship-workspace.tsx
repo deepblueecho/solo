@@ -23,7 +23,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
-import { Loader2, Plus, LayoutGrid, Undo2, Redo2, Layers } from 'lucide-react';
+import { ArrowLeft, Loader2, Plus, LayoutGrid, Undo2, Redo2, Layers } from 'lucide-react';
 import { NavBar } from '@/components/ui/navbar';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -696,7 +696,7 @@ export function RelationshipWorkspace({
           <Button
             type="button"
             onClick={() => setShowChoiceDialog(true)}
-            variant="primary"
+            variant="success"
             size="sm"
             className="gap-1.5 uppercase tracking-wider"
           >
@@ -802,6 +802,19 @@ export function RelationshipWorkspace({
               <DialogTitle>{t('teamsCreateAgent')}</DialogTitle>
               <DialogCloseButton onClick={() => setShowCreateAgentModal(false)} />
             </DialogHeader>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowCreateAgentModal(false);
+                setShowChoiceDialog(true);
+              }}
+              className="mb-4 gap-1.5"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              {t('back')}
+            </Button>
             <AgentForm
               onSubmit={handleCreateAgent}
               isSubmitting={isCreatingAgent}
@@ -814,6 +827,19 @@ export function RelationshipWorkspace({
               <DialogTitle>Create from Template</DialogTitle>
               <DialogCloseButton onClick={() => setShowTemplateModal(false)} />
             </DialogHeader>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowTemplateModal(false);
+                setShowChoiceDialog(true);
+              }}
+              className="mb-4 gap-1.5"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              {t('back')}
+            </Button>
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
               <div>
                 <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">

@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { t } from '@/lib/i18n';
 import { usePathname } from 'next/navigation';
 import {
-  Hash,
-  ClipboardList,
+  MessageSquare,
   Users,
   Monitor,
 } from 'lucide-react';
@@ -14,8 +13,7 @@ import { useAuth } from '@/lib/auth-context';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 
 const NAV_ITEMS = [
-  { href: '/dashboard', icon: Hash, label: t('navChannels') },
-  { href: '/tasks', icon: ClipboardList, label: t('navTasks') },
+  { href: '/dashboard', icon: MessageSquare, label: t('navChannels') },
   { href: '/teams', icon: Users, label: t('navTeams') },
   { href: '/computers', icon: Monitor, label: t('navComputers') },
 ] as const;

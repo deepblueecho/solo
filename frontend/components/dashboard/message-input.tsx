@@ -1,7 +1,7 @@
 // ============================================================================
 // MessageInput — bottom message composition with brutalist styling
 // - input-brutal textarea with Space Mono placeholder
-// - Send button: btn-brutal-primary circular icon button
+// - Send button: btn-brutal-success circular icon button
 // - Enter/Shift+Enter handling
 // - @mention autocomplete (SOLO-51-F)
 // - File upload: drag & drop + paste (SOLO-247-F)
@@ -20,7 +20,8 @@ import {
 } from 'react';
 import {
   Send,
-  ClipboardList,
+  MessageSquare,
+  SquareCheckBig,
   Upload,
   X,
   Check,
@@ -581,24 +582,32 @@ export function MessageInput({
           </div>
         )}
 
-        {/* As Task toggle */}
+        {/* Message / Task mode */}
         {showAsTaskToggle && (
-          <div className="mb-2 flex items-center">
+          <div className="mb-2 flex w-fit items-center gap-2" role="group" aria-label="Message mode">
             <button
               type="button"
-              onClick={() => setAsTask((prev) => !prev)}
+              onClick={() => setAsTask(false)}
               className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1 font-mono text-[11px] font-bold transition-all',
-                'border-2 border-black shadow-brutal-sm',
-                asTask
-                  ? 'bg-brutal-primary text-black translate-x-[2px] translate-y-[2px] shadow-none'
-                  : 'bg-white text-muted-foreground hover:text-foreground hover:-translate-x-px hover:-translate-y-px hover:shadow-brutal',
+                'btn-brutal btn-brutal-sm flex items-center gap-1.5 px-2.5 py-1 font-mono text-[11px] font-bold',
+                !asTask ? 'btn-brutal-primary' : 'bg-white text-muted-foreground hover:text-foreground',
               )}
-              aria-label={asTask ? t('cancelAsTask') : t('createAsTask')}
+              aria-pressed={!asTask}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Message
+            </button>
+            <button
+              type="button"
+              onClick={() => setAsTask(true)}
+              className={cn(
+                'btn-brutal btn-brutal-sm flex items-center gap-1.5 px-2.5 py-1 font-mono text-[11px] font-bold',
+                asTask ? 'btn-brutal-primary' : 'bg-white text-muted-foreground hover:text-foreground',
+              )}
               aria-pressed={asTask}
             >
-              <ClipboardList className="h-3.5 w-3.5" />
-              {asTask ? 'Message Mode' : 'Track as Task'}
+              <SquareCheckBig className="h-3.5 w-3.5" />
+              Task
             </button>
           </div>
         )}
@@ -634,7 +643,7 @@ export function MessageInput({
             disabled={!canSend}
             className={cn(
               'absolute bottom-2 right-2 flex h-8 items-center justify-center gap-1.5 px-3',
-              'btn-brutal btn-brutal-primary',
+              'btn-brutal btn-brutal-success',
               !canSend && 'opacity-40 pointer-events-none',
               // v3.1: when the user has typed something and the send is
               // armed, a slow 2s pulse draws the eye without being frantic.

@@ -8,6 +8,7 @@ import { Plus, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import { selectableRowClass, selectableRowIconClass } from '@/components/ui/selectable-row';
+import { iconActionClass } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Channel } from '@/lib/types';
 
@@ -61,11 +62,13 @@ function ChannelItem({
   isSelected,
   onSelect,
   onDelete,
+  canDelete,
 }: {
   channel: Channel;
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  canDelete: boolean;
 }) {
   return (
     <div
@@ -89,16 +92,18 @@ function ChannelItem({
       </div>
 
       <div className="flex items-center gap-1">
+        {canDelete && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
-          className="hidden group-hover:flex items-center justify-center rounded-none p-1 hover:bg-brutal-primary-light transition-colors flex-shrink-0"
+          className={iconActionClass('invisible h-5 w-5 p-0 shadow-brutal-sm hover:bg-brutal-danger group-hover:visible')}
           aria-label={t('closeChannel', { name: channel.name })}
         >
-          <X className="h-4 w-4" />
+          <X className="h-3.5 w-3.5" />
         </button>
+        )}
       </div>
     </div>
   );
@@ -163,6 +168,7 @@ export function ChannelList({
                 isSelected={channel.id === selectedChannelId}
                 onSelect={() => onSelectChannel(channel.id)}
                 onDelete={() => onDeleteChannel(channel.id)}
+                canDelete={!channel.name.startsWith('all-')}
               />
             ))}
           </div>

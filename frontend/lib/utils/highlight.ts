@@ -22,7 +22,11 @@ const MENTION_REGEX = /(?<![a-zA-Z0-9_])@([\p{L}\p{N}_-]+)/gu;
 const TASKNUM_REGEX = /#(\d+)/g;
 
 export function buildValidNames(members: ChannelMember[]): string[] {
-  return Array.from(new Set(members.map((m) => m.display_name.toLowerCase())));
+  return Array.from(new Set(
+    members
+      .filter((m) => m.member_type === 'user')
+      .map((m) => m.display_name.toLowerCase()),
+  ));
 }
 
 /** Try every prefix of `name` against the whitelist; return the longest match, or null. */

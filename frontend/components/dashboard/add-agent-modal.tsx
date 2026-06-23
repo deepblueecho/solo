@@ -8,9 +8,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Bot, Circle, AlertCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Bot, Circle, AlertCircle, Layers, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { useAgents } from '@/lib/hooks/use-agents';
+import { AgentForm, type AgentFormValues } from '@/components/agents/agent-form';
+import { useCliDetection } from '@/lib/hooks/use-cli-detection';
+import { listTemplates, applyTemplate, type Template } from '@/lib/templates-api';
 import {
   Dialog,
   DialogHeader,
@@ -19,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { t } from '@/lib/i18n';
 import type { Agent } from '@/lib/types';
@@ -37,17 +41,35 @@ export function AddAgentModal({
   existingAgentIds,
   onAdd,
 }: AddAgentModalProps) {
-  const { agents, isLoading, error: agentsError, refetch } = useAgents();
+  const { agents, isLoading, error: agentsError, refetch, createAgent } = useAgents();
+  const detection = useCliDetection();
   const [searchQuery, setSearchQuery] = useState('');
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [mode, setMode] = useState<'list' | 'create' | 'template'>('list');
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [selectedModelProvider, setSelectedModelProvider] = useState('');
+  const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null);
 
   // Reset search when modal opens
   useEffect(() => {
     if (open) {
       setSearchQuery('');
       setAddingId(null);
+      setMode('list');
+      setCreateError(null);
+      setTemplateError(null);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (mode !== 'template' || selectedModelProvider) return;
+    const available = Object.values(detection.results).find((rt) => rt.available);
+    if (available) setSelectedModelProvider(available.type);
+  }, [detection.results, mode, selectedModelProvider]);
 
   const availableAgents = agents.filter(
     (a) => !existingAgentIds.includes(a.id),
@@ -75,13 +97,195 @@ export function AddAgentModal({
     [onAdd, onOpenChange],
   );
 
+  const handleCreate = useCallback(
+    async (values: AgentFormValues) => {
+      setIsCreating(true);
+      setCreateError(null);
+      try {
+        const agent = await createAgent(values);
+        await onAdd(agent.id, agent.name);
+        await refetch();
+        onOpenChange(false);
+      } catch (err) {
+        setCreateError(err instanceof Error ? err.message : t('teamsAgentCreateError'));
+      } finally {
+        setIsCreating(false);
+      }
+    },
+    [createAgent, onAdd, onOpenChange, refetch],
+  );
+
+  const handleOpenTemplates = useCallback(async () => {
+    setMode('template');
+    setTemplatesLoading(true);
+    setTemplateError(null);
+    try {
+      setTemplates(await listTemplates());
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : 'Failed to load templates');
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, []);
+
+  const handleApplyTemplate = useCallback(
+    async (templateId: string) => {
+      if (!selectedModelProvider) {
+        setTemplateError('Please select a runtime');
+        return;
+      }
+      setApplyingTemplate(templateId);
+      setTemplateError(null);
+      try {
+        const result = await applyTemplate(templateId, selectedModelProvider);
+        await Promise.all(result.created_agent_ids.map((id) => onAdd(id, id)));
+        await refetch();
+        onOpenChange(false);
+      } catch (err) {
+        setTemplateError(err instanceof Error ? err.message : 'Failed to apply template');
+      } finally {
+        setApplyingTemplate(null);
+      }
+    },
+    [onAdd, onOpenChange, refetch, selectedModelProvider],
+  );
+
+  const createModeButtons = (
+    <div className="mb-4 grid grid-cols-2 gap-2">
+      <Button
+        type="button"
+        onClick={() => setMode('create')}
+        variant={mode === 'create' ? 'primary' : 'outline'}
+        className="gap-2"
+      >
+        <Plus className="h-4 w-4" />
+        Single Agent
+      </Button>
+      <Button
+        type="button"
+        onClick={handleOpenTemplates}
+        variant={mode === 'template' ? 'primary' : 'outline'}
+        className="gap-2"
+      >
+        <Layers className="h-4 w-4" />
+        From Template
+      </Button>
+    </div>
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} width={mode === 'template' ? 'lg' : 'md'}>
       <DialogHeader>
-        <DialogTitle>{t('addAgentToChannel')}</DialogTitle>
+        <DialogTitle>
+          {mode === 'create' ? t('teamsCreateAgent') : mode === 'template' ? 'Create from Template' : t('addAgentToChannel')}
+        </DialogTitle>
         <DialogCloseButton onClick={() => onOpenChange(false)} />
       </DialogHeader>
 
+      {mode === 'create' ? (
+        <div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setMode('list')}
+            className="mb-4 gap-1.5"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {t('back')}
+          </Button>
+          {createError && (
+            <div className="mb-4 flex items-center gap-2 border-2 border-brutal-danger bg-brutal-danger-light/30 px-3 py-2">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 text-brutal-danger" />
+              <span className="font-mono text-xs flex-1 text-brutal-danger">
+                {createError}
+              </span>
+            </div>
+          )}
+          <AgentForm
+            onSubmit={handleCreate}
+            isSubmitting={isCreating}
+            submitLabel={t('teamsCreateAgent')}
+          />
+        </div>
+      ) : mode === 'template' ? (
+        <div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setMode('list')}
+            className="mb-4 gap-1.5"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {t('back')}
+          </Button>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+          <div>
+            <label className="block font-heading text-xs font-bold uppercase tracking-wider mb-1.5">
+              Runtime <span className="text-brutal-danger">*</span>
+            </label>
+            <Select
+              value={selectedModelProvider}
+              onChange={setSelectedModelProvider}
+              options={Object.values(detection.results).map((rt) => ({
+                value: rt.type,
+                label: `${rt.available ? '●' : '○'} ${rt.display_name}${rt.version ? ` (${rt.version})` : ''}`,
+                disabled: !rt.available,
+              }))}
+              placeholder="Select runtime..."
+              size="md"
+              className="w-full"
+            />
+          </div>
+          {templatesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : templates.length === 0 ? (
+            <p className="font-mono text-sm text-muted-foreground text-center py-4">No templates available.</p>
+          ) : (
+            [...new Set(templates.map((template) => template.category))].map((category) => (
+              <div key={category}>
+                <h3 className="font-heading text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 border-b-2 border-black pb-1">
+                  {category}
+                </h3>
+                <div className="space-y-2">
+                  {templates.filter((template) => template.category === category).map((template) => (
+                    <div key={template.id} className="flex items-start gap-3 p-3 border-2 border-black bg-white">
+                      <span className="text-2xl flex-shrink-0">{template.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-heading text-sm font-bold text-black">{template.name}</span>
+                          <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 border-2 border-black bg-brutal-cream font-mono text-[10px] font-bold text-black">
+                            {template.member_count}
+                          </span>
+                        </div>
+                        <p className="font-sans text-xs text-muted-foreground mt-0.5">{template.description}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => handleApplyTemplate(template.id)}
+                        disabled={applyingTemplate === template.id}
+                        variant="success"
+                        size="sm"
+                        className="flex-shrink-0"
+                      >
+                        {applyingTemplate === template.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+          {templateError && (
+            <p className="font-mono text-xs text-brutal-danger">{templateError}</p>
+          )}
+          </div>
+        </div>
+      ) : (
+      <>
       {/* Search */}
       <div className="mb-4">
         <Input
@@ -111,6 +315,8 @@ export function AddAgentModal({
           </Button>
         </div>
       )}
+
+      {createModeButtons}
 
       {/* Agent list */}
       <div className="max-h-64 overflow-y-auto">
@@ -178,7 +384,7 @@ export function AddAgentModal({
                 <Button
                   type="button"
                   size="sm"
-                  variant="primary"
+                  variant="success"
                   onClick={() => handleAdd(agent)}
                   disabled={addingId === agent.id}
                   className="flex-shrink-0"
@@ -190,6 +396,8 @@ export function AddAgentModal({
           </div>
         )}
       </div>
+      </>
+      )}
     </Dialog>
   );
 }

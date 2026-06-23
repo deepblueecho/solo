@@ -4,7 +4,7 @@
 // - Optional task metadata bar: #N title [status] -> @claimer
 // - Parent message: message-bubble style
 // - Input: input-brutal font-mono
-// - Send: btn-brutal btn-brutal-primary
+// - Send: btn-brutal btn-brutal-success
 // - Close: btn-brutal-sm
 // - Empty: "还没有回复，发起讨论吧"
 // - States: loading skeleton, empty, error, normal
@@ -18,7 +18,8 @@ import {
   useState,
   useCallback,
 } from 'react';
-import { X, AlertCircle, RefreshCw, Send, MessageSquare } from 'lucide-react';
+import { X, AlertCircle, RefreshCw, Send, MessageSquare, SquareCheckBig } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -46,6 +47,9 @@ interface ThreadPanelProps {
   task?: Task;
   /** Callback after the thread has been marked as read (P25-08-F) */
   onMarkRead?: () => void;
+  onViewInChannel?: () => void;
+  onViewTask?: () => void;
+  showViewTask?: boolean;
 }
 
 // ---- Parent message display ----
@@ -452,7 +456,7 @@ function ThreadReplyInput({
             disabled={!canSend}
             aria-label={t('sendReply')}
             className={cn(
-              'btn-brutal btn-brutal-primary absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center p-0',
+              'btn-brutal btn-brutal-success absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center p-0',
               !canSend && 'opacity-40 pointer-events-none',
             )}
           >
@@ -594,7 +598,11 @@ export function ThreadPanel({
   replyCount: initialReplyCount = 0,
   task,
   onMarkRead,
+  onViewInChannel,
+  onViewTask,
+  showViewTask,
 }: ThreadPanelProps) {
+  const router = useRouter();
   const {
     messages,
     isLoading,
@@ -692,6 +700,24 @@ export function ThreadPanel({
     };
   }, [targetMessageId, isLoading, messages.length]);
 
+  const handleViewInChannel = useCallback(() => {
+    if (onViewInChannel) {
+      onViewInChannel();
+      return;
+    }
+    router.push(`/dashboard?channel=${parentMessage.channel_id}&message=${parentMessage.id}`);
+  }, [onViewInChannel, parentMessage.channel_id, parentMessage.id, router]);
+
+  const taskNumber = task?.task_number ?? parentMessage.task_number;
+  const handleViewTask = useCallback(() => {
+    if (onViewTask) {
+      onViewTask();
+      return;
+    }
+    if (taskNumber == null) return;
+    router.push(`/dashboard?channel=${parentMessage.channel_id}&tab=tasks&task=${taskNumber}&thread=${parentMessage.id}`);
+  }, [onViewTask, parentMessage.channel_id, parentMessage.id, router, taskNumber]);
+
   return (
     <div
       className={cn(
@@ -708,14 +734,36 @@ export function ThreadPanel({
             </span>
           )}
         </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="btn-brutal btn-brutal-sm flex h-8 w-8 items-center justify-center p-0"
-          aria-label={t('closeThreadPanel')}
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {(taskNumber != null || showViewTask) && (
+            <button
+              type="button"
+              onClick={handleViewTask}
+              className="btn-brutal btn-brutal-sm flex h-8 w-8 items-center justify-center p-0"
+              aria-label="View task"
+              title="View task"
+            >
+              <SquareCheckBig className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleViewInChannel}
+            className="btn-brutal btn-brutal-sm flex h-8 w-8 items-center justify-center p-0"
+            aria-label="View in channel"
+            title="View in channel"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-brutal btn-brutal-sm flex h-8 w-8 items-center justify-center p-0"
+            aria-label={t('closeThreadPanel')}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Content area */}

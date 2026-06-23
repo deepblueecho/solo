@@ -15,6 +15,7 @@ import { Plus, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { selectableRowClass } from '@/components/ui/selectable-row';
+import { iconActionClass } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { t } from '@/lib/i18n';
 import type { DMChannel } from '@/lib/types';
@@ -172,10 +173,10 @@ function DMItem({
           e.stopPropagation();
           onClose();
         }}
-        className="hidden group-hover:flex items-center justify-center rounded-none p-1 hover:bg-brutal-primary-light transition-colors flex-shrink-0"
+        className={iconActionClass('invisible h-5 w-5 p-0 shadow-brutal-sm hover:bg-brutal-danger group-hover:visible')}
         aria-label={t('closeDM')}
       >
-        <X className="h-4 w-4" />
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   );
