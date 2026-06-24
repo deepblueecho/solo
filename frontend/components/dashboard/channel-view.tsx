@@ -882,8 +882,6 @@ export function ChannelView({
               onMarkRead={handleThreadMarkRead}
               onViewInChannel={handleViewThreadInChannel}
               onViewTask={handleViewThreadTask}
-              onGenerateArtifact={threadTask && !threadTask.parent_task_id ? () => handleGenerateArtifact(threadTask) : undefined}
-              isArtifactGenerating={!!threadTask && isGeneratingTask(threadTask.id)}
               onAgentClick={openAgentDetail}
             />
           </Suspense>

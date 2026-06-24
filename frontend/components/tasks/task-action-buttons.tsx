@@ -42,9 +42,10 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
 
   if (task.status === 'in_review') {
     return (
-      <div className="mt-2 space-y-2">
+      <>
+        <CloseHoverButton disabled={disabled} onClick={() => run('close')} />
         {isCreator && (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <ActionButton disabled={disabled} onClick={() => run('accept')} tone="success">
               <Check className="h-3 w-3" />
               Accept
@@ -56,7 +57,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
           </div>
         )}
         {rejecting && (
-          <div className="space-y-1">
+          <div className="mt-2 space-y-1">
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -74,11 +75,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
             </ActionButton>
           </div>
         )}
-        <ActionButton disabled={disabled} onClick={() => run('close')} tone="muted">
-          <XCircle className="h-3 w-3" />
-          Close
-        </ActionButton>
-      </div>
+      </>
     );
   }
 
@@ -94,13 +91,23 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
     );
   }
 
+  return <CloseHoverButton disabled={disabled} onClick={() => run('close')} />;
+}
+
+function CloseHoverButton({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
   return (
-    <div className="mt-2">
-      <ActionButton disabled={disabled} onClick={() => run('close')} tone="muted">
-        <XCircle className="h-3 w-3" />
-        Close
-      </ActionButton>
-    </div>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-label="Close task"
+      className="absolute right-2 top-2 z-20 inline-flex h-7 w-7 items-center justify-center border-2 border-black bg-white text-black opacity-0 shadow-brutal-sm transition-all duration-100 hover:bg-brutal-danger hover:text-white focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brutal-danger focus-visible:ring-offset-2 group-hover:opacity-100 disabled:cursor-not-allowed disabled:grayscale disabled:opacity-50"
+    >
+      <XCircle className="h-4 w-4" />
+    </button>
   );
 }
 

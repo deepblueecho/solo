@@ -18,7 +18,7 @@ import {
   useState,
   useCallback,
 } from 'react';
-import { X, AlertCircle, RefreshCw, Send, MessageSquare, SquareCheckBig, FileText } from 'lucide-react';
+import { X, AlertCircle, RefreshCw, Send, MessageSquare, SquareCheckBig } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -34,7 +34,6 @@ import { useWebSocket } from '@/lib/ws-context';
 import { MentionDropdown, type DropdownAnchor } from './mention-dropdown';
 import { t } from '@/lib/i18n';
 import type { AgentDetailTarget, Message, ChannelMember, Task, TaskStatus } from '@/lib/types';
-import { getTaskArtifactAction, taskArtifactActionLabel } from '@/lib/utils/task-artifact';
 
 interface ThreadPanelProps {
   parentMessage: Message;
@@ -51,8 +50,6 @@ interface ThreadPanelProps {
   onViewInChannel?: () => void;
   onViewTask?: () => void;
   showViewTask?: boolean;
-  onGenerateArtifact?: () => void;
-  isArtifactGenerating?: boolean;
   onAgentClick?: (agent: AgentDetailTarget) => void;
 }
 
@@ -641,8 +638,6 @@ export function ThreadPanel({
   onViewInChannel,
   onViewTask,
   showViewTask,
-  onGenerateArtifact,
-  isArtifactGenerating,
   onAgentClick,
 }: ThreadPanelProps) {
   const router = useRouter();
@@ -752,7 +747,6 @@ export function ThreadPanel({
   }, [onViewInChannel, parentMessage.channel_id, parentMessage.id, router]);
 
   const taskNumber = task?.task_number ?? parentMessage.task_number;
-  const artifactAction = getTaskArtifactAction(task, isArtifactGenerating);
   const handleViewTask = useCallback(() => {
     if (onViewTask) {
       onViewTask();
@@ -779,22 +773,6 @@ export function ThreadPanel({
           )}
         </h3>
         <div className="flex items-center gap-2">
-          {onGenerateArtifact && artifactAction !== 'hidden' && (
-            <button
-              type="button"
-              disabled={artifactAction === 'pending'}
-              onClick={onGenerateArtifact}
-              className={cn(
-                'inline-flex items-center gap-1 border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm hover:bg-brutal-info disabled:pointer-events-none disabled:opacity-80',
-                artifactAction === 'generate' && 'bg-brutal-success text-black',
-                artifactAction === 'pending' && 'bg-brutal-muted text-black',
-                artifactAction === 'read' && 'bg-brutal-primary text-black',
-              )}
-            >
-              <FileText className="h-3 w-3" />
-              {taskArtifactActionLabel(artifactAction)}
-            </button>
-          )}
           {(taskNumber != null || showViewTask) && (
             <button
               type="button"

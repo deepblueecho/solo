@@ -711,8 +711,6 @@ export function DMView({
               replyCount={threadMessage.reply_count ?? 0}
               onViewInChannel={handleViewThreadInDM}
               onViewTask={handleViewThreadTask}
-              onGenerateArtifact={threadTask && !threadTask.parent_task_id ? () => handleGenerateArtifact(threadTask) : undefined}
-              isArtifactGenerating={!!threadTask && isGeneratingTask(threadTask.id)}
               onAgentClick={openAgentDetail}
             />
           </Suspense>

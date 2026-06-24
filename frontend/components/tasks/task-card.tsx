@@ -18,12 +18,12 @@ import { getTaskArtifactAction, taskArtifactActionLabel } from '@/lib/utils/task
 // Static card keeps the neutral 12px black shadow; hover swaps to a tinted
 // 12px shadow in the status color so the list reads like a temperature gauge.
 
-const STATUS_CONFIG: Record<TaskStatus, { label: string; bgClass: string; shadowClass: string }> = {
-  todo: { label: 'TODO', bgClass: 'bg-brutal-warning text-black', shadowClass: 'hover:shadow-brutal-warning' },
-  in_progress: { label: 'IN PROGRESS', bgClass: 'bg-brutal-info text-black', shadowClass: 'hover:shadow-brutal-info' },
-  in_review: { label: 'IN REVIEW', bgClass: 'bg-brutal-violet text-black', shadowClass: 'hover:shadow-brutal-violet' },
-  done: { label: 'DONE', bgClass: 'bg-brutal-success text-black', shadowClass: 'hover:shadow-brutal-success' },
-  closed: { label: 'CLOSED', bgClass: 'bg-brutal-muted text-black', shadowClass: 'hover:shadow-brutal-accent' },
+const STATUS_CONFIG: Record<TaskStatus, { shadowClass: string }> = {
+  todo: { shadowClass: 'hover:shadow-brutal-warning' },
+  in_progress: { shadowClass: 'hover:shadow-brutal-info' },
+  in_review: { shadowClass: 'hover:shadow-brutal-violet' },
+  done: { shadowClass: 'hover:shadow-brutal-success' },
+  closed: { shadowClass: 'hover:shadow-brutal-accent' },
 };
 
 const PRIORITY_CONFIG: Record<TaskPriority, { label: string; bgClass: string }> = {
@@ -93,11 +93,8 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
       )}
     >
       <div className="p-4">
-        {/* Top row: status + priority badges */}
+        {/* Top row: priority badge */}
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span className={cn('badge-brutal', statusConf.bgClass)}>
-            {statusConf.label}
-          </span>
           <span className={cn('badge-brutal', priorityConf.bgClass)}>
             {priorityConf.label}
           </span>
@@ -177,7 +174,7 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
                 e.stopPropagation();
               }}
               className={cn(
-                'inline-flex items-center gap-1 border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm hover:bg-brutal-info hover:text-black disabled:pointer-events-none disabled:opacity-80',
+                'inline-flex items-center gap-1 border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm disabled:pointer-events-none disabled:opacity-80',
                 artifactAction === 'generate' && 'bg-brutal-success text-black',
                 artifactAction === 'pending' && 'bg-brutal-muted text-black',
                 artifactAction === 'read' && 'bg-brutal-primary text-black',
