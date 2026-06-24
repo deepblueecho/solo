@@ -84,7 +84,7 @@ export function useTaskArtifact() {
   }, []);
 
   const listArtifacts = useCallback((taskId: string): Promise<TaskArtifact[]> => {
-    return apiClient.get<TaskArtifact[]>(`/api/v1/tasks/${taskId}/artifacts`);
+    return apiClient.get<TaskArtifact[] | null>(`/api/v1/tasks/${taskId}/artifacts`).then((artifacts) => artifacts ?? []);
   }, []);
 
   return { generateArtifact, finalizeArtifact, fetchArtifactHTML, listArtifacts, isGenerating };

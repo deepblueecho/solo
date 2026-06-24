@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +46,37 @@ func TestArtifactFilenameForMode(t *testing.T) {
 	}
 	if got := artifactFilename("final"); got != "final.html" {
 		t.Fatalf("final filename = %q", got)
+	}
+}
+
+func TestArtifactServiceList_EmptyReturnsJSONArray(t *testing.T) {
+	pool := taskSubmitTestPool(t)
+	ctx := context.Background()
+	creatorID := taskSubmitUser(t, pool)
+	channelID := taskSubmitChannel(t, pool, creatorID)
+	taskSubmitMember(t, pool, channelID, "user", creatorID)
+	taskID := taskSubmitTask(t, pool, channelID, creatorID, "", TaskStatusInReview, nil)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM artifacts WHERE task_id = $1`, taskID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tasks WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channel_members WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channels WHERE id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, creatorID)
+	})
+
+	artifacts, err := NewArtifactService(pool, "").List(ctx, taskID, creatorID)
+	if err != nil {
+		t.Fatalf("List error = %v", err)
+	}
+	if artifacts == nil {
+		t.Fatal("expected empty artifact list to be a JSON array, got nil slice")
+	}
+	body, err := json.Marshal(artifacts)
+	if err != nil {
+		t.Fatalf("marshal artifacts: %v", err)
+	}
+	if string(body) != "[]" {
+		t.Fatalf("empty artifact list JSON = %s, want []", body)
 	}
 }
 

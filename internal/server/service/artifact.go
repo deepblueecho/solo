@@ -125,7 +125,7 @@ func (s *ArtifactService) List(ctx context.Context, taskID, userID string) ([]Ar
 	}
 	defer rows.Close()
 
-	var artifacts []Artifact
+	artifacts := make([]Artifact, 0)
 	for rows.Next() {
 		var a Artifact
 		if err := rows.Scan(&a.ID, &a.TaskID, &a.ChannelID, &a.Kind, &a.Title, &a.HTMLPath, &a.Summary, &a.SourceSnapshot, &a.CreatedBy, &a.CreatedAt, &a.UpdatedAt); err != nil {
