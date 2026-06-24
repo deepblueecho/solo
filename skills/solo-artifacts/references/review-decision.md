@@ -36,7 +36,7 @@ Review action buttons, when the artifact is embedded inside Solo:
 ```html
 <div class="review-actions">
   <button class="btn success" data-solo-action="accept" data-task-id="TASK_ID">Accept</button>
-  <textarea id="rejectReason" data-persist data-solo-comment placeholder="Optional rejection note"></textarea>
+  <textarea id="rejectReason" data-persist data-solo-comment placeholder="Rejection reason (required)"></textarea>
   <button class="btn warning" data-solo-action="reject" data-task-id="TASK_ID" data-reason="#rejectReason">Reject & submit comment</button>
 </div>
 ```

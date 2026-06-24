@@ -165,8 +165,8 @@ td.best { font-weight: 700; color: var(--green); }
 .commentbox { border: 2px dashed var(--text); border-radius: var(--radius); padding: .6rem .8rem; min-height: 2.4rem; font-family: var(--mono); font-size: .85rem; color: var(--text); background: color-mix(in srgb, var(--bg-accent) 50%, transparent); }
 .commentbox:empty::before { content: "Comment\2026"; color: var(--text-muted); }
 .commentbox:focus { outline: 2px solid var(--accent); }
-.review-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-start; margin: 1rem 0; }
-.review-actions textarea { min-height: 4.5rem; flex: 1 1 260px; border: 3px solid var(--ink); border-radius: var(--radius); padding: .55rem .7rem; font-family: var(--mono); font-size: .85rem; background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); }
+.review-actions { display: grid; grid-template-columns: 1fr auto; gap: .75rem; align-items: center; margin: 1.25rem 0; padding: 1rem; border: 3px solid var(--card-border); background: var(--card); box-shadow: var(--shadow-sm); }
+.review-actions textarea { grid-column: 1 / -1; width: 100%; min-height: 5rem; resize: vertical; border: 3px solid var(--ink); border-radius: var(--radius); padding: .65rem .75rem; font-family: var(--mono); font-size: .9rem; background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); }
 
 /* ---- timeline ------------------------------------------------------------ */
 .timeline { position: relative; padding-left: 2rem; }
@@ -200,8 +200,9 @@ pre code { background: none; padding: 0; color: var(--text); box-shadow: none; o
 
 /* ---- toolbar (print) + copy buttons ------------------------------------- */
 .toolbar { position: fixed; top: .75rem; right: .75rem; display: flex; gap: .4rem; z-index: 50; }
-.btn { padding: .35rem .7rem; border-radius: var(--radius); border: 2px solid var(--card-border); background: var(--accent); color: var(--text); font-size: .8rem; font-weight: 900; cursor: pointer; box-shadow: var(--shadow-sm); }
-.btn:hover { border-color: var(--accent); }
+.btn { padding: .45rem .8rem; border-radius: var(--radius); border: 2px solid var(--card-border); background: var(--accent); color: var(--text); font-size: .8rem; font-weight: 900; cursor: pointer; box-shadow: var(--shadow-sm); transition: transform .1s, box-shadow .1s; }
+.btn:hover { border-color: var(--card-border); transform: translate(-1px, -1px); box-shadow: var(--shadow-brutal); }
+.btn:active { transform: translate(1px, 1px); box-shadow: none; }
 .btn.success { background: var(--solo-success); }
 .btn.warning { background: var(--solo-warning); }
 .copy-btn { padding: .15rem .5rem; font-size: .72rem; border-radius: var(--radius); border: 2px solid var(--card-border); background: var(--card); color: var(--text); cursor: pointer; box-shadow: var(--shadow-sm); }

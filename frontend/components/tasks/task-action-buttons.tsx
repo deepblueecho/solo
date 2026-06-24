@@ -6,6 +6,15 @@ import { useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/components/ui/toast';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogCloseButton,
+} from '@/components/ui/dialog';
 import type { Task } from '@/lib/types';
 
 type TaskAction = 'accept' | 'reject' | 'close' | 'reopen';
@@ -21,6 +30,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
   const [busy, setBusy] = useState<TaskAction | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   const isCreator = !!user?.id && task.creator_id === user.id;
   const disabled = busy !== null;
@@ -31,6 +41,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
       const updated = await apiClient.post<Task>(`/api/v1/tasks/${task.id}/${action}`, body);
       showToast(`Task ${action} succeeded`, 'success');
       onActionComplete?.(updated);
+      if (action === 'close') setConfirmingClose(false);
       setRejecting(false);
       setReason('');
     } catch {
@@ -43,7 +54,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
   if (task.status === 'in_review') {
     return (
       <>
-        <CloseHoverButton disabled={disabled} onClick={() => run('close')} />
+        <CloseHoverButton disabled={disabled} onClick={() => setConfirmingClose(true)} />
         {isCreator && (
           <div className="mt-2 flex flex-wrap gap-2">
             <ActionButton disabled={disabled} onClick={() => run('accept')} tone="success">
@@ -75,6 +86,13 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
             </ActionButton>
           </div>
         )}
+        <CloseTaskDialog
+          open={confirmingClose}
+          disabled={disabled}
+          taskTitle={task.title}
+          onOpenChange={setConfirmingClose}
+          onConfirm={() => run('close')}
+        />
       </>
     );
   }
@@ -91,7 +109,54 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
     );
   }
 
-  return <CloseHoverButton disabled={disabled} onClick={() => run('close')} />;
+  return (
+    <>
+      <CloseHoverButton disabled={disabled} onClick={() => setConfirmingClose(true)} />
+      <CloseTaskDialog
+        open={confirmingClose}
+        disabled={disabled}
+        taskTitle={task.title}
+        onOpenChange={setConfirmingClose}
+        onConfirm={() => run('close')}
+      />
+    </>
+  );
+}
+
+function CloseTaskDialog({
+  open,
+  disabled,
+  taskTitle,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  disabled?: boolean;
+  taskTitle: string;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogHeader>
+          <DialogTitle>Close Task</DialogTitle>
+          <DialogCloseButton onClick={() => onOpenChange(false)} />
+        </DialogHeader>
+        <DialogDescription>
+          Are you sure you want to close <strong>{taskTitle}</strong>? This will move it out of active work.
+        </DialogDescription>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={disabled}>
+            Cancel
+          </Button>
+          <Button type="button" variant="danger" onClick={onConfirm} disabled={disabled}>
+            {disabled ? 'Closing...' : 'Close Task'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    </div>
+  );
 }
 
 function CloseHoverButton({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
