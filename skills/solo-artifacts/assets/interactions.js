@@ -155,6 +155,38 @@ function initPersist() {
   });
 }
 
+/* SOLO REVIEW ACTIONS -------------------------------------------------------
+   Needs:
+   <button data-solo-action="accept" data-task-id="...">Accept</button>
+   <button data-solo-action="reject" data-task-id="..." data-reason="#rejectReason">Reject</button>
+   Optional comment inputs: [data-solo-comment] */
+function initSoloReviewActions() {
+  document.querySelectorAll("[data-solo-action]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.dataset.soloAction;
+      if (action !== "accept" && action !== "reject") return;
+      const reasonSource = btn.dataset.reason ? document.querySelector(btn.dataset.reason) : null;
+      const comments = [...document.querySelectorAll("[data-solo-comment]")]
+        .filter(el => el !== reasonSource)
+        .map(el => {
+          if (el.type === "checkbox") return el.checked ? (el.closest("label")?.innerText || el.dataset.comment || "").trim() : "";
+          return (el.value ?? el.innerText ?? "").trim();
+        })
+        .filter(Boolean);
+      const reason = [
+        reasonSource ? (reasonSource.value ?? reasonSource.innerText ?? "").trim() : "",
+        ...comments,
+      ].filter(Boolean).join("\n\n");
+      window.parent.postMessage({
+        type: "artifact.reviewAction",
+        action,
+        taskId: btn.dataset.taskId || document.body.dataset.taskId || "",
+        reason,
+      }, "*");
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  initPrint(); initTabs(); initTables(); initLightbox(); initCopy(); initScrollspy(); initPersist();
+  initPrint(); initTabs(); initTables(); initLightbox(); initCopy(); initScrollspy(); initPersist(); initSoloReviewActions();
 });

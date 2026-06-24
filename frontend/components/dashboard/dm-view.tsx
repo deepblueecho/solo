@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { useStreamingMessages } from '@/lib/hooks/use-streaming-messages';
 import { TaskArtifactStillPendingError, useTaskArtifact } from '@/lib/hooks/use-task-artifact';
 import { getTaskArtifactAction } from '@/lib/utils/task-artifact';
+import { apiClient } from '@/lib/api-client';
 import { MessageList } from './message-list';
 import { MessageInput } from './message-input';
 import { TaskBoard } from '@/components/tasks/task-board';
@@ -114,6 +115,7 @@ export function DMView({
   const [threadTask, setThreadTask] = useState<Task | null>(null);
   const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
   const [artifactHistory, setArtifactHistory] = useState<TaskArtifact[]>([]);
+  const [artifactReviewBusy, setArtifactReviewBusy] = useState(false);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
   const [scrollMsgKey, setScrollMsgKey] = useState(0);
@@ -333,6 +335,41 @@ export function DMView({
     setThreadTask((prev) => (prev?.id === updated.id ? updated : prev));
     refetchTasks?.();
   }, [refetchTasks]);
+
+  useEffect(() => {
+    if (!artifactPreview) return;
+
+    const handleArtifactMessage = async (event: MessageEvent) => {
+      if (event.source !== artifactFrameRef.current?.contentWindow) return;
+      const data = event.data;
+      if (!data || typeof data !== 'object' || data.type !== 'artifact.reviewAction') return;
+      if (data.taskId && data.taskId !== artifactPreview.task_id) return;
+      if (data.action !== 'accept' && data.action !== 'reject') return;
+      if (artifactReviewBusy) return;
+
+      const reason = typeof data.reason === 'string' ? data.reason.trim() : '';
+      if (data.action === 'reject' && reason === '') {
+        showToast('Reject comment is required.', 'error');
+        return;
+      }
+
+      setArtifactReviewBusy(true);
+      try {
+        const path = `/api/v1/tasks/${artifactPreview.task_id}/${data.action === 'accept' ? 'accept' : 'reject'}`;
+        const updated = await apiClient.post<Task>(path, data.action === 'reject' ? { reason } : undefined);
+        handleTaskActionComplete(updated);
+        closeArtifactPreview();
+        showToast(data.action === 'accept' ? 'Task accepted.' : 'Task rejected.', 'success');
+      } catch {
+        showToast(data.action === 'accept' ? 'Could not accept task.' : 'Could not reject task.', 'error');
+      } finally {
+        setArtifactReviewBusy(false);
+      }
+    };
+
+    window.addEventListener('message', handleArtifactMessage);
+    return () => window.removeEventListener('message', handleArtifactMessage);
+  }, [artifactPreview, artifactReviewBusy, closeArtifactPreview, handleTaskActionComplete, showToast]);
 
   const handleGenerateArtifact = useCallback(async (task: Task) => {
     const action = getTaskArtifactAction(task, isGeneratingTask(task.id));

@@ -9,6 +9,8 @@ const types = read('lib/types.ts');
 const apiClient = read('lib/api-client.ts');
 const hook = read('lib/hooks/use-task-artifact.ts');
 const artifactAction = read('lib/utils/task-artifact.ts');
+const artifactInteractions = read('../skills/solo-artifacts/assets/interactions.js');
+const reviewDecision = read('../skills/solo-artifacts/references/review-decision.md');
 const taskCard = read('components/tasks/task-card.tsx');
 const taskBoard = read('components/tasks/task-board.tsx');
 const taskColumn = read('components/tasks/task-column.tsx');
@@ -26,7 +28,10 @@ assert(hook.includes('TaskArtifactStillPendingError') && hook.includes('/api/v1/
 assert(hook.includes('fetchArtifactHTML') && hook.includes('apiClient.getText(artifact.url)'), 'useTaskArtifact should fetch artifact HTML with bearer auth');
 assert(hook.includes('inFlightByTaskRef') && hook.includes('inFlightByTaskRef.current.get(taskId)'), 'useTaskArtifact should track in-flight generation per task');
 assert(hook.includes('isGeneratingTask') && hook.includes('generatingTaskIds.has(taskId)'), 'useTaskArtifact should expose per-task generating state');
-assert(artifactAction.includes("task.status === 'in_review'") && artifactAction.includes("task.status === 'done' && status === 'available'"), 'Artifact action helper should generate only in review and read done history only when available');
+assert(artifactAction.includes("status === 'available'") && artifactAction.includes("return 'read'"), 'Artifact action helper should read existing artifact history from any parent task status');
+assert(artifactAction.includes("task.status === 'in_review'") && artifactAction.includes("return 'generate'"), 'Artifact action helper should generate only in review');
+assert(artifactInteractions.includes('data-solo-action') && artifactInteractions.includes('window.parent.postMessage'), 'Artifact interactions should post review actions to the Solo viewer');
+assert(reviewDecision.includes('data-solo-action="accept"') && reviewDecision.includes('data-solo-action="reject"'), 'Review decision reference should document accept/reject artifact actions');
 assert(taskCard.includes('onGenerateArtifact?: (task: Task) => void') && taskCard.includes('FileText'), 'TaskCard should expose an artifact action');
 assert(taskCard.includes('getTaskArtifactAction') && taskCard.includes('bg-brutal-success') && taskCard.includes('bg-brutal-primary'), 'TaskCard should distinguish generate/read/pending artifact actions');
 assert(taskCard.includes("artifactAction !== 'hidden'"), 'TaskCard should hide artifact action when unsupported');
@@ -44,6 +49,7 @@ assert(channelView.includes('showToast') && channelView.includes('catch'), 'Chan
 assert(channelView.includes('URL.createObjectURL') && channelView.includes('URL.revokeObjectURL') && channelView.includes('previewUrl'), 'Channel viewer should use revokable blob URLs for protected artifact HTML');
 assert(channelView.includes('handleRegenerateArtifact') && channelView.includes('Regenerate'), 'Channel viewer should expose artifact regeneration');
 assert(channelView.includes('getTaskArtifactAction') && channelView.includes("action === 'read'"), 'Channel view should generate or read artifacts based on task artifact state');
+assert(channelView.includes('artifact.reviewAction') && channelView.includes('apiClient.post<Task>') && channelView.includes("'accept' : 'reject'"), 'Channel viewer should bridge artifact review actions to task lifecycle APIs');
 assert(channelView.includes('threadTask && !threadTask.parent_task_id'), 'Channel thread panel should hide artifact action on child tasks');
 assert(channelView.includes('role="dialog"') && channelView.includes('aria-modal="true"') && channelView.includes("event.key === 'Escape'"), 'Channel artifact viewer should use dialog semantics and Escape close');
 assert(channelView.includes('artifactCloseButtonRef') && channelView.includes('artifactReturnFocusRef'), 'Channel artifact viewer should handle focus on open and close');
@@ -56,6 +62,7 @@ assert(dmView.includes('showToast') && dmView.includes('catch'), 'DM view should
 assert(dmView.includes('URL.createObjectURL') && dmView.includes('URL.revokeObjectURL') && dmView.includes('previewUrl'), 'DM viewer should use revokable blob URLs for protected artifact HTML');
 assert(dmView.includes('handleRegenerateArtifact') && dmView.includes('Regenerate'), 'DM viewer should expose artifact regeneration');
 assert(dmView.includes('getTaskArtifactAction') && dmView.includes("action === 'read'"), 'DM view should generate or read artifacts based on task artifact state');
+assert(dmView.includes('artifact.reviewAction') && dmView.includes('apiClient.post<Task>') && dmView.includes("'accept' : 'reject'"), 'DM viewer should bridge artifact review actions to task lifecycle APIs');
 assert(dmView.includes('threadTask && !threadTask.parent_task_id'), 'DM thread panel should hide artifact action on child tasks');
 assert(dmView.includes('role="dialog"') && dmView.includes('aria-modal="true"') && dmView.includes("event.key === 'Escape'"), 'DM artifact viewer should use dialog semantics and Escape close');
 assert(dmView.includes('artifactCloseButtonRef') && dmView.includes('artifactReturnFocusRef'), 'DM artifact viewer should handle focus on open and close');

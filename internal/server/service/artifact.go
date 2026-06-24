@@ -493,6 +493,7 @@ func renderArtifactAgentPrompt(data artifactRenderData, mode string) string {
 	b.WriteString("- Use `comparison` when the task/thread compares options, approaches, models, benchmarks, A/B variants, or vendors.\n")
 	b.WriteString("- Use `progress-report` when the task is still in progress, blocked, long-running, multi-subtask, or mainly needs status/timeline/next commands.\n")
 	b.WriteString("- Otherwise use `review-decision`, especially for in-review acceptance/rejection decisions.\n\n")
+	b.WriteString("For `review-decision`, include the `data-solo-action=\"accept\"` and `data-solo-action=\"reject\"` buttons documented in `references/review-decision.md` so Solo can submit the decision from the artifact viewer.\n\n")
 	b.WriteString("Write one self-contained HTML file. Then publish it with:\n")
 	b.WriteString("solo artifact publish --task ")
 	b.WriteString(data.Task.ID)
