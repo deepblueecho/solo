@@ -47,6 +47,26 @@ func TestArtifactFilenameForMode(t *testing.T) {
 	}
 }
 
+func TestArtifactRenderDataFromTask_AllowsTaskWithoutSourceMessage(t *testing.T) {
+	task := &Task{
+		ID:          "task-1",
+		ChannelID:   "channel-1",
+		Title:       "Direct task",
+		Description: "Created from the task board, not a message.",
+		Status:      TaskStatusTodo,
+		Priority:    "normal",
+		TaskNumber:  9,
+	}
+
+	data := artifactRenderDataFromTask(task)
+	if data.Task.ID != "task-1" || data.Task.Title != "Direct task" {
+		t.Fatalf("expected task metadata in render data, got %#v", data.Task)
+	}
+	if data.RootMessage.Content != "Created from the task board, not a message." {
+		t.Fatalf("expected task description as fallback root content, got %q", data.RootMessage.Content)
+	}
+}
+
 func TestRenderArtifactAgentPrompt_InstructsPublishWithContext(t *testing.T) {
 	data := artifactRenderData{
 		Task: ArtifactTask{

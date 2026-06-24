@@ -5,7 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import type { TaskArtifact } from '@/lib/types';
 
 const ARTIFACT_POLL_INTERVAL_MS = 1500;
-const ARTIFACT_POLL_ATTEMPTS = 40;
+const ARTIFACT_POLL_ATTEMPTS = 200;
 
 export class TaskArtifactGenerationInProgressError extends Error {
   constructor() {
@@ -78,7 +78,8 @@ export function useTaskArtifact() {
   );
 
   const fetchArtifactHTML = useCallback((artifact: TaskArtifact): Promise<string> => {
-    return apiClient.getText(artifact.url);
+    const separator = artifact.url.includes('?') ? '&' : '?';
+    return apiClient.getText(`${artifact.url}${separator}v=${encodeURIComponent(artifact.updated_at)}`);
   }, []);
 
   const listArtifacts = useCallback((taskId: string): Promise<TaskArtifact[]> => {

@@ -232,7 +232,7 @@ func (s *ArtifactService) currentArtifactSnapshot(ctx context.Context, task *Tas
 
 func (s *ArtifactService) loadRenderData(ctx context.Context, task *Task) (artifactRenderData, error) {
 	if task.MessageID == "" {
-		return artifactRenderData{}, errors.New("task has no source message")
+		return artifactRenderDataFromTask(task), nil
 	}
 
 	rootMessage, err := s.loadArtifactMessage(ctx, task.MessageID)
@@ -247,6 +247,17 @@ func (s *ArtifactService) loadRenderData(ctx context.Context, task *Task) (artif
 		return artifactRenderData{}, err
 	}
 
+	data := artifactRenderDataFromTask(task)
+	data.RootMessage = rootMessage
+	data.Thread = thread
+	return data, nil
+}
+
+func artifactRenderDataFromTask(task *Task) artifactRenderData {
+	rootContent := task.Description
+	if rootContent == "" {
+		rootContent = task.Title
+	}
 	return artifactRenderData{
 		Task: ArtifactTask{
 			ID:          task.ID,
@@ -261,9 +272,13 @@ func (s *ArtifactService) loadRenderData(ctx context.Context, task *Task) (artif
 			CreatedAt:   task.CreatedAt,
 			UpdatedAt:   task.UpdatedAt,
 		},
-		RootMessage: rootMessage,
-		Thread:      thread,
-	}, nil
+		RootMessage: ArtifactMessage{
+			ID:         task.MessageID,
+			SenderName: task.CreatorName,
+			Content:    rootContent,
+			CreatedAt:  task.CreatedAt,
+		},
+	}
 }
 
 func (s *ArtifactService) artifactPath(taskID, mode string) string {
