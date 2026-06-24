@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { Clock, ChevronRight, ChevronDown, FileText } from 'lucide-react';
 import type { Task, TaskStatus } from '@/lib/types';
 import { t } from '@/lib/i18n';
+import { getTaskArtifactAction, taskArtifactActionLabel } from '@/lib/utils/task-artifact';
 import { TaskActionButtons } from './task-action-buttons';
 
 // ---- Status display config ----
@@ -130,6 +131,7 @@ function TaskCard({
   const claimerDeletedSuffix = task.claimer_deleted ? ' (Deleted)' : '';
 
   const lastActivity = task.updated_at || task.created_at;
+  const artifactAction = getTaskArtifactAction(task, isArtifactGenerating);
 
   return (
     <div
@@ -323,23 +325,25 @@ function TaskCard({
 
         {/* Footer: last activity */}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          {onGenerateArtifact && !isChild && (
+          {onGenerateArtifact && artifactAction !== 'hidden' && (
             <button
               type="button"
-              disabled={isArtifactGenerating}
+              disabled={artifactAction === 'pending'}
               onClick={(e) => {
                 e.stopPropagation();
-                if (isArtifactGenerating) return;
+                if (artifactAction === 'pending') return;
                 onGenerateArtifact(task);
               }}
               className={cn(
                 'inline-flex items-center gap-1 border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm hover:bg-brutal-info hover:text-black disabled:pointer-events-none disabled:opacity-80',
-                isArtifactGenerating ? 'bg-brutal-primary text-black' : 'bg-white',
+                artifactAction === 'generate' && 'bg-brutal-success text-black',
+                artifactAction === 'pending' && 'bg-brutal-muted text-black',
+                artifactAction === 'read' && 'bg-brutal-primary text-black',
               )}
               aria-label={`Generate artifact for ${task.title}`}
             >
               <FileText className="h-3 w-3" />
-              {isArtifactGenerating ? 'Generating' : 'Artifact'}
+              {taskArtifactActionLabel(artifactAction)}
             </button>
           )}
           <span className="flex items-center">

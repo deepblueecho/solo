@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -65,6 +66,16 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 	if agentSvc != nil {
 		artifactSvc.SetAgentArtifactRequester(agentSvc.TriggerAgentForArtifact)
 	}
+	taskSvc.SetArtifactGenerator(func(ctx context.Context, taskID, userID string) (string, error) {
+		artifact, err := artifactSvc.GenerateLatest(ctx, taskID, userID)
+		if err != nil {
+			return "", err
+		}
+		if artifact.Summary == "pending" {
+			return "pending", nil
+		}
+		return "available", nil
+	})
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(pool, agentSvc)

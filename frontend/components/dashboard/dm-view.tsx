@@ -16,6 +16,7 @@ import { AlertCircle, RefreshCw, MessageSquare, Circle, SquareCheckBig } from 'l
 import { cn } from '@/lib/utils';
 import { useStreamingMessages } from '@/lib/hooks/use-streaming-messages';
 import { TaskArtifactStillPendingError, useTaskArtifact } from '@/lib/hooks/use-task-artifact';
+import { getTaskArtifactAction } from '@/lib/utils/task-artifact';
 import { MessageList } from './message-list';
 import { MessageInput } from './message-input';
 import { TaskBoard } from '@/components/tasks/task-board';
@@ -334,12 +335,17 @@ export function DMView({
   }, [refetchTasks]);
 
   const handleGenerateArtifact = useCallback(async (task: Task) => {
-    if (isGeneratingTask(task.id) || task.artifact_pending) return;
+    const action = getTaskArtifactAction(task, isGeneratingTask(task.id));
+    if (action === 'hidden' || action === 'pending') return;
     artifactReturnFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
 
     try {
+      if (action === 'read') {
+        await showExistingArtifact(task.id);
+        return;
+      }
       if (await showExistingArtifact(task.id)) return;
       const artifact = await generateArtifact(task.id);
       await refreshArtifactHistory(task.id);
@@ -620,7 +626,7 @@ export function DMView({
                 onRefetch={refetchTasks ?? (() => {})}
                 onActionComplete={handleTaskActionComplete}
                 onGenerateArtifact={handleGenerateArtifact}
-                isArtifactGenerating={(task) => isGeneratingTask(task.id) || !!task.artifact_pending}
+                isArtifactGenerating={(task) => isGeneratingTask(task.id)}
               />
             </div>
           </div>
@@ -669,7 +675,7 @@ export function DMView({
               onViewInChannel={handleViewThreadInDM}
               onViewTask={handleViewThreadTask}
               onGenerateArtifact={threadTask && !threadTask.parent_task_id ? () => handleGenerateArtifact(threadTask) : undefined}
-              isArtifactGenerating={!!threadTask && (isGeneratingTask(threadTask.id) || !!threadTask.artifact_pending)}
+              isArtifactGenerating={!!threadTask && isGeneratingTask(threadTask.id)}
               onAgentClick={openAgentDetail}
             />
           </Suspense>

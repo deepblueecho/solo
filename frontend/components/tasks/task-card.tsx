@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { Calendar, User, ChevronRight, FileText } from 'lucide-react';
 import type { Task, TaskStatus, TaskPriority } from '@/lib/types';
 import { t } from '@/lib/i18n';
+import { getTaskArtifactAction, taskArtifactActionLabel } from '@/lib/utils/task-artifact';
 
 // ---- Status display config ----
 // v3.3: shadowClass powers hover color-coded shadow (status as visual info).
@@ -67,6 +68,7 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
   const priorityConf = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.normal;
   const hasSubtasks = (task.subtask_count ?? 0) > 0;
   const isChild = !!task.parent_task_id;
+  const artifactAction = getTaskArtifactAction(task, isArtifactGenerating);
 
   return (
     <div
@@ -162,13 +164,13 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
 
         {/* Bottom row: assignee + channel + due date */}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {onGenerateArtifact && !isChild && (
+          {onGenerateArtifact && artifactAction !== 'hidden' && (
             <button
               type="button"
-              disabled={isArtifactGenerating}
+              disabled={artifactAction === 'pending'}
               onClick={(e) => {
                 e.stopPropagation();
-                if (isArtifactGenerating) return;
+                if (artifactAction === 'pending') return;
                 onGenerateArtifact(task);
               }}
               onKeyDown={(e) => {
@@ -176,12 +178,14 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
               }}
               className={cn(
                 'inline-flex items-center gap-1 border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm hover:bg-brutal-info hover:text-black disabled:pointer-events-none disabled:opacity-80',
-                isArtifactGenerating ? 'bg-brutal-primary text-black' : 'bg-white',
+                artifactAction === 'generate' && 'bg-brutal-success text-black',
+                artifactAction === 'pending' && 'bg-brutal-muted text-black',
+                artifactAction === 'read' && 'bg-brutal-primary text-black',
               )}
               aria-label={`Generate artifact for ${task.title}`}
             >
               <FileText className="h-3 w-3" />
-              {isArtifactGenerating ? 'Generating' : 'Artifact'}
+              {taskArtifactActionLabel(artifactAction)}
             </button>
           )}
 

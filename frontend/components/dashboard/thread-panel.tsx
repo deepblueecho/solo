@@ -34,6 +34,7 @@ import { useWebSocket } from '@/lib/ws-context';
 import { MentionDropdown, type DropdownAnchor } from './mention-dropdown';
 import { t } from '@/lib/i18n';
 import type { AgentDetailTarget, Message, ChannelMember, Task, TaskStatus } from '@/lib/types';
+import { getTaskArtifactAction, taskArtifactActionLabel } from '@/lib/utils/task-artifact';
 
 interface ThreadPanelProps {
   parentMessage: Message;
@@ -751,6 +752,7 @@ export function ThreadPanel({
   }, [onViewInChannel, parentMessage.channel_id, parentMessage.id, router]);
 
   const taskNumber = task?.task_number ?? parentMessage.task_number;
+  const artifactAction = getTaskArtifactAction(task, isArtifactGenerating);
   const handleViewTask = useCallback(() => {
     if (onViewTask) {
       onViewTask();
@@ -777,18 +779,20 @@ export function ThreadPanel({
           )}
         </h3>
         <div className="flex items-center gap-2">
-          {onGenerateArtifact && (
+          {onGenerateArtifact && artifactAction !== 'hidden' && (
             <button
               type="button"
-              disabled={isArtifactGenerating}
+              disabled={artifactAction === 'pending'}
               onClick={onGenerateArtifact}
               className={cn(
                 'inline-flex items-center gap-1 border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm hover:bg-brutal-info disabled:pointer-events-none disabled:opacity-80',
-                isArtifactGenerating ? 'bg-brutal-primary text-black' : 'bg-white',
+                artifactAction === 'generate' && 'bg-brutal-success text-black',
+                artifactAction === 'pending' && 'bg-brutal-muted text-black',
+                artifactAction === 'read' && 'bg-brutal-primary text-black',
               )}
             >
               <FileText className="h-3 w-3" />
-              {isArtifactGenerating ? 'Generating' : 'Artifact'}
+              {taskArtifactActionLabel(artifactAction)}
             </button>
           )}
           {(taskNumber != null || showViewTask) && (
