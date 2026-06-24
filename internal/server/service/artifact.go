@@ -49,8 +49,8 @@ type ArtifactMessage struct {
 }
 
 type ArtifactAttachment struct {
-	ID, Filename, MIMEType, URL string
-	Size                        int64
+	ID, Filename, MIMEType string
+	Size                   int64
 }
 
 type artifactRenderData struct {
@@ -283,7 +283,6 @@ func (s *ArtifactService) attachArtifactMetadata(ctx context.Context, messages [
 		if err := rows.Scan(&a.ID, &a.Filename, &a.MIMEType, &a.Size); err != nil {
 			return err
 		}
-		a.URL = "/api/v1/attachments/" + a.ID
 		byID[a.ID] = a
 	}
 	if err := rows.Err(); err != nil {
@@ -356,12 +355,13 @@ func writeArtifactMessage(b *strings.Builder, msg ArtifactMessage) {
 	if len(msg.Attachments) > 0 {
 		b.WriteString("<ul>")
 		for _, a := range msg.Attachments {
-			b.WriteString("<li><a href=\"")
-			b.WriteString(html.EscapeString(a.URL))
-			b.WriteString("\">")
+			b.WriteString("<li>")
 			b.WriteString(html.EscapeString(a.Filename))
-			b.WriteString("</a> ")
+			b.WriteString(" ")
 			b.WriteString(html.EscapeString(a.MIMEType))
+			b.WriteString(" ")
+			b.WriteString(html.EscapeString(strconv.FormatInt(a.Size, 10)))
+			b.WriteString(" bytes")
 			b.WriteString("</li>")
 		}
 		b.WriteString("</ul>")
@@ -376,7 +376,7 @@ func stringInt(n int) string {
 func attachmentPlaceholders(ids []string) []ArtifactAttachment {
 	attachments := make([]ArtifactAttachment, 0, len(ids))
 	for _, id := range ids {
-		attachments = append(attachments, ArtifactAttachment{ID: id, URL: "/api/v1/attachments/" + id})
+		attachments = append(attachments, ArtifactAttachment{ID: id})
 	}
 	return attachments
 }
