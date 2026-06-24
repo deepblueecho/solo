@@ -28,11 +28,13 @@ assert(hook.includes('inFlightPromiseRef') && hook.includes('return inFlightProm
 assert(hook.includes('inFlightTaskIdRef') && hook.includes('inFlightTaskIdRef.current !== taskId'), 'useTaskArtifact should only reuse in-flight generation for the same task');
 assert(hook.includes('TaskArtifactGenerationInProgressError'), 'useTaskArtifact should expose a known different-task concurrency error');
 assert(taskCard.includes('onGenerateArtifact?: (task: Task) => void') && taskCard.includes('FileText'), 'TaskCard should expose an artifact action');
+assert(taskCard.includes('onGenerateArtifact && !isChild'), 'TaskCard should hide artifact action on child tasks');
 assert(taskCard.includes('e.target !== e.currentTarget') && taskCard.includes('e.stopPropagation()'), 'TaskCard should not let nested artifact keydown trigger parent navigation');
 assert(taskBoard.includes('onGenerateArtifact?: (task: Task) => void'), 'TaskBoard should accept artifact action');
 assert(taskBoard.includes('isArtifactGenerating?: boolean'), 'TaskBoard should accept artifact pending state');
 assert(taskColumn.includes('onGenerateArtifact?: (task: Task) => void'), 'TaskColumn should pass artifact action');
 assert(taskColumn.includes('isArtifactGenerating?: boolean'), 'TaskColumn should pass artifact pending state');
+assert(taskColumn.includes('onGenerateArtifact && !isChild'), 'TaskColumn should hide artifact action on child tasks');
 assert(threadPanel.includes('onGenerateArtifact?: () => void') && threadPanel.includes('Artifact'), 'ThreadPanel should expose artifact access');
 assert(threadPanel.includes('isArtifactGenerating?: boolean'), 'ThreadPanel should accept artifact pending state');
 assert(channelView.includes('useTaskArtifact') && channelView.includes('handleGenerateArtifact') && channelView.includes('<iframe'), 'Channel view should wire artifact generation into an iframe viewer');
@@ -41,6 +43,7 @@ assert(channelView.includes('showToast') && channelView.includes('catch'), 'Chan
 assert(channelView.includes('URL.createObjectURL') && channelView.includes('URL.revokeObjectURL') && channelView.includes('previewUrl'), 'Channel viewer should use revokable blob URLs for protected artifact HTML');
 assert(channelView.includes('handleRegenerateArtifact') && channelView.includes('Regenerate'), 'Channel viewer should expose artifact regeneration');
 assert(channelView.includes('isGenerating') && channelView.includes('isArtifactGenerating={isGenerating}'), 'Channel view should disable artifact actions while generating');
+assert(channelView.includes('threadTask && !threadTask.parent_task_id'), 'Channel thread panel should hide artifact action on child tasks');
 assert(channelView.includes('role="dialog"') && channelView.includes('aria-modal="true"') && channelView.includes("event.key === 'Escape'"), 'Channel artifact viewer should use dialog semantics and Escape close');
 assert(channelView.includes('artifactCloseButtonRef') && channelView.includes('artifactReturnFocusRef'), 'Channel artifact viewer should handle focus on open and close');
 assert(channelView.includes("event.key === 'Tab'") && channelView.includes('artifactOpenLinkRef'), 'Channel artifact viewer should trap Tab focus across viewer controls');
@@ -52,6 +55,7 @@ assert(dmView.includes('showToast') && dmView.includes('catch'), 'DM view should
 assert(dmView.includes('URL.createObjectURL') && dmView.includes('URL.revokeObjectURL') && dmView.includes('previewUrl'), 'DM viewer should use revokable blob URLs for protected artifact HTML');
 assert(dmView.includes('handleRegenerateArtifact') && dmView.includes('Regenerate'), 'DM viewer should expose artifact regeneration');
 assert(dmView.includes('isGenerating') && dmView.includes('isArtifactGenerating={isGenerating}'), 'DM view should disable artifact actions while generating');
+assert(dmView.includes('threadTask && !threadTask.parent_task_id'), 'DM thread panel should hide artifact action on child tasks');
 assert(dmView.includes('role="dialog"') && dmView.includes('aria-modal="true"') && dmView.includes("event.key === 'Escape'"), 'DM artifact viewer should use dialog semantics and Escape close');
 assert(dmView.includes('artifactCloseButtonRef') && dmView.includes('artifactReturnFocusRef'), 'DM artifact viewer should handle focus on open and close');
 assert(dmView.includes("event.key === 'Tab'") && dmView.includes('artifactOpenLinkRef'), 'DM artifact viewer should trap Tab focus across viewer controls');

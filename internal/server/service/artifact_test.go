@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +117,28 @@ func TestArtifactServiceRegenerateLatest_ForcesRequester(t *testing.T) {
 	}
 }
 
+func TestArtifactServiceGenerateLatest_RejectsChildTask(t *testing.T) {
+	pool := taskSubmitTestPool(t)
+	ctx := context.Background()
+	creatorID := taskSubmitUser(t, pool)
+	channelID := taskSubmitChannel(t, pool, creatorID)
+	taskSubmitMember(t, pool, channelID, "user", creatorID)
+	parentID := taskSubmitTask(t, pool, channelID, creatorID, "", TaskStatusInProgress, nil)
+	childID := taskSubmitTask(t, pool, channelID, creatorID, "", TaskStatusInReview, &parentID)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM artifacts WHERE task_id IN ($1, $2)`, parentID, childID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tasks WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channel_members WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channels WHERE id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, creatorID)
+	})
+
+	_, err := NewArtifactService(pool, t.TempDir()).GenerateLatest(ctx, childID, creatorID)
+	if !errors.Is(err, ErrArtifactChildTaskUnsupported) {
+		t.Fatalf("GenerateLatest child error = %v, want ErrArtifactChildTaskUnsupported", err)
+	}
+}
+
 func TestArtifactRenderDataFromTask_AllowsTaskWithoutSourceMessage(t *testing.T) {
 	task := &Task{
 		ID:          "task-1",
@@ -153,6 +176,9 @@ func TestRenderArtifactAgentPrompt_InstructsPublishWithContext(t *testing.T) {
 		Thread: []ArtifactMessage{
 			{SenderName: "Grace", Content: "Option A is safer; option B is faster."},
 		},
+		Subtasks: []ArtifactTask{
+			{ID: "task-2", MessageID: "msg-child", Number: 8, Title: "E2E coverage", Status: TaskStatusDone, ClaimerName: "Grace"},
+		},
 		Mode: "latest",
 	}
 
@@ -162,6 +188,9 @@ func TestRenderArtifactAgentPrompt_InstructsPublishWithContext(t *testing.T) {
 		"solo artifact publish --task task-1 --mode latest --file",
 		"Need a visual review decision.",
 		"Option A is safer; option B is faster.",
+		"E2E coverage",
+		"solo task list -c channel-1 --output json",
+		"solo message read",
 		"Solo-brutal",
 	} {
 		if !strings.Contains(prompt, want) {

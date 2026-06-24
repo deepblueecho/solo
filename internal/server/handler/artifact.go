@@ -167,6 +167,8 @@ func writeArtifactError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "not a channel member")
 	case errors.Is(err, service.ErrTaskNotClaimer), errors.Is(err, service.ErrTaskNotCreator):
 		writeError(w, http.StatusForbidden, "not allowed to publish artifact")
+	case errors.Is(err, service.ErrArtifactChildTaskUnsupported):
+		writeError(w, http.StatusBadRequest, "artifact is only supported for parent tasks")
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to handle artifact")
 	}

@@ -22,6 +22,8 @@ const (
 	artifactPendingTTL     = 5 * time.Minute
 )
 
+var ErrArtifactChildTaskUnsupported = errors.New("artifact is only supported for parent tasks")
+
 type Artifact struct {
 	ID             string    `json:"id"`
 	TaskID         string    `json:"task_id"`
@@ -44,10 +46,10 @@ type ArtifactService struct {
 }
 
 type ArtifactTask struct {
-	ID, ChannelID, Title, Description, Status, Priority string
-	Number                                              int
-	CreatorName, ClaimerName                            string
-	CreatedAt, UpdatedAt                                time.Time
+	ID, ChannelID, MessageID, Title, Description, Status, Priority string
+	Number                                                         int
+	CreatorName, ClaimerName                                       string
+	CreatedAt, UpdatedAt                                           time.Time
 }
 
 type ArtifactMessage struct {
@@ -65,6 +67,7 @@ type artifactRenderData struct {
 	Task        ArtifactTask
 	RootMessage ArtifactMessage
 	Thread      []ArtifactMessage
+	Subtasks    []ArtifactTask
 	GeneratedAt time.Time
 	Mode        string
 }
@@ -73,6 +76,7 @@ type artifactSnapshot struct {
 	TaskID           string   `json:"task_id"`
 	MessageID        string   `json:"message_id"`
 	ThreadMessageIDs []string `json:"thread_message_ids"`
+	SubtaskRefs      []string `json:"subtask_refs"`
 	AttachmentIDs    []string `json:"attachment_ids"`
 	Mode             string   `json:"mode"`
 }
@@ -109,12 +113,18 @@ func (s *ArtifactService) LatestMode(ctx context.Context, taskID, userID, mode s
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureArtifactParentTask(task); err != nil {
+		return nil, err
+	}
 	return s.getByTaskPath(ctx, task.ID, userID, artifactFilename(mode))
 }
 
 func (s *ArtifactService) List(ctx context.Context, taskID, userID string) ([]Artifact, error) {
 	task, err := NewTaskService(s.pool).GetTaskGlobal(ctx, taskID, userID)
 	if err != nil {
+		return nil, err
+	}
+	if err := ensureArtifactParentTask(task); err != nil {
 		return nil, err
 	}
 	rows, err := s.pool.Query(ctx, `
@@ -169,6 +179,9 @@ func (s *ArtifactService) Publish(ctx context.Context, taskID, userID, mode, htm
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureArtifactParentTask(task); err != nil {
+		return nil, err
+	}
 	if userID != task.CreatorID && userID != task.ClaimerID {
 		return nil, ErrTaskNotClaimer
 	}
@@ -191,13 +204,16 @@ func (s *ArtifactService) generate(ctx context.Context, taskID, userID, mode str
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureArtifactParentTask(task); err != nil {
+		return nil, err
+	}
 	data, err := s.loadRenderData(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 	data.GeneratedAt = time.Now().UTC()
 	data.Mode = mode
-	snapshot, err := buildArtifactSnapshot(task.ID, data.RootMessage, data.Thread, mode)
+	snapshot, err := buildArtifactSnapshot(task.ID, data.RootMessage, data.Thread, data.Subtasks, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -231,32 +247,77 @@ func (s *ArtifactService) generate(ctx context.Context, taskID, userID, mode str
 func (s *ArtifactService) currentArtifactSnapshot(ctx context.Context, task *Task, mode string) ([]byte, error) {
 	data, err := s.loadRenderData(ctx, task)
 	if err == nil {
-		return buildArtifactSnapshot(task.ID, data.RootMessage, data.Thread, mode)
+		return buildArtifactSnapshot(task.ID, data.RootMessage, data.Thread, data.Subtasks, mode)
 	}
 	return json.Marshal(artifactSnapshot{TaskID: task.ID, MessageID: task.MessageID, Mode: mode})
 }
 
 func (s *ArtifactService) loadRenderData(ctx context.Context, task *Task) (artifactRenderData, error) {
-	if task.MessageID == "" {
-		return artifactRenderDataFromTask(task), nil
-	}
-
-	rootMessage, err := s.loadArtifactMessage(ctx, task.MessageID)
-	if err != nil {
-		return artifactRenderData{}, err
-	}
-	thread, err := s.loadArtifactThread(ctx, task.MessageID, task.ChannelID)
-	if err != nil {
-		return artifactRenderData{}, err
-	}
-	if err := s.attachArtifactMetadata(ctx, append([]*ArtifactMessage{&rootMessage}, messagePointers(thread)...)); err != nil {
-		return artifactRenderData{}, err
-	}
-
 	data := artifactRenderDataFromTask(task)
-	data.RootMessage = rootMessage
-	data.Thread = thread
+
+	if task.MessageID != "" {
+		rootMessage, err := s.loadArtifactMessage(ctx, task.MessageID)
+		if err != nil {
+			return artifactRenderData{}, err
+		}
+		thread, err := s.loadArtifactThread(ctx, task.MessageID, task.ChannelID)
+		if err != nil {
+			return artifactRenderData{}, err
+		}
+		data.RootMessage = rootMessage
+		data.Thread = thread
+	}
+
+	subtasks, err := s.loadArtifactSubtasks(ctx, task)
+	if err != nil {
+		return artifactRenderData{}, err
+	}
+	data.Subtasks = subtasks
+
+	messages := append([]*ArtifactMessage{&data.RootMessage}, messagePointers(data.Thread)...)
+	if err := s.attachArtifactMetadata(ctx, messages); err != nil {
+		return artifactRenderData{}, err
+	}
 	return data, nil
+}
+
+func ensureArtifactParentTask(task *Task) error {
+	if task != nil && task.ParentTaskID != nil && *task.ParentTaskID != "" {
+		return ErrArtifactChildTaskUnsupported
+	}
+	return nil
+}
+
+func (s *ArtifactService) loadArtifactSubtasks(ctx context.Context, task *Task) ([]ArtifactTask, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT t.id, t.task_number, t.channel_id, COALESCE(t.message_id::text, ''),
+		       t.title, COALESCE(t.description, ''), t.status, t.priority,
+		       COALESCE(u_creator.display_name, a_creator.name, ''),
+		       COALESCE(u_claimer.display_name, a_claimer.name, ''),
+		       t.created_at, t.updated_at
+		FROM tasks t
+		LEFT JOIN users u_creator ON t.creator_id = u_creator.id
+		LEFT JOIN agents a_creator ON t.creator_id = a_creator.id
+		LEFT JOIN users u_claimer ON t.claimer_id = u_claimer.id
+		LEFT JOIN agents a_claimer ON t.claimer_id = a_claimer.id
+		WHERE t.parent_task_id = $1
+		ORDER BY t.task_number ASC, t.created_at ASC`,
+		task.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	subtasks := make([]ArtifactTask, 0)
+	for rows.Next() {
+		var sub ArtifactTask
+		if err := rows.Scan(&sub.ID, &sub.Number, &sub.ChannelID, &sub.MessageID, &sub.Title, &sub.Description, &sub.Status, &sub.Priority, &sub.CreatorName, &sub.ClaimerName, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+			return nil, err
+		}
+		subtasks = append(subtasks, sub)
+	}
+	return subtasks, rows.Err()
 }
 
 func artifactRenderDataFromTask(task *Task) artifactRenderData {
@@ -268,6 +329,7 @@ func artifactRenderDataFromTask(task *Task) artifactRenderData {
 		Task: ArtifactTask{
 			ID:          task.ID,
 			ChannelID:   task.ChannelID,
+			MessageID:   task.MessageID,
 			Title:       task.Title,
 			Description: task.Description,
 			Status:      task.Status,
@@ -442,6 +504,8 @@ func renderArtifactAgentPrompt(data artifactRenderData, mode string) string {
 	b.WriteString(data.Task.ID)
 	b.WriteString("\n- Channel ID: ")
 	b.WriteString(data.Task.ChannelID)
+	b.WriteString("\n- Message ID: ")
+	b.WriteString(data.Task.MessageID)
 	b.WriteString("\n- Number: #")
 	b.WriteString(stringInt(data.Task.Number))
 	b.WriteString("\n- Title: ")
@@ -464,6 +528,33 @@ func renderArtifactAgentPrompt(data artifactRenderData, mode string) string {
 	}
 	for _, msg := range data.Thread {
 		writeArtifactPromptMessage(&b, msg)
+	}
+	b.WriteString("\nSubtasks:\n")
+	if len(data.Subtasks) == 0 {
+		b.WriteString("(none)\n")
+	} else {
+		b.WriteString("These are only a map. If a subtask looks relevant, fetch more context through Solo CLI, for example `solo task list -c ")
+		b.WriteString(data.Task.ChannelID)
+		b.WriteString(" --output json`; when a subtask has a message ID, use `solo message read --target '#<channel-name-or-id>:<message-short-id>' --limit 50`.\n")
+	}
+	for _, sub := range data.Subtasks {
+		b.WriteString("- #")
+		b.WriteString(stringInt(sub.Number))
+		b.WriteString(" ")
+		b.WriteString(sub.Title)
+		b.WriteString(" [")
+		b.WriteString(sub.Status)
+		b.WriteString("] task_id=")
+		b.WriteString(sub.ID)
+		if sub.MessageID != "" {
+			b.WriteString(" message_id=")
+			b.WriteString(sub.MessageID)
+		}
+		if sub.ClaimerName != "" {
+			b.WriteString(" claimer=")
+			b.WriteString(sub.ClaimerName)
+		}
+		b.WriteString("\n")
 	}
 	b.WriteString("\nDo not produce a transcript clone. Follow the selected reference's section order and component recipes. Keep conclusions first, decisions explicit, evidence compact, legends present when visual encodings are used, and copy-ready commands where relevant.")
 	return b.String()
@@ -561,7 +652,7 @@ func uniqueArtifactAttachmentIDs(messages []*ArtifactMessage) []string {
 	return ids
 }
 
-func buildArtifactSnapshot(taskID string, root ArtifactMessage, thread []ArtifactMessage, mode string) ([]byte, error) {
+func buildArtifactSnapshot(taskID string, root ArtifactMessage, thread []ArtifactMessage, subtasks []ArtifactTask, mode string) ([]byte, error) {
 	snapshot := artifactSnapshot{
 		TaskID:    taskID,
 		MessageID: root.ID,
@@ -569,6 +660,15 @@ func buildArtifactSnapshot(taskID string, root ArtifactMessage, thread []Artifac
 	}
 	for _, msg := range thread {
 		snapshot.ThreadMessageIDs = append(snapshot.ThreadMessageIDs, msg.ID)
+	}
+	for _, sub := range subtasks {
+		snapshot.SubtaskRefs = append(snapshot.SubtaskRefs, strings.Join([]string{
+			sub.ID,
+			stringInt(sub.Number),
+			sub.Status,
+			sub.MessageID,
+			sub.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		}, ":"))
 	}
 	snapshot.AttachmentIDs = uniqueArtifactAttachmentIDs(append([]*ArtifactMessage{&root}, messagePointers(thread)...))
 	return json.Marshal(snapshot)

@@ -323,7 +323,7 @@ function TaskCard({
 
         {/* Footer: last activity */}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          {onGenerateArtifact && (
+          {onGenerateArtifact && !isChild && (
             <button
               type="button"
               disabled={isArtifactGenerating}

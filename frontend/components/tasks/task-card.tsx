@@ -162,7 +162,7 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
 
         {/* Bottom row: assignee + channel + due date */}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {onGenerateArtifact && (
+          {onGenerateArtifact && !isChild && (
             <button
               type="button"
               disabled={isArtifactGenerating}
