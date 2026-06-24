@@ -20,7 +20,7 @@ The first artifact type is a review/status memo. It renders:
 - Task title, number, status, priority, creator, claimer, and timestamps.
 - The root task message.
 - Thread timeline ordered by time.
-- Attachment list with filenames, MIME type, size, and authorized URLs.
+- Attachment list with filenames, MIME type, size, and existing attachment URLs; image attachments render inline.
 - A small "Needs input" section for `in_review` tasks or thread messages that explicitly ask the user for a decision.
 - Provenance footer with task ID, channel ID, generator, and generated time.
 
@@ -74,21 +74,22 @@ Add a small Artifact action in two places:
 - Task card or task detail: `Generate Artifact` / `Refresh Artifact`.
 - Thread panel: `Generate Artifact` near the task controls.
 
-After generation, open the artifact in a new tab or an iframe-backed panel. First version can use a new tab; an embedded panel can follow once the backend loop is proven.
+After generation, show the artifact inside Solo in an iframe-backed panel or dialog. `Open in new tab` can exist as a secondary action.
 
 ## Security
 
 - Require existing channel or DM membership before generation or viewing.
 - Escape all message content before rendering into HTML.
 - Do not execute message content as raw HTML.
-- Do not inline private attachment bytes in v1; show authorized attachment links and metadata only.
+- Do not create a separate artifact attachment authorization layer in v1. Reuse existing attachment URLs for convenient in-product viewing.
+- Render image attachments inline in the artifact HTML; render other attachments as links plus metadata.
 - Include a provenance footer and "review before external sharing" note.
 
 ## Testing
 
 Backend tests:
 
-- Unauthorized user cannot generate or view an artifact.
+- Unauthorized user cannot generate or view an artifact HTML page.
 - A task with no thread still generates a valid HTML file.
 - Thread messages are ordered chronologically.
 - Message content containing HTML/script is escaped.
@@ -96,7 +97,7 @@ Backend tests:
 
 Frontend smoke check:
 
-- Task card or thread panel can trigger generation and open the returned artifact URL.
+- Task card or thread panel can trigger generation and show the returned artifact URL inside Solo.
 
 ## Explicitly Skipped
 

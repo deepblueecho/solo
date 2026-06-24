@@ -17,7 +17,8 @@
 - Require existing channel or DM membership before generation or viewing.
 - Escape all message content before rendering into HTML.
 - Do not execute message content as raw HTML.
-- Do not inline private attachment bytes in v1; show authorized attachment links and metadata only.
+- Do not create a separate artifact attachment authorization layer in v1. Reuse existing attachment URLs for convenient in-product viewing.
+- Render image attachments inline in the artifact HTML; render other attachments as links plus metadata.
 - Include a provenance footer and "review before external sharing" note.
 - Skip AI summaries, version history, realtime updates, editable/commentable artifacts, and runnable React artifacts.
 
@@ -670,6 +671,7 @@ git commit -m "Add artifact HTTP routes"
 - Produces: `useTaskArtifact()` with `generateArtifact(taskID: string): Promise<TaskArtifact>`.
 - Produces: optional `onGenerateArtifact?: (task: Task) => void` props down to `TaskCard`.
 - Produces: optional `onGenerateArtifact?: () => void` on `ThreadPanel`.
+- Produces: an in-Solo artifact viewer panel/dialog using an iframe; new-tab opening is secondary.
 
 - [ ] **Step 1: Add frontend type and hook**
 
@@ -743,8 +745,8 @@ assert(taskCard.includes('onGenerateArtifact?: (task: Task) => void') && taskCar
 assert(taskBoard.includes('onGenerateArtifact?: (task: Task) => void'), 'TaskBoard should accept artifact action');
 assert(taskColumn.includes('onGenerateArtifact?: (task: Task) => void'), 'TaskColumn should pass artifact action');
 assert(threadPanel.includes('onGenerateArtifact?: () => void') && threadPanel.includes('Generate Artifact'), 'ThreadPanel should expose artifact generation');
-assert(channelView.includes('useTaskArtifact') && channelView.includes('handleGenerateArtifact'), 'Channel view should wire artifact generation');
-assert(dmView.includes('useTaskArtifact') && dmView.includes('handleGenerateArtifact'), 'DM view should wire artifact generation');
+assert(channelView.includes('useTaskArtifact') && channelView.includes('handleGenerateArtifact') && channelView.includes('<iframe'), 'Channel view should wire artifact generation into an iframe viewer');
+assert(dmView.includes('useTaskArtifact') && dmView.includes('handleGenerateArtifact') && dmView.includes('<iframe'), 'DM view should wire artifact generation into an iframe viewer');
 
 console.log('task artifact entrypoint source checks passed');
 ```
@@ -840,8 +842,44 @@ const { generateArtifact } = useTaskArtifact();
 
 const handleGenerateArtifact = useCallback(async (task: Task) => {
   const artifact = await generateArtifact(task.id);
-  window.open(artifact.url, '_blank', 'noopener,noreferrer');
+  setArtifactPreview(artifact);
 }, [generateArtifact]);
+```
+
+Add state in each file:
+
+```ts
+const [artifactPreview, setArtifactPreview] = useState<TaskArtifact | null>(null);
+```
+
+Render a simple in-product viewer near the existing right-side panel or page root:
+
+```tsx
+{artifactPreview && (
+  <div className="fixed inset-4 z-50 flex flex-col border-4 border-black bg-white shadow-brutal-xl">
+    <div className="flex items-center justify-between border-b-4 border-black px-4 py-2">
+      <div className="font-heading text-sm font-black uppercase">{artifactPreview.title}</div>
+      <div className="flex items-center gap-2">
+        <a
+          href={artifactPreview.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
+        >
+          Open
+        </a>
+        <button
+          type="button"
+          onClick={() => setArtifactPreview(null)}
+          className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+    <iframe title={artifactPreview.title} src={artifactPreview.url} className="min-h-0 flex-1 bg-white" />
+  </div>
+)}
 ```
 
 Pass `onGenerateArtifact={handleGenerateArtifact}` to `TaskBoard`. For `ThreadPanel`, pass:
@@ -894,4 +932,4 @@ Expected: build succeeds.
 bash scripts/start-services.sh
 ```
 
-Open the app, create or choose a task, add one thread reply, click `Artifact`, and confirm a new tab opens HTML containing the task title, root message, thread reply, provenance footer, and no raw HTML execution from message content.
+Open the app, create or choose a task, add one thread reply, click `Artifact`, and confirm Solo opens an in-product artifact viewer containing the task title, root message, thread reply, provenance footer, and no raw HTML execution from message content. Use the secondary `Open` action to verify the same artifact can still open in a new tab.
