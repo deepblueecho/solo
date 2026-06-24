@@ -1234,6 +1234,74 @@ func (s *AgentService) TriggerAgentForTask(ctx context.Context, channelID, taskI
 	go s.handleStreamingAgentTask(context.Background(), daemon, taskReq, ag)
 }
 
+func (s *AgentService) TriggerAgentForArtifact(ctx context.Context, task *Task, data artifactRenderData, requestedBy, mode string) error {
+	if s == nil || s.dm == nil || task == nil {
+		return nil
+	}
+	ag, ok := s.findArtifactLeader(ctx, task)
+	if !ok {
+		slog.Info("artifact: no active leader agent for task", "task_id", task.ID)
+		return nil
+	}
+
+	threadID := ""
+	if task.MessageID != "" {
+		if tid, _, err := NewThreadService(s.pool).GetOrCreateThread(ctx, task.ChannelID, task.MessageID); err == nil {
+			threadID = tid
+		} else {
+			slog.Warn("artifact: failed to resolve task thread", "task_id", task.ID, "error", err)
+		}
+	}
+
+	daemon := s.dm.SelectDaemon("llm")
+	if daemon == nil {
+		return fmt.Errorf("no available daemon for artifact agent trigger")
+	}
+
+	taskReq := daemonTaskRequest{
+		TaskID:       uuid.New().String(),
+		AgentID:      ag.ID,
+		ChannelID:    task.ChannelID,
+		ThreadID:     threadID,
+		OriginTaskID: task.ID,
+		Messages: []agent.Message{
+			{Role: agent.RoleUser, Content: renderArtifactAgentPrompt(data, mode)},
+		},
+		SystemPrompt: ag.SystemPrompt,
+		ModelConfig: agent.ModelConfig{
+			Provider: ag.ModelProvider,
+			Model:    ag.ModelName,
+		},
+	}
+
+	slog.Info("triggering leader agent for artifact",
+		"agent_id", ag.ID,
+		"task_id", task.ID,
+		"requested_by", requestedBy,
+		"mode", mode,
+	)
+	go s.handleStreamingAgentTask(context.Background(), daemon, taskReq, ag)
+	return nil
+}
+
+func (s *AgentService) findArtifactLeader(ctx context.Context, task *Task) (agentChannelInfo, bool) {
+	for _, id := range []string{task.ClaimerID, task.CreatorID} {
+		if id == "" {
+			continue
+		}
+		var ag agentChannelInfo
+		err := s.pool.QueryRow(ctx,
+			`SELECT id, name, model_provider, model_name, system_prompt
+			 FROM agents WHERE id = $1 AND is_active = true`,
+			id,
+		).Scan(&ag.ID, &ag.Name, &ag.ModelProvider, &ag.ModelName, &ag.SystemPrompt)
+		if err == nil {
+			return ag, true
+		}
+	}
+	return agentChannelInfo{}, false
+}
+
 // agentChannelInfo holds agent data needed for triggering.
 type agentChannelInfo struct {
 	ID            string

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -175,6 +176,57 @@ func TestCLIUnknownCommand(t *testing.T) {
 	}
 	if stdout != "" {
 		t.Errorf("expected empty stdout, got %q", stdout)
+	}
+}
+
+func TestHandleArtifactPublishPostsHTMLFile(t *testing.T) {
+	htmlPath := filepath.Join(t.TempDir(), "artifact.html")
+	if err := os.WriteFile(htmlPath, []byte("<!doctype html><html><body>ok</body></html>"), 0o644); err != nil {
+		t.Fatalf("write artifact file: %v", err)
+	}
+
+	var capturedMethod, capturedPath, capturedAuth string
+	var capturedBody struct {
+		Mode string `json:"mode"`
+		HTML string `json:"html"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedMethod = r.Method
+		capturedPath = r.URL.Path
+		capturedAuth = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(`{"id":"artifact-1","task_id":"task-1","url":"/api/v1/artifacts/artifact-1"}`))
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := captureAndRun(t, func() {
+		handleArtifact([]string{"publish", "--task", "task-1", "--mode", "final", "--file", htmlPath}, server.URL, "test-token")
+	})
+
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d\nstderr: %s", code, stderr)
+	}
+	if capturedMethod != http.MethodPost {
+		t.Errorf("expected POST, got %s", capturedMethod)
+	}
+	if capturedPath != "/api/v1/tasks/task-1/artifact/publish" {
+		t.Errorf("expected artifact publish path, got %s", capturedPath)
+	}
+	if capturedAuth != "Bearer test-token" {
+		t.Errorf("expected Bearer token, got %q", capturedAuth)
+	}
+	if capturedBody.Mode != "final" {
+		t.Errorf("expected mode final, got %q", capturedBody.Mode)
+	}
+	if !strings.Contains(capturedBody.HTML, "<body>ok</body>") {
+		t.Errorf("expected HTML body in request, got %q", capturedBody.HTML)
+	}
+	if !strings.Contains(stdout, `"artifact-1"`) {
+		t.Errorf("expected response JSON in stdout, got %q", stdout)
 	}
 }
 

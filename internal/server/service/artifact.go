@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"html"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,8 +32,9 @@ type Artifact struct {
 }
 
 type ArtifactService struct {
-	pool    *pgxpool.Pool
-	rootDir string
+	pool              *pgxpool.Pool
+	rootDir           string
+	artifactRequester func(context.Context, *Task, artifactRenderData, string, string) error
 }
 
 type ArtifactTask struct {
@@ -76,6 +78,10 @@ func NewArtifactService(pool *pgxpool.Pool, rootDir string) *ArtifactService {
 	return &ArtifactService{pool: pool, rootDir: rootDir}
 }
 
+func (s *ArtifactService) SetAgentArtifactRequester(requester func(context.Context, *Task, artifactRenderData, string, string) error) {
+	s.artifactRequester = requester
+}
+
 func (s *ArtifactService) GenerateLatest(ctx context.Context, taskID, userID string) (*Artifact, error) {
 	return s.generate(ctx, taskID, userID, "latest")
 }
@@ -109,6 +115,34 @@ func (s *ArtifactService) Get(ctx context.Context, artifactID, userID string) (*
 	return &a, nil
 }
 
+func (s *ArtifactService) Publish(ctx context.Context, taskID, userID, mode, htmlContent string) (*Artifact, error) {
+	if mode != "latest" && mode != "final" {
+		return nil, errors.New("invalid artifact mode")
+	}
+	if strings.TrimSpace(htmlContent) == "" {
+		return nil, errors.New("artifact html is required")
+	}
+	task, err := NewTaskService(s.pool).GetTaskGlobal(ctx, taskID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if userID != task.CreatorID && userID != task.ClaimerID {
+		return nil, ErrTaskNotClaimer
+	}
+	path := s.artifactPath(task.ID, mode)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(path, []byte(htmlContent), 0o644); err != nil {
+		return nil, err
+	}
+	snapshot, err := json.Marshal(artifactSnapshot{TaskID: task.ID, MessageID: task.MessageID, Mode: mode})
+	if err != nil {
+		return nil, err
+	}
+	return s.upsertArtifact(ctx, task, userID, mode, path, snapshot)
+}
+
 func (s *ArtifactService) generate(ctx context.Context, taskID, userID, mode string) (*Artifact, error) {
 	task, err := NewTaskService(s.pool).GetTaskGlobal(ctx, taskID, userID)
 	if err != nil {
@@ -120,6 +154,11 @@ func (s *ArtifactService) generate(ctx context.Context, taskID, userID, mode str
 	}
 	data.GeneratedAt = time.Now().UTC()
 	data.Mode = mode
+	if s.artifactRequester != nil {
+		if err := s.artifactRequester(ctx, task, data, userID, mode); err != nil {
+			slog.Warn("artifact: failed to request agent artifact", "task_id", taskID, "mode", mode, "error", err)
+		}
+	}
 
 	path := s.artifactPath(task.ID, mode)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -305,6 +344,74 @@ func artifactFilename(mode string) string {
 		return "final.html"
 	}
 	return "latest.html"
+}
+
+func renderArtifactAgentPrompt(data artifactRenderData, mode string) string {
+	var b strings.Builder
+	b.WriteString("Generate a Solo artifact for this task.\n\n")
+	b.WriteString("Use the `solo-artifacts` skill from this workspace. Keep the fixed Solo-brutal template/style from that skill; fill it with this task's actual conclusions, review decision, evidence, and provenance.\n\n")
+	b.WriteString("Write one self-contained HTML file. Then publish it with:\n")
+	b.WriteString("solo artifact publish --task ")
+	b.WriteString(data.Task.ID)
+	b.WriteString(" --mode ")
+	b.WriteString(mode)
+	b.WriteString(" --file <path-to-your-html>\n\n")
+	b.WriteString("Prefer the `review-decision` artifact type unless the thread clearly asks for progress-report or comparison.\n\n")
+	b.WriteString("Task:\n")
+	b.WriteString("- ID: ")
+	b.WriteString(data.Task.ID)
+	b.WriteString("\n- Channel ID: ")
+	b.WriteString(data.Task.ChannelID)
+	b.WriteString("\n- Number: #")
+	b.WriteString(stringInt(data.Task.Number))
+	b.WriteString("\n- Title: ")
+	b.WriteString(data.Task.Title)
+	b.WriteString("\n- Status: ")
+	b.WriteString(data.Task.Status)
+	b.WriteString("\n- Priority: ")
+	b.WriteString(data.Task.Priority)
+	b.WriteString("\n- Creator: ")
+	b.WriteString(data.Task.CreatorName)
+	b.WriteString("\n- Claimer: ")
+	b.WriteString(data.Task.ClaimerName)
+	b.WriteString("\n- Description:\n")
+	b.WriteString(data.Task.Description)
+	b.WriteString("\n\nRoot message:\n")
+	writeArtifactPromptMessage(&b, data.RootMessage)
+	b.WriteString("\nThread messages:\n")
+	if len(data.Thread) == 0 {
+		b.WriteString("(none)\n")
+	}
+	for _, msg := range data.Thread {
+		writeArtifactPromptMessage(&b, msg)
+	}
+	b.WriteString("\nDo not produce a transcript clone. Make the page useful for a human reviewer inside Solo: conclusions first, decisions explicit, evidence compact, copy-ready commands where relevant.")
+	return b.String()
+}
+
+func writeArtifactPromptMessage(b *strings.Builder, msg ArtifactMessage) {
+	b.WriteString("- ")
+	b.WriteString(msg.SenderName)
+	if !msg.CreatedAt.IsZero() {
+		b.WriteString(" at ")
+		b.WriteString(msg.CreatedAt.Format(time.RFC3339))
+	}
+	b.WriteString(":\n")
+	b.WriteString(msg.Content)
+	b.WriteString("\n")
+	if len(msg.Attachments) == 0 {
+		return
+	}
+	b.WriteString("  Attachments:\n")
+	for _, a := range msg.Attachments {
+		b.WriteString("  - ")
+		b.WriteString(a.Filename)
+		b.WriteString(" ")
+		b.WriteString(a.MIMEType)
+		b.WriteString(" ")
+		b.WriteString(a.URL)
+		b.WriteString("\n")
+	}
 }
 
 func renderArtifactHTML(data artifactRenderData) string {

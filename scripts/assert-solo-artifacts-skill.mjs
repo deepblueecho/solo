@@ -2,13 +2,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = new URL('../', import.meta.url).pathname;
-const skillDir = join(root, '.codex/skills/solo-artifacts');
+const skillDir = join(root, 'skills/solo-artifacts');
+const oldCodexSkillDir = join(root, '.codex/skills/solo-artifacts');
 const read = (path) => readFileSync(join(skillDir, path), 'utf8');
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
 assert(existsSync(skillDir), 'solo-artifacts skill directory should exist');
+assert(!existsSync(oldCodexSkillDir), 'solo-artifacts should live in Solo skills/, not .codex/skills/');
 assert(!existsSync(join(skillDir, '.git')), 'solo-artifacts skill should not contain nested git metadata');
 
 const skill = read('SKILL.md');

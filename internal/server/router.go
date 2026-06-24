@@ -62,6 +62,9 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 		}
 	}
 	artifactSvc := service.NewArtifactService(pool, artifactRoot)
+	if agentSvc != nil {
+		artifactSvc.SetAgentArtifactRequester(agentSvc.TriggerAgentForArtifact)
+	}
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(pool, agentSvc)
@@ -260,6 +263,7 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 		r.Post("/api/v1/tasks/{taskID}/reopen", taskHandler.ReopenGlobal)
 		r.Post("/api/v1/tasks/{taskID}/artifact", artifactHandler.GenerateLatest)
 		r.Post("/api/v1/tasks/{taskID}/artifact/finalize", artifactHandler.Finalize)
+		r.Post("/api/v1/tasks/{taskID}/artifact/publish", artifactHandler.Publish)
 		r.Get("/api/v1/tasks/{taskID}/artifact/latest", artifactHandler.Latest)
 		r.Get("/api/v1/artifacts/{artifactID}", artifactHandler.Serve)
 

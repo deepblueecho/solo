@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // AgentConfig is the local cache of Agent configuration stored in
@@ -164,7 +166,90 @@ func (wm *WorkspaceManager) InjectConfig(ctx context.Context, agentID string, ch
 	return nil
 }
 
+// SyncSoloSkillsForProvider copies Solo-managed skills into the runtime-specific
+// skill directories inside an agent workspace.
+func SyncSoloSkillsForProvider(skillsRoot, workDir, provider string) error {
+	if skillsRoot == "" || workDir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(skillsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("workspace: read skills root: %w", err)
+	}
+	targetRoots := skillTargetRoots(workDir, provider)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		src := filepath.Join(skillsRoot, entry.Name())
+		for _, targetRoot := range targetRoots {
+			if err := copyDir(src, filepath.Join(targetRoot, entry.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
 
+func skillTargetRoots(workDir, provider string) []string {
+	agentsSkills := filepath.Join(workDir, ".agents", "skills")
+	switch strings.ToLower(provider) {
+	case "claude":
+		return []string{filepath.Join(workDir, ".claude", "skills"), agentsSkills}
+	case "codex":
+		return []string{filepath.Join(workDir, ".codex", "skills"), agentsSkills}
+	case "opencode":
+		return []string{filepath.Join(workDir, ".opencode", "skills"), filepath.Join(workDir, ".claude", "skills"), agentsSkills}
+	case "openclaw":
+		return []string{filepath.Join(workDir, "skills"), agentsSkills}
+	default:
+		return []string{agentsSkills}
+	}
+}
+
+func copyDir(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		return copyFile(path, target, info.Mode())
+	})
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -196,4 +281,3 @@ func readConfig(wm *WorkspaceManager, agentID string) (*AgentConfig, error) {
 	}
 	return &cfg, nil
 }
-
