@@ -864,7 +864,7 @@ Expected: source check prints `task artifact entrypoint source checks passed`; b
 - [ ] **Step 9: Commit**
 
 ```bash
-git add frontend/lib/types.ts frontend/lib/hooks/use-task-artifact.ts frontend/components/tasks/task-card.tsx frontend/components/tasks/task-column.tsx frontend/components/tasks/task-board.tsx frontend/components/dashboard/thread-panel.tsx frontend/scripts/assert-task-artifact-entrypoints.mjs
+git add frontend/lib/types.ts frontend/lib/hooks/use-task-artifact.ts frontend/components/tasks/task-card.tsx frontend/components/tasks/task-column.tsx frontend/components/tasks/task-board.tsx frontend/components/dashboard/thread-panel.tsx frontend/components/dashboard/channel-view.tsx frontend/components/dashboard/dm-view.tsx frontend/scripts/assert-task-artifact-entrypoints.mjs
 git commit -m "Add task artifact frontend actions"
 ```
 
