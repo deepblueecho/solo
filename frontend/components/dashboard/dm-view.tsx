@@ -15,7 +15,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, RefreshCw, MessageSquare, Circle, SquareCheckBig } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStreamingMessages } from '@/lib/hooks/use-streaming-messages';
-import { useTaskArtifact } from '@/lib/hooks/use-task-artifact';
+import { TaskArtifactGenerationInProgressError, useTaskArtifact } from '@/lib/hooks/use-task-artifact';
 import { MessageList } from './message-list';
 import { MessageInput } from './message-input';
 import { TaskBoard } from '@/components/tasks/task-board';
@@ -119,6 +119,7 @@ export function DMView({
   const { showToast } = useToast();
   const { generateArtifact, isGenerating } = useTaskArtifact();
   const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
+  const artifactFrameRef = useRef<HTMLIFrameElement>(null);
   const artifactCloseButtonRef = useRef<HTMLButtonElement>(null);
   const artifactReturnFocusRef = useRef<HTMLElement | null>(null);
 
@@ -138,7 +139,7 @@ export function DMView({
       }
 
       if (event.key === 'Tab') {
-        const controls = ([artifactOpenLinkRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
+        const controls = ([artifactOpenLinkRef.current, artifactFrameRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
           (control): control is HTMLElement => Boolean(control),
         );
         if (controls.length === 0) return;
@@ -298,8 +299,9 @@ export function DMView({
     try {
       const artifact = await generateArtifact(task.id);
       setArtifactPreview(artifact);
-    } catch {
+    } catch (error) {
       artifactReturnFocusRef.current = null;
+      if (error instanceof TaskArtifactGenerationInProgressError) return;
       showToast('Could not generate artifact. Please try again.', 'error');
     }
   }, [generateArtifact, isGenerating, showToast]);
@@ -647,7 +649,7 @@ export function DMView({
               </button>
             </div>
           </div>
-          <iframe title={artifactPreview.title} src={artifactPreview.url} className="min-h-0 flex-1 bg-white" />
+          <iframe ref={artifactFrameRef} title={artifactPreview.title} src={artifactPreview.url} tabIndex={0} className="min-h-0 flex-1 bg-white" />
         </div>
       )}
     </div>

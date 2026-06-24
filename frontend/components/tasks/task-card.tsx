@@ -74,6 +74,7 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
       tabIndex={0}
       onClick={() => onClick?.(task)}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick?.(task);
@@ -169,6 +170,9 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
                 e.stopPropagation();
                 if (isArtifactGenerating) return;
                 onGenerateArtifact(task);
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
               }}
               className="inline-flex items-center gap-1 border-2 border-black bg-white px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm hover:bg-brutal-info hover:text-black disabled:pointer-events-none disabled:opacity-50"
               aria-label={`Generate artifact for ${task.title}`}
