@@ -49,8 +49,8 @@ type ArtifactMessage struct {
 }
 
 type ArtifactAttachment struct {
-	ID, Filename, MIMEType string
-	Size                   int64
+	ID, Filename, MIMEType, URL string
+	Size                        int64
 }
 
 type artifactRenderData struct {
@@ -283,6 +283,7 @@ func (s *ArtifactService) attachArtifactMetadata(ctx context.Context, messages [
 		if err := rows.Scan(&a.ID, &a.Filename, &a.MIMEType, &a.Size); err != nil {
 			return err
 		}
+		a.URL = artifactAttachmentURL(a.ID)
 		byID[a.ID] = a
 	}
 	if err := rows.Err(); err != nil {
@@ -356,7 +357,20 @@ func writeArtifactMessage(b *strings.Builder, msg ArtifactMessage) {
 		b.WriteString("<ul>")
 		for _, a := range msg.Attachments {
 			b.WriteString("<li>")
-			b.WriteString(html.EscapeString(a.Filename))
+			if strings.HasPrefix(a.MIMEType, "image/") {
+				b.WriteString("<img loading=\"lazy\" src=\"")
+				b.WriteString(html.EscapeString(a.URL))
+				b.WriteString("\" alt=\"")
+				b.WriteString(html.EscapeString(a.Filename))
+				b.WriteString("\"> ")
+				b.WriteString(html.EscapeString(a.Filename))
+			} else {
+				b.WriteString("<a href=\"")
+				b.WriteString(html.EscapeString(a.URL))
+				b.WriteString("\">")
+				b.WriteString(html.EscapeString(a.Filename))
+				b.WriteString("</a>")
+			}
 			b.WriteString(" ")
 			b.WriteString(html.EscapeString(a.MIMEType))
 			b.WriteString(" ")
@@ -376,9 +390,13 @@ func stringInt(n int) string {
 func attachmentPlaceholders(ids []string) []ArtifactAttachment {
 	attachments := make([]ArtifactAttachment, 0, len(ids))
 	for _, id := range ids {
-		attachments = append(attachments, ArtifactAttachment{ID: id})
+		attachments = append(attachments, ArtifactAttachment{ID: id, URL: artifactAttachmentURL(id)})
 	}
 	return attachments
+}
+
+func artifactAttachmentURL(id string) string {
+	return "/api/v1/attachments/" + id
 }
 
 func messagePointers(messages []ArtifactMessage) []*ArtifactMessage {
