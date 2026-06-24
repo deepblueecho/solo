@@ -35,7 +35,7 @@ interface TaskBoardProps {
   onRefetch: () => void;
   onActionComplete?: (task: Task) => void;
   onGenerateArtifact?: (task: Task) => void;
-  isArtifactGenerating?: boolean;
+  isArtifactGenerating?: (task: Task) => boolean;
 }
 
 // ---- Component ----

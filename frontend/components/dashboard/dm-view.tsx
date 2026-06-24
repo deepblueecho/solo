@@ -15,7 +15,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, RefreshCw, MessageSquare, Circle, SquareCheckBig } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStreamingMessages } from '@/lib/hooks/use-streaming-messages';
-import { TaskArtifactGenerationInProgressError, TaskArtifactStillPendingError, useTaskArtifact } from '@/lib/hooks/use-task-artifact';
+import { TaskArtifactStillPendingError, useTaskArtifact } from '@/lib/hooks/use-task-artifact';
 import { MessageList } from './message-list';
 import { MessageInput } from './message-input';
 import { TaskBoard } from '@/components/tasks/task-board';
@@ -120,7 +120,7 @@ export function DMView({
   const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
   const rightPanelOpen = activeRightPanel !== null;
   const { showToast } = useToast();
-  const { generateArtifact, regenerateArtifact, fetchArtifactHTML, listArtifacts, isGenerating } = useTaskArtifact();
+  const { generateArtifact, regenerateArtifact, fetchArtifactHTML, listArtifacts, isGeneratingTask } = useTaskArtifact();
   const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
   const artifactRegenerateButtonRef = useRef<HTMLButtonElement>(null);
   const artifactFrameRef = useRef<HTMLIFrameElement>(null);
@@ -334,7 +334,7 @@ export function DMView({
   }, [refetchTasks]);
 
   const handleGenerateArtifact = useCallback(async (task: Task) => {
-    if (isGenerating) return;
+    if (isGeneratingTask(task.id) || task.artifact_pending) return;
     artifactReturnFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
@@ -345,7 +345,6 @@ export function DMView({
       await refreshArtifactHistory(task.id);
       await showArtifactPreview(artifact);
     } catch (error) {
-      if (error instanceof TaskArtifactGenerationInProgressError) return;
       if (error instanceof TaskArtifactStillPendingError) {
         const showedExisting = await showExistingArtifact(task.id);
         if (!showedExisting) {
@@ -357,24 +356,23 @@ export function DMView({
       artifactReturnFocusRef.current = null;
       showToast('Could not generate artifact. Please try again.', 'error');
     }
-  }, [generateArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showExistingArtifact, showToast]);
+  }, [generateArtifact, isGeneratingTask, refreshArtifactHistory, showArtifactPreview, showExistingArtifact, showToast]);
 
   const handleRegenerateArtifact = useCallback(async () => {
-    if (!artifactPreview || isGenerating) return;
+    if (!artifactPreview || isGeneratingTask(artifactPreview.task_id)) return;
 
     try {
       const artifact = await regenerateArtifact(artifactPreview.task_id);
       await refreshArtifactHistory(artifactPreview.task_id);
       await showArtifactPreview(artifact);
     } catch (error) {
-      if (error instanceof TaskArtifactGenerationInProgressError) return;
       if (error instanceof TaskArtifactStillPendingError) {
         showToast('Artifact is still regenerating. Try again in a moment.', 'error');
         return;
       }
       showToast('Could not regenerate artifact. Please try again.', 'error');
     }
-  }, [artifactPreview, regenerateArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showToast]);
+  }, [artifactPreview, regenerateArtifact, isGeneratingTask, refreshArtifactHistory, showArtifactPreview, showToast]);
 
   // ---- ThreadPanel handlers ----
 
@@ -622,7 +620,7 @@ export function DMView({
                 onRefetch={refetchTasks ?? (() => {})}
                 onActionComplete={handleTaskActionComplete}
                 onGenerateArtifact={handleGenerateArtifact}
-                isArtifactGenerating={isGenerating}
+                isArtifactGenerating={(task) => isGeneratingTask(task.id) || !!task.artifact_pending}
               />
             </div>
           </div>
@@ -671,7 +669,7 @@ export function DMView({
               onViewInChannel={handleViewThreadInDM}
               onViewTask={handleViewThreadTask}
               onGenerateArtifact={threadTask && !threadTask.parent_task_id ? () => handleGenerateArtifact(threadTask) : undefined}
-              isArtifactGenerating={isGenerating}
+              isArtifactGenerating={!!threadTask && (isGeneratingTask(threadTask.id) || !!threadTask.artifact_pending)}
               onAgentClick={openAgentDetail}
             />
           </Suspense>
@@ -712,7 +710,7 @@ export function DMView({
                 ref={artifactRegenerateButtonRef}
                 type="button"
                 onClick={handleRegenerateArtifact}
-                disabled={isGenerating}
+                disabled={isGeneratingTask(artifactPreview.task_id)}
                 className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm disabled:opacity-50"
               >
                 Regenerate

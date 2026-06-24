@@ -160,6 +160,7 @@ func TestBuildListAllUserTasksQuery_IncludesHierarchyFields(t *testing.T) {
 		"COALESCE(t.parent_task_id::text, '')",
 		"subtask_count",
 		"done_subtask_count",
+		"artifact_pending",
 	} {
 		if !strings.Contains(query, want) {
 			t.Fatalf("expected query to include %q\nquery: %s", want, query)

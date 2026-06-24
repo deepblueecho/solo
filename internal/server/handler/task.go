@@ -80,6 +80,7 @@ type TaskResponse struct {
 	ParentTaskID     *string `json:"parent_task_id,omitempty"`
 	SubtaskCount     int     `json:"subtask_count,omitempty"`
 	DoneSubtaskCount int     `json:"done_subtask_count,omitempty"`
+	ArtifactPending  bool    `json:"artifact_pending,omitempty"`
 	CreatedAt        string  `json:"created_at"`
 	UpdatedAt        string  `json:"updated_at"`
 }
@@ -102,6 +103,7 @@ func toTaskResponse(t *service.Task) TaskResponse {
 		ParentTaskID:     t.ParentTaskID,
 		SubtaskCount:     t.SubtaskCount,
 		DoneSubtaskCount: t.DoneSubtaskCount,
+		ArtifactPending:  t.ArtifactPending,
 		CreatedAt:        t.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:        t.UpdatedAt.Format(time.RFC3339),
 	}
