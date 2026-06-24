@@ -80,6 +80,42 @@ func TestArtifactServiceList_EmptyReturnsJSONArray(t *testing.T) {
 	}
 }
 
+func TestArtifactServiceRegenerateLatest_ForcesRequester(t *testing.T) {
+	pool := taskSubmitTestPool(t)
+	ctx := context.Background()
+	creatorID := taskSubmitUser(t, pool)
+	channelID := taskSubmitChannel(t, pool, creatorID)
+	taskSubmitMember(t, pool, channelID, "user", creatorID)
+	taskID := taskSubmitTask(t, pool, channelID, creatorID, "", TaskStatusInReview, nil)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM artifacts WHERE task_id = $1`, taskID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tasks WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channel_members WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channels WHERE id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, creatorID)
+	})
+
+	requests := 0
+	svc := NewArtifactService(pool, t.TempDir())
+	svc.SetAgentArtifactRequester(func(context.Context, *Task, artifactRenderData, string, string) error {
+		requests++
+		return nil
+	})
+
+	if _, err := svc.GenerateLatest(ctx, taskID, creatorID); err != nil {
+		t.Fatalf("GenerateLatest error = %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("GenerateLatest requests = %d, want 1", requests)
+	}
+	if _, err := svc.RegenerateLatest(ctx, taskID, creatorID); err != nil {
+		t.Fatalf("RegenerateLatest error = %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("RegenerateLatest requests = %d, want 2", requests)
+	}
+}
+
 func TestArtifactRenderDataFromTask_AllowsTaskWithoutSourceMessage(t *testing.T) {
 	task := &Task{
 		ID:          "task-1",

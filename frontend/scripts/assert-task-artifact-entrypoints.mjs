@@ -18,6 +18,7 @@ const dmView = read('components/dashboard/dm-view.tsx');
 assert(types.includes('export interface TaskArtifact'), 'TaskArtifact type should exist');
 assert(apiClient.includes('getText') && apiClient.includes('processTextResponse'), 'ApiClient should fetch protected artifact HTML as text');
 assert(hook.includes('generateArtifact') && hook.includes('/api/v1/tasks/${taskId}/artifact'), 'useTaskArtifact should call the generate endpoint');
+assert(hook.includes('regenerateArtifact') && hook.includes('/api/v1/tasks/${taskId}/artifact?force=1'), 'useTaskArtifact should call the forced regenerate endpoint');
 assert(hook.includes('finalizeArtifact') && hook.includes('/api/v1/tasks/${taskId}/artifact/finalize'), 'useTaskArtifact should call the finalize endpoint');
 assert(hook.includes('waitForPublishedArtifact') && hook.includes('/api/v1/tasks/${taskId}/artifact/latest?mode=${mode}'), 'useTaskArtifact should wait for the published artifact after generation');
 assert(hook.includes('TaskArtifactStillPendingError') && hook.includes('/api/v1/tasks/${taskId}/artifacts'), 'useTaskArtifact should expose pending timeout and task artifact history');

@@ -89,11 +89,15 @@ func (s *ArtifactService) SetAgentArtifactRequester(requester func(context.Conte
 }
 
 func (s *ArtifactService) GenerateLatest(ctx context.Context, taskID, userID string) (*Artifact, error) {
-	return s.generate(ctx, taskID, userID, "latest")
+	return s.generate(ctx, taskID, userID, "latest", false)
+}
+
+func (s *ArtifactService) RegenerateLatest(ctx context.Context, taskID, userID string) (*Artifact, error) {
+	return s.generate(ctx, taskID, userID, "latest", true)
 }
 
 func (s *ArtifactService) Finalize(ctx context.Context, taskID, userID string) (*Artifact, error) {
-	return s.generate(ctx, taskID, userID, "final")
+	return s.generate(ctx, taskID, userID, "final", false)
 }
 
 func (s *ArtifactService) Latest(ctx context.Context, taskID, userID string) (*Artifact, error) {
@@ -182,7 +186,7 @@ func (s *ArtifactService) Publish(ctx context.Context, taskID, userID, mode, htm
 	return s.upsertArtifact(ctx, task, userID, mode, path, snapshot, "")
 }
 
-func (s *ArtifactService) generate(ctx context.Context, taskID, userID, mode string) (*Artifact, error) {
+func (s *ArtifactService) generate(ctx context.Context, taskID, userID, mode string, force bool) (*Artifact, error) {
 	task, err := NewTaskService(s.pool).GetTaskGlobal(ctx, taskID, userID)
 	if err != nil {
 		return nil, err
@@ -197,9 +201,11 @@ func (s *ArtifactService) generate(ctx context.Context, taskID, userID, mode str
 	if err != nil {
 		return nil, err
 	}
-	if existing, err := s.getByTaskPath(ctx, task.ID, userID, artifactFilename(mode)); err == nil && bytes.Equal(existing.SourceSnapshot, snapshot) {
-		if existing.Summary != artifactPendingSummary || time.Since(existing.UpdatedAt) < artifactPendingTTL {
-			return existing, nil
+	if !force {
+		if existing, err := s.getByTaskPath(ctx, task.ID, userID, artifactFilename(mode)); err == nil && bytes.Equal(existing.SourceSnapshot, snapshot) {
+			if existing.Summary != artifactPendingSummary || time.Since(existing.UpdatedAt) < artifactPendingTTL {
+				return existing, nil
+			}
 		}
 	}
 

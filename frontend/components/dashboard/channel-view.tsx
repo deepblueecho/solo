@@ -135,7 +135,7 @@ export function ChannelView({
   const [isMemberPopoverOpen, setIsMemberPopoverOpen] = useState(false);
 
   const { showToast } = useToast();
-  const { generateArtifact, fetchArtifactHTML, listArtifacts, isGenerating } = useTaskArtifact();
+  const { generateArtifact, regenerateArtifact, fetchArtifactHTML, listArtifacts, isGenerating } = useTaskArtifact();
   const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
   const artifactRegenerateButtonRef = useRef<HTMLButtonElement>(null);
   const artifactFrameRef = useRef<HTMLIFrameElement>(null);
@@ -595,7 +595,7 @@ export function ChannelView({
     if (!artifactPreview || isGenerating) return;
 
     try {
-      const artifact = await generateArtifact(artifactPreview.task_id);
+      const artifact = await regenerateArtifact(artifactPreview.task_id);
       await refreshArtifactHistory(artifactPreview.task_id);
       await showArtifactPreview(artifact);
     } catch (error) {
@@ -606,7 +606,7 @@ export function ChannelView({
       }
       showToast('Could not regenerate artifact. Please try again.', 'error');
     }
-  }, [artifactPreview, generateArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showToast]);
+  }, [artifactPreview, regenerateArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showToast]);
 
   // SOLO-island PR2: removed agentActivities aggregation — the
   // TypingIndicator it fed is now replaced by AgentIsland, which

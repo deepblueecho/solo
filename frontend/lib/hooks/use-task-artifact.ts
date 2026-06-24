@@ -72,6 +72,11 @@ export function useTaskArtifact() {
     [runArtifactMutation],
   );
 
+  const regenerateArtifact = useCallback(
+    (taskId: string): Promise<TaskArtifact> => runArtifactMutation(taskId, `/api/v1/tasks/${taskId}/artifact?force=1`, 'latest'),
+    [runArtifactMutation],
+  );
+
   const finalizeArtifact = useCallback(
     (taskId: string): Promise<TaskArtifact> => runArtifactMutation(taskId, `/api/v1/tasks/${taskId}/artifact/finalize`, 'final'),
     [runArtifactMutation],
@@ -87,5 +92,5 @@ export function useTaskArtifact() {
     return apiClient.get<TaskArtifact[] | null>(`/api/v1/tasks/${taskId}/artifacts`).then((artifacts) => artifacts ?? []);
   }, []);
 
-  return { generateArtifact, finalizeArtifact, fetchArtifactHTML, listArtifacts, isGenerating };
+  return { generateArtifact, regenerateArtifact, finalizeArtifact, fetchArtifactHTML, listArtifacts, isGenerating };
 }

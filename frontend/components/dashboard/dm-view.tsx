@@ -120,7 +120,7 @@ export function DMView({
   const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
   const rightPanelOpen = activeRightPanel !== null;
   const { showToast } = useToast();
-  const { generateArtifact, fetchArtifactHTML, listArtifacts, isGenerating } = useTaskArtifact();
+  const { generateArtifact, regenerateArtifact, fetchArtifactHTML, listArtifacts, isGenerating } = useTaskArtifact();
   const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
   const artifactRegenerateButtonRef = useRef<HTMLButtonElement>(null);
   const artifactFrameRef = useRef<HTMLIFrameElement>(null);
@@ -363,7 +363,7 @@ export function DMView({
     if (!artifactPreview || isGenerating) return;
 
     try {
-      const artifact = await generateArtifact(artifactPreview.task_id);
+      const artifact = await regenerateArtifact(artifactPreview.task_id);
       await refreshArtifactHistory(artifactPreview.task_id);
       await showArtifactPreview(artifact);
     } catch (error) {
@@ -374,7 +374,7 @@ export function DMView({
       }
       showToast('Could not regenerate artifact. Please try again.', 'error');
     }
-  }, [artifactPreview, generateArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showToast]);
+  }, [artifactPreview, regenerateArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showToast]);
 
   // ---- ThreadPanel handlers ----
 

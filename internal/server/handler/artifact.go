@@ -147,6 +147,8 @@ func (h *ArtifactHandler) generate(w http.ResponseWriter, r *http.Request, final
 	var err error
 	if final {
 		artifact, err = h.svc.Finalize(r.Context(), taskID, userID)
+	} else if r.URL.Query().Get("force") == "1" || r.URL.Query().Get("force") == "true" {
+		artifact, err = h.svc.RegenerateLatest(r.Context(), taskID, userID)
 	} else {
 		artifact, err = h.svc.GenerateLatest(r.Context(), taskID, userID)
 	}
