@@ -18,22 +18,19 @@
       show paste-ready output instead. Redact PII for life-admin tasks.
     • Publish with: solo artifact publish --task <task-id> --mode <latest|final> --file <html>
 ============================================================================= -->
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TITLE — solo-artifacts</title>
-<!-- restore saved theme before first paint (avoids flash) -->
-<script>try{var t=localStorage.getItem("solo-artifact-theme");if(t)document.documentElement.setAttribute("data-theme",t);else if(matchMedia("(prefers-color-scheme: dark)").matches){/* keep light default; flip here if you prefer auto-dark */}}catch(e){}</script>
 <style>
 [[PASTE base.css]]
 </style>
 </head>
 <body>
 
-<!-- optional toolbar: theme toggle + print. Delete if the page is fully static. -->
+<!-- optional toolbar: print. Delete if the page is fully static. -->
 <div class="toolbar">
-  <button class="btn" data-theme-toggle title="Toggle theme">🌗</button>
   <button class="btn" data-print title="Print / PDF">⎙</button>
 </div>
 

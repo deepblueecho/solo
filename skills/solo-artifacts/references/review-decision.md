@@ -1,5 +1,7 @@
 # Review / decision memo
 
+Solo-brutal review-decision variant: use the yellow/cream light skin from `assets/base.css`; keep boxes square, bordered, and decision-first.
+
 **Use when** you need to present analysis, a status write-up, a multi-perspective review, or a
 plan/architecture proposal so the user can **read it, mark it up, and adjudicate decisions**
 before discussing — i.e. the HTML is a decision-forcing function, not a passive dump.
@@ -44,7 +46,7 @@ Status badges for items: `badge pass|fail|pend|new|exists`. Paste-ready block:
   only when a single page is genuinely too long — don't tab a short memo.
 
 ## Interactivity
-Include: `initTheme`, `initCopy`, `initPersist`, plus `initScrollspy` **or** `initTabs` per layout.
+Include: `initCopy`, `initPersist`, plus `initScrollspy` **or** `initTabs` per layout. Add `initPrint` only when a print/PDF control is useful.
 
 ## Guardrails (enforced)
 - **Surface only REAL open questions.** Do not pad `needs-input` with decisions already resolved

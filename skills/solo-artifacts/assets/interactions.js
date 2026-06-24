@@ -5,19 +5,9 @@
    no network. Each module is keyed to the HTML hooks documented in the references.
    ========================================================================== */
 
-/* THEME TOGGLE + PRINT ------------------------------------------------------
-   Needs: <button class="btn" data-theme-toggle>🌗</button>
-          <button class="btn" data-print>⎙</button>  (optional)
-   Restores saved theme before paint via the inline IIFE in starter.html. */
-function initTheme() {
-  const KEY = "solo-artifact-theme";
-  const root = document.documentElement;
-  const btn = document.querySelector("[data-theme-toggle]");
-  if (btn) btn.addEventListener("click", () => {
-    const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    root.setAttribute("data-theme", next);
-    try { localStorage.setItem(KEY, next); } catch (e) {}
-  });
+/* PRINT ---------------------------------------------------------------------
+   Needs: <button class="btn" data-print>⎙</button>  (optional) */
+function initPrint() {
   const p = document.querySelector("[data-print]");
   if (p) p.addEventListener("click", () => window.print());
 }
@@ -166,5 +156,5 @@ function initPersist() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  initTheme(); initTabs(); initTables(); initLightbox(); initCopy(); initScrollspy(); initPersist();
+  initPrint(); initTabs(); initTables(); initLightbox(); initCopy(); initScrollspy(); initPersist();
 });

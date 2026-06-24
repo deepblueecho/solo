@@ -22,8 +22,10 @@ assert(skill.includes('name: solo-artifacts'), 'SKILL.md should use solo-artifac
 assert(!skill.includes('name: work-canvas'), 'SKILL.md should not keep the old work-canvas name');
 assert(skill.includes('Solo') && skill.includes('artifact'), 'SKILL.md should describe Solo artifact usage');
 assert(starter.includes('solo-artifacts STARTER'), 'starter should identify itself as solo-artifacts');
-assert(css.includes('--solo-blue') && css.includes('shadow-brutal'), 'base.css should use Solo brutal tokens');
-assert(css.includes('border: 2px solid var(--ink)'), 'base.css should use hard brutal borders');
+assert(css.includes('--solo-yellow') && css.includes('--solo-cream') && css.includes('shadow-brutal'), 'base.css should use Solo brutal yellow/cream tokens');
+assert(!css.includes('[data-theme="dark"]'), 'base.css should not include a dark theme');
+assert(!starter.includes('data-theme') && !starter.includes('data-theme-toggle'), 'starter should not include theme switching');
+assert(css.includes('border: 2px solid var(--text)') || css.includes('border: 2px solid var(--ink)'), 'base.css should use hard brutal borders');
 assert(review.includes('Solo-brutal') && review.includes('review-decision'), 'review-decision reference should describe the Solo-brutal variant');
 
 console.log('solo-artifacts skill source checks passed');

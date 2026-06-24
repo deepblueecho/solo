@@ -39,11 +39,10 @@ that took days of debugging.)
 - Tables go in `.table-wrap`; numeric cells use `class="num"`; commands in `<code>`.
 
 ## Interactivity (static-first)
-Default to **zero JS** — this type is usually read-only. The only common module is the theme
-toggle/print toolbar (`initTheme`). Include it only if useful.
+Default to **zero JS** — this type is usually read-only. The only common module is the print
+toolbar (`initPrint`). Include it only if useful.
 
 ## Workflow notes
 - **Update in place**: regenerate the *same* file as the run progresses so the link stays stable.
   **Finalize only once all runs are complete** — don't ship a half-filled comparison.
 - For long jobs, this can be built by a cheap sub-agent to save main-model tokens.
-- Theme: dashboards read well in **dark**; set `data-theme="dark"` on `<html>` if the user prefers the dashboard look, otherwise keep the light default.

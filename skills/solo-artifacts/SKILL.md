@@ -47,5 +47,5 @@ Solo-brutal fork of `work-canvas`: produce **one self-contained HTML file** that
 
 - `assets/starter.html` — the skeleton to copy.
 - `assets/base.css` — class-compatible Solo-brutal design system.
-- `assets/interactions.js` — optional vanilla-JS modules: theme, tabs, tables, lightbox, copy, scrollspy, persist.
+- `assets/interactions.js` — optional vanilla-JS modules: print, tabs, tables, lightbox, copy, scrollspy, persist.
 - `references/*.md` — work-canvas section order, component recipes, and guardrails.

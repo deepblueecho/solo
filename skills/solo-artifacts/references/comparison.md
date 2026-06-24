@@ -51,7 +51,7 @@ Images in `.img-grid`/`.filmstrip` are click-to-zoom via `initLightbox`. Embed a
 `loading="lazy"`. Agreement/consensus across options → `badge pass|fail|warn` per cell.
 
 ## Interactivity
-Include: `initTables` (sort + filter), `initLightbox` (if media), `initTheme`. Otherwise static.
+Include: `initTables` (sort + filter), `initLightbox` (if media), and `initPrint` only when a print/PDF control is useful. Otherwise static.
 
 ## Guardrails (enforced)
 - **Reference-backed**: the user can't judge a metric without seeing the artifact — embed the actual
