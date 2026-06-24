@@ -196,7 +196,7 @@ export function StreamingMessage({ message, onAgentClick }: StreamingMessageProp
                   const isInline = !className;
                   if (isInline) {
                     return (
-                      <code className="rounded-none border border-black bg-black/5 px-1 py-0.5 font-mono text-xs text-foreground">
+                      <code className="inline-code-brutal">
                         {children}
                       </code>
                     );

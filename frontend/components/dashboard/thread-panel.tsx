@@ -160,7 +160,7 @@ const mdComponents = {
   code({ className, children, ...props }: { className?: string; children?: React.ReactNode; [key: string]: unknown }) {
     const isInline = !className;
     if (isInline) {
-      return <code className="rounded-none border border-black bg-black/5 px-1 py-0.5 font-mono text-xs text-foreground">{children}</code>;
+      return <code className="inline-code-brutal">{children}</code>;
     }
     return <CodeBlock className={className}>{children}</CodeBlock>;
   },

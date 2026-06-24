@@ -192,9 +192,9 @@ td.best { font-weight: 700; color: var(--green); }
 .filmstrip > * { flex: 0 0 220px; }
 
 /* ---- code chips ---------------------------------------------------------- */
-code { font-family: var(--mono); font-size: .85em; background: color-mix(in srgb, var(--accent) 20%, var(--card)); padding: .12rem .4rem; border-radius: var(--radius); color: var(--accent-text); word-break: break-word; border: 1px solid var(--ink); }
+code { font-family: var(--mono); font-size: .88em; line-height: 1.45; background: color-mix(in srgb, var(--accent) 14%, var(--card)); padding: .08rem .28rem; border-radius: 2px; color: var(--ink); overflow-wrap: anywhere; word-break: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; box-shadow: inset 0 -1px 0 var(--ink); }
 pre { background: var(--bg-accent); border: 2px solid var(--card-border); border-radius: var(--radius); padding: 1rem; overflow-x: auto; font-family: var(--mono); font-size: .85rem; box-shadow: var(--shadow-sm); }
-pre code { background: none; padding: 0; color: var(--text); }
+pre code { background: none; padding: 0; color: var(--text); box-shadow: none; overflow-wrap: normal; }
 
 /* ---- toolbar (print) + copy buttons ------------------------------------- */
 .toolbar { position: fixed; top: .75rem; right: .75rem; display: flex; gap: .4rem; z-index: 50; }
