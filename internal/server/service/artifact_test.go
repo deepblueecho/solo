@@ -91,6 +91,62 @@ func TestRenderArtifactHTML_RendersNonImageAttachmentsAsLinks(t *testing.T) {
 	}
 }
 
+func TestRenderArtifactHTML_RendersTaskMetadataAndProvenance(t *testing.T) {
+	data := artifactRenderData{
+		Task: ArtifactTask{
+			ID:          "task-1",
+			ChannelID:   "channel-1",
+			Number:      7,
+			Title:       "Metadata task",
+			Description: "Ship the artifact",
+			Status:      TaskStatusTodo,
+			Priority:    "high",
+			CreatorName: "Ada",
+			ClaimerName: "Grace",
+			CreatedAt:   time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC),
+			UpdatedAt:   time.Date(2026, 6, 23, 11, 0, 0, 0, time.UTC),
+		},
+		RootMessage: ArtifactMessage{SenderName: "Alice", Content: "source", CreatedAt: time.Date(2026, 6, 23, 10, 5, 0, 0, time.UTC)},
+		GeneratedAt: time.Date(2026, 6, 23, 12, 0, 0, 0, time.UTC),
+		Mode:        "final",
+	}
+
+	html := renderArtifactHTML(data)
+	for _, want := range []string{
+		"<dt>Priority</dt><dd>high</dd>",
+		"<dt>Creator</dt><dd>Ada</dd>",
+		"<dt>Claimer</dt><dd>Grace</dd>",
+		"<dt>Created</dt><dd>2026-06-23T10:00:00Z</dd>",
+		"Task task-1 in channel channel-1",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("expected rendered HTML to contain %q, got:\n%s", want, html)
+		}
+	}
+}
+
+func TestRenderArtifactHTML_FlagsDecisionQuestionAsNeedsInput(t *testing.T) {
+	data := artifactRenderData{
+		Task: ArtifactTask{
+			ID: "task-1", ChannelID: "channel-1", Number: 7,
+			Title: "Decision task", Status: TaskStatusTodo,
+			CreatedAt: time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC),
+			UpdatedAt: time.Date(2026, 6, 23, 11, 0, 0, 0, time.UTC),
+		},
+		RootMessage: ArtifactMessage{SenderName: "Alice", Content: "please implement", CreatedAt: time.Date(2026, 6, 23, 10, 5, 0, 0, time.UTC)},
+		Thread: []ArtifactMessage{
+			{SenderName: "Bob", Content: "Can you approve this direction?", CreatedAt: time.Date(2026, 6, 23, 10, 10, 0, 0, time.UTC)},
+		},
+		GeneratedAt: time.Date(2026, 6, 23, 12, 0, 0, 0, time.UTC),
+		Mode:        "latest",
+	}
+
+	html := renderArtifactHTML(data)
+	if !strings.Contains(html, "<h2>Needs input</h2>") {
+		t.Fatalf("expected rendered HTML to flag decision question as needing input, got:\n%s", html)
+	}
+}
+
 func TestArtifactFilenameForMode(t *testing.T) {
 	if got := artifactFilename("latest"); got != "latest.html" {
 		t.Fatalf("latest filename = %q", got)

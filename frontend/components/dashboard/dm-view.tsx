@@ -30,6 +30,8 @@ const ThreadPanel = lazy(() =>
 import { t } from '@/lib/i18n';
 import type { AgentDetailTarget, DMChannel, ChannelMember, Message, Task, TaskArtifact } from '@/lib/types';
 
+type ArtifactPreview = TaskArtifact & { previewUrl: string };
+
 interface DMViewProps {
   dm: DMChannel;
   messages: Message[];
@@ -109,7 +111,7 @@ export function DMView({
   );
   const [threadMessage, setThreadMessage] = useState<Message | null>(null);
   const [threadTask, setThreadTask] = useState<Task | null>(null);
-  const [artifactPreview, setArtifactPreview] = useState<TaskArtifact | null>(null);
+  const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
   const [scrollMsgKey, setScrollMsgKey] = useState(0);
@@ -117,15 +119,39 @@ export function DMView({
   const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
   const rightPanelOpen = activeRightPanel !== null;
   const { showToast } = useToast();
-  const { generateArtifact, isGenerating } = useTaskArtifact();
+  const { generateArtifact, finalizeArtifact, fetchArtifactHTML, isGenerating } = useTaskArtifact();
   const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
+  const artifactFinalizeButtonRef = useRef<HTMLButtonElement>(null);
   const artifactFrameRef = useRef<HTMLIFrameElement>(null);
   const artifactCloseButtonRef = useRef<HTMLButtonElement>(null);
   const artifactReturnFocusRef = useRef<HTMLElement | null>(null);
+  const artifactPreviewUrlRef = useRef<string | null>(null);
 
   const closeArtifactPreview = useCallback(() => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      artifactPreviewUrlRef.current = null;
+    }
     setArtifactPreview(null);
   }, []);
+
+  useEffect(() => () => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      artifactPreviewUrlRef.current = null;
+    }
+  }, []);
+
+  const showArtifactPreview = useCallback(async (artifact: TaskArtifact) => {
+    const html = await fetchArtifactHTML(artifact);
+    const previewUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const previousPreviewUrl = artifactPreviewUrlRef.current;
+    artifactPreviewUrlRef.current = previewUrl;
+    setArtifactPreview({ ...artifact, previewUrl });
+    if (previousPreviewUrl) {
+      URL.revokeObjectURL(previousPreviewUrl);
+    }
+  }, [fetchArtifactHTML]);
 
   useEffect(() => {
     if (!artifactPreview) return;
@@ -139,7 +165,7 @@ export function DMView({
       }
 
       if (event.key === 'Tab') {
-        const controls = ([artifactOpenLinkRef.current, artifactFrameRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
+        const controls = ([artifactOpenLinkRef.current, artifactFinalizeButtonRef.current, artifactFrameRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
           (control): control is HTMLElement => Boolean(control),
         );
         if (controls.length === 0) return;
@@ -298,13 +324,25 @@ export function DMView({
 
     try {
       const artifact = await generateArtifact(task.id);
-      setArtifactPreview(artifact);
+      await showArtifactPreview(artifact);
     } catch (error) {
       artifactReturnFocusRef.current = null;
       if (error instanceof TaskArtifactGenerationInProgressError) return;
       showToast('Could not generate artifact. Please try again.', 'error');
     }
-  }, [generateArtifact, isGenerating, showToast]);
+  }, [generateArtifact, isGenerating, showArtifactPreview, showToast]);
+
+  const handleFinalizeArtifact = useCallback(async () => {
+    if (!artifactPreview || isGenerating) return;
+
+    try {
+      const artifact = await finalizeArtifact(artifactPreview.task_id);
+      await showArtifactPreview(artifact);
+    } catch (error) {
+      if (error instanceof TaskArtifactGenerationInProgressError) return;
+      showToast('Could not finalize artifact. Please try again.', 'error');
+    }
+  }, [artifactPreview, finalizeArtifact, isGenerating, showArtifactPreview, showToast]);
 
   // ---- ThreadPanel handlers ----
 
@@ -631,13 +669,22 @@ export function DMView({
             <div className="flex items-center gap-2">
               <a
                 ref={artifactOpenLinkRef}
-                href={artifactPreview.url}
+                href={artifactPreview.previewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
               >
                 Open
               </a>
+              <button
+                ref={artifactFinalizeButtonRef}
+                type="button"
+                onClick={handleFinalizeArtifact}
+                disabled={isGenerating}
+                className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm disabled:opacity-50"
+              >
+                Finalize
+              </button>
               <button
                 ref={artifactCloseButtonRef}
                 type="button"
@@ -649,7 +696,7 @@ export function DMView({
               </button>
             </div>
           </div>
-          <iframe ref={artifactFrameRef} title={artifactPreview.title} src={artifactPreview.url} tabIndex={0} className="min-h-0 flex-1 bg-white" />
+          <iframe ref={artifactFrameRef} title={artifactPreview.title} src={artifactPreview.previewUrl} tabIndex={0} className="min-h-0 flex-1 bg-white" />
         </div>
       )}
     </div>

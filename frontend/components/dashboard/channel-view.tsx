@@ -34,6 +34,8 @@ import { WizardCard } from '@/components/onboarding/wizard-card';
 import { t } from '@/lib/i18n';
 import type { AgentDetailTarget, Channel, Message, Task, TaskArtifact } from '@/lib/types';
 
+type ArtifactPreview = TaskArtifact & { previewUrl: string };
+
 // SOLO-63-F: Lazy-load ThreadPanel (only rendered when a thread is open)
 const ThreadPanel = lazy(() =>
   import('./thread-panel').then((m) => ({ default: m.ThreadPanel })),
@@ -112,7 +114,7 @@ export function ChannelView({
   const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
   const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentDetailTarget | null>(null);
   const [threadTask, setThreadTask] = useState<Task | null>(null);
-  const [artifactPreview, setArtifactPreview] = useState<TaskArtifact | null>(null);
+  const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
   const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
   const rightPanelOpen = activeRightPanel !== null;
 
@@ -132,15 +134,39 @@ export function ChannelView({
   const [isMemberPopoverOpen, setIsMemberPopoverOpen] = useState(false);
 
   const { showToast } = useToast();
-  const { generateArtifact, isGenerating } = useTaskArtifact();
+  const { generateArtifact, finalizeArtifact, fetchArtifactHTML, isGenerating } = useTaskArtifact();
   const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
+  const artifactFinalizeButtonRef = useRef<HTMLButtonElement>(null);
   const artifactFrameRef = useRef<HTMLIFrameElement>(null);
   const artifactCloseButtonRef = useRef<HTMLButtonElement>(null);
   const artifactReturnFocusRef = useRef<HTMLElement | null>(null);
+  const artifactPreviewUrlRef = useRef<string | null>(null);
 
   const closeArtifactPreview = useCallback(() => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      artifactPreviewUrlRef.current = null;
+    }
     setArtifactPreview(null);
   }, []);
+
+  useEffect(() => () => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      artifactPreviewUrlRef.current = null;
+    }
+  }, []);
+
+  const showArtifactPreview = useCallback(async (artifact: TaskArtifact) => {
+    const html = await fetchArtifactHTML(artifact);
+    const previewUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const previousPreviewUrl = artifactPreviewUrlRef.current;
+    artifactPreviewUrlRef.current = previewUrl;
+    setArtifactPreview({ ...artifact, previewUrl });
+    if (previousPreviewUrl) {
+      URL.revokeObjectURL(previousPreviewUrl);
+    }
+  }, [fetchArtifactHTML]);
 
   useEffect(() => {
     if (!artifactPreview) return;
@@ -154,7 +180,7 @@ export function ChannelView({
       }
 
       if (event.key === 'Tab') {
-        const controls = ([artifactOpenLinkRef.current, artifactFrameRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
+        const controls = ([artifactOpenLinkRef.current, artifactFinalizeButtonRef.current, artifactFrameRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
           (control): control is HTMLElement => Boolean(control),
         );
         if (controls.length === 0) return;
@@ -530,13 +556,25 @@ export function ChannelView({
 
     try {
       const artifact = await generateArtifact(task.id);
-      setArtifactPreview(artifact);
+      await showArtifactPreview(artifact);
     } catch (error) {
       artifactReturnFocusRef.current = null;
       if (error instanceof TaskArtifactGenerationInProgressError) return;
       showToast('Could not generate artifact. Please try again.', 'error');
     }
-  }, [generateArtifact, isGenerating, showToast]);
+  }, [generateArtifact, isGenerating, showArtifactPreview, showToast]);
+
+  const handleFinalizeArtifact = useCallback(async () => {
+    if (!artifactPreview || isGenerating) return;
+
+    try {
+      const artifact = await finalizeArtifact(artifactPreview.task_id);
+      await showArtifactPreview(artifact);
+    } catch (error) {
+      if (error instanceof TaskArtifactGenerationInProgressError) return;
+      showToast('Could not finalize artifact. Please try again.', 'error');
+    }
+  }, [artifactPreview, finalizeArtifact, isGenerating, showArtifactPreview, showToast]);
 
   // SOLO-island PR2: removed agentActivities aggregation — the
   // TypingIndicator it fed is now replaced by AgentIsland, which
@@ -802,13 +840,22 @@ export function ChannelView({
             <div className="flex items-center gap-2">
               <a
                 ref={artifactOpenLinkRef}
-                href={artifactPreview.url}
+                href={artifactPreview.previewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
               >
                 Open
               </a>
+              <button
+                ref={artifactFinalizeButtonRef}
+                type="button"
+                onClick={handleFinalizeArtifact}
+                disabled={isGenerating}
+                className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm disabled:opacity-50"
+              >
+                Finalize
+              </button>
               <button
                 ref={artifactCloseButtonRef}
                 type="button"
@@ -820,7 +867,7 @@ export function ChannelView({
               </button>
             </div>
           </div>
-          <iframe ref={artifactFrameRef} title={artifactPreview.title} src={artifactPreview.url} tabIndex={0} className="min-h-0 flex-1 bg-white" />
+          <iframe ref={artifactFrameRef} title={artifactPreview.title} src={artifactPreview.previewUrl} tabIndex={0} className="min-h-0 flex-1 bg-white" />
         </div>
       )}
 

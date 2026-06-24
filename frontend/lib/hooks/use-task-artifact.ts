@@ -17,7 +17,7 @@ export function useTaskArtifact() {
   const inFlightPromiseRef = useRef<Promise<TaskArtifact> | null>(null);
   const inFlightTaskIdRef = useRef<string | null>(null);
 
-  const generateArtifact = useCallback(async (taskId: string): Promise<TaskArtifact> => {
+  const runArtifactMutation = useCallback(async (taskId: string, endpoint: string): Promise<TaskArtifact> => {
     if (isGeneratingRef.current && inFlightPromiseRef.current) {
       if (inFlightTaskIdRef.current !== taskId) {
         throw new TaskArtifactGenerationInProgressError();
@@ -27,7 +27,7 @@ export function useTaskArtifact() {
     isGeneratingRef.current = true;
     inFlightTaskIdRef.current = taskId;
     setIsGenerating(true);
-    const promise = apiClient.post<TaskArtifact>(`/api/v1/tasks/${taskId}/artifact`);
+    const promise = apiClient.post<TaskArtifact>(endpoint);
     inFlightPromiseRef.current = promise;
     try {
       return await promise;
@@ -39,5 +39,19 @@ export function useTaskArtifact() {
     }
   }, []);
 
-  return { generateArtifact, isGenerating };
+  const generateArtifact = useCallback(
+    (taskId: string): Promise<TaskArtifact> => runArtifactMutation(taskId, `/api/v1/tasks/${taskId}/artifact`),
+    [runArtifactMutation],
+  );
+
+  const finalizeArtifact = useCallback(
+    (taskId: string): Promise<TaskArtifact> => runArtifactMutation(taskId, `/api/v1/tasks/${taskId}/artifact/finalize`),
+    [runArtifactMutation],
+  );
+
+  const fetchArtifactHTML = useCallback((artifact: TaskArtifact): Promise<string> => {
+    return apiClient.getText(artifact.url);
+  }, []);
+
+  return { generateArtifact, finalizeArtifact, fetchArtifactHTML, isGenerating };
 }
