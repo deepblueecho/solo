@@ -118,6 +118,7 @@ export function DMView({
   const rightPanelOpen = activeRightPanel !== null;
   const { showToast } = useToast();
   const { generateArtifact, isGenerating } = useTaskArtifact();
+  const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
   const artifactCloseButtonRef = useRef<HTMLButtonElement>(null);
   const artifactReturnFocusRef = useRef<HTMLElement | null>(null);
 
@@ -133,6 +134,31 @@ export function DMView({
       if (event.key === 'Escape') {
         event.preventDefault();
         closeArtifactPreview();
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        const controls = ([artifactOpenLinkRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
+          (control): control is HTMLElement => Boolean(control),
+        );
+        if (controls.length === 0) return;
+
+        const firstControl = controls[0];
+        const lastControl = controls[controls.length - 1];
+        const activeElement = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+
+        if (event.shiftKey && activeElement === firstControl) {
+          event.preventDefault();
+          lastControl.focus();
+        } else if (!event.shiftKey && activeElement === lastControl) {
+          event.preventDefault();
+          firstControl.focus();
+        } else if (!activeElement || !controls.includes(activeElement)) {
+          event.preventDefault();
+          firstControl.focus();
+        }
       }
     };
 
@@ -602,6 +628,7 @@ export function DMView({
             <div id="dm-artifact-preview-title" className="font-heading text-sm font-black uppercase">{artifactPreview.title}</div>
             <div className="flex items-center gap-2">
               <a
+                ref={artifactOpenLinkRef}
                 href={artifactPreview.url}
                 target="_blank"
                 rel="noopener noreferrer"
