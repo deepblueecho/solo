@@ -120,9 +120,9 @@ export function DMView({
   const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
   const rightPanelOpen = activeRightPanel !== null;
   const { showToast } = useToast();
-  const { generateArtifact, finalizeArtifact, fetchArtifactHTML, listArtifacts, isGenerating } = useTaskArtifact();
+  const { generateArtifact, fetchArtifactHTML, listArtifacts, isGenerating } = useTaskArtifact();
   const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
-  const artifactFinalizeButtonRef = useRef<HTMLButtonElement>(null);
+  const artifactRegenerateButtonRef = useRef<HTMLButtonElement>(null);
   const artifactFrameRef = useRef<HTMLIFrameElement>(null);
   const artifactCloseButtonRef = useRef<HTMLButtonElement>(null);
   const artifactReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -182,7 +182,7 @@ export function DMView({
       }
 
       if (event.key === 'Tab') {
-        const controls = ([artifactOpenLinkRef.current, artifactFinalizeButtonRef.current, artifactFrameRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
+        const controls = ([artifactOpenLinkRef.current, artifactRegenerateButtonRef.current, artifactFrameRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
           (control): control is HTMLElement => Boolean(control),
         );
         if (controls.length === 0) return;
@@ -359,22 +359,22 @@ export function DMView({
     }
   }, [generateArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showExistingArtifact, showToast]);
 
-  const handleFinalizeArtifact = useCallback(async () => {
+  const handleRegenerateArtifact = useCallback(async () => {
     if (!artifactPreview || isGenerating) return;
 
     try {
-      const artifact = await finalizeArtifact(artifactPreview.task_id);
+      const artifact = await generateArtifact(artifactPreview.task_id);
       await refreshArtifactHistory(artifactPreview.task_id);
       await showArtifactPreview(artifact);
     } catch (error) {
       if (error instanceof TaskArtifactGenerationInProgressError) return;
       if (error instanceof TaskArtifactStillPendingError) {
-        showToast('Final artifact is still generating. Try again in a moment.', 'error');
+        showToast('Artifact is still regenerating. Try again in a moment.', 'error');
         return;
       }
-      showToast('Could not finalize artifact. Please try again.', 'error');
+      showToast('Could not regenerate artifact. Please try again.', 'error');
     }
-  }, [artifactPreview, finalizeArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showToast]);
+  }, [artifactPreview, generateArtifact, isGenerating, refreshArtifactHistory, showArtifactPreview, showToast]);
 
   // ---- ThreadPanel handlers ----
 
@@ -699,18 +699,6 @@ export function DMView({
           <div className="flex items-center justify-between border-b-4 border-black px-4 py-2">
             <div id="dm-artifact-preview-title" className="font-heading text-sm font-black uppercase">{artifactPreview.title}</div>
             <div className="flex items-center gap-2">
-              {artifactHistory
-                .filter((artifact) => artifact.summary !== 'pending')
-                .map((artifact) => (
-                  <button
-                    key={artifact.id}
-                    type="button"
-                    onClick={() => showArtifactPreview(artifact)}
-                    className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
-                  >
-                    {artifact.html_path.endsWith('final.html') ? 'Final' : 'Latest'}
-                  </button>
-                ))}
               <a
                 ref={artifactOpenLinkRef}
                 href={artifactPreview.previewUrl}
@@ -721,13 +709,13 @@ export function DMView({
                 Open
               </a>
               <button
-                ref={artifactFinalizeButtonRef}
+                ref={artifactRegenerateButtonRef}
                 type="button"
-                onClick={handleFinalizeArtifact}
+                onClick={handleRegenerateArtifact}
                 disabled={isGenerating}
                 className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm disabled:opacity-50"
               >
-                Finalize
+                Regenerate
               </button>
               <button
                 ref={artifactCloseButtonRef}

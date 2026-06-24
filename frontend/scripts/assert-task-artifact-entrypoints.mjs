@@ -38,23 +38,23 @@ assert(channelView.includes('useTaskArtifact') && channelView.includes('handleGe
 assert(channelView.includes('artifactHistory') && channelView.includes('showExistingArtifact') && channelView.includes('if (await showExistingArtifact(task.id)) return'), 'Channel view should open existing published artifacts before generating');
 assert(channelView.includes('showToast') && channelView.includes('catch'), 'Channel view should surface artifact generation errors');
 assert(channelView.includes('URL.createObjectURL') && channelView.includes('URL.revokeObjectURL') && channelView.includes('previewUrl'), 'Channel viewer should use revokable blob URLs for protected artifact HTML');
-assert(channelView.includes('handleFinalizeArtifact') && channelView.includes('Finalize'), 'Channel viewer should expose final artifact generation');
+assert(channelView.includes('handleRegenerateArtifact') && channelView.includes('Regenerate'), 'Channel viewer should expose artifact regeneration');
 assert(channelView.includes('isGenerating') && channelView.includes('isArtifactGenerating={isGenerating}'), 'Channel view should disable artifact actions while generating');
 assert(channelView.includes('role="dialog"') && channelView.includes('aria-modal="true"') && channelView.includes("event.key === 'Escape'"), 'Channel artifact viewer should use dialog semantics and Escape close');
 assert(channelView.includes('artifactCloseButtonRef') && channelView.includes('artifactReturnFocusRef'), 'Channel artifact viewer should handle focus on open and close');
 assert(channelView.includes("event.key === 'Tab'") && channelView.includes('artifactOpenLinkRef'), 'Channel artifact viewer should trap Tab focus across viewer controls');
-assert(channelView.includes('artifactFinalizeButtonRef'), 'Channel artifact viewer should include finalize in focus handling');
+assert(channelView.includes('artifactRegenerateButtonRef'), 'Channel artifact viewer should include regenerate in focus handling');
 assert(channelView.includes('artifactFrameRef') && channelView.includes('tabIndex={0}'), 'Channel artifact viewer should include iframe in the focus trap');
 assert(dmView.includes('useTaskArtifact') && dmView.includes('handleGenerateArtifact') && dmView.includes('<iframe'), 'DM view should wire artifact generation into an iframe viewer');
 assert(dmView.includes('artifactHistory') && dmView.includes('showExistingArtifact') && dmView.includes('if (await showExistingArtifact(task.id)) return'), 'DM view should open existing published artifacts before generating');
 assert(dmView.includes('showToast') && dmView.includes('catch'), 'DM view should surface artifact generation errors');
 assert(dmView.includes('URL.createObjectURL') && dmView.includes('URL.revokeObjectURL') && dmView.includes('previewUrl'), 'DM viewer should use revokable blob URLs for protected artifact HTML');
-assert(dmView.includes('handleFinalizeArtifact') && dmView.includes('Finalize'), 'DM viewer should expose final artifact generation');
+assert(dmView.includes('handleRegenerateArtifact') && dmView.includes('Regenerate'), 'DM viewer should expose artifact regeneration');
 assert(dmView.includes('isGenerating') && dmView.includes('isArtifactGenerating={isGenerating}'), 'DM view should disable artifact actions while generating');
 assert(dmView.includes('role="dialog"') && dmView.includes('aria-modal="true"') && dmView.includes("event.key === 'Escape'"), 'DM artifact viewer should use dialog semantics and Escape close');
 assert(dmView.includes('artifactCloseButtonRef') && dmView.includes('artifactReturnFocusRef'), 'DM artifact viewer should handle focus on open and close');
 assert(dmView.includes("event.key === 'Tab'") && dmView.includes('artifactOpenLinkRef'), 'DM artifact viewer should trap Tab focus across viewer controls');
-assert(dmView.includes('artifactFinalizeButtonRef'), 'DM artifact viewer should include finalize in focus handling');
+assert(dmView.includes('artifactRegenerateButtonRef'), 'DM artifact viewer should include regenerate in focus handling');
 assert(dmView.includes('artifactFrameRef') && dmView.includes('tabIndex={0}'), 'DM artifact viewer should include iframe in the focus trap');
 
 console.log('task artifact entrypoint source checks passed');

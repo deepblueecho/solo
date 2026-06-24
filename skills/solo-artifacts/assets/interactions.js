@@ -155,7 +155,7 @@ function initScrollspy() {
 function initPersist() {
   const els = document.querySelectorAll("[data-persist]");
   els.forEach(el => {
-    const key = "wc-" + (el.id || el.dataset.persist);
+    const key = "solo-artifact-" + (el.id || el.dataset.persist);
     try {
       const saved = localStorage.getItem(key);
       if (saved !== null) { if (el.type === "checkbox") el.checked = saved === "1"; else el.textContent = saved; }

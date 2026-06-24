@@ -1,53 +1,73 @@
 <!DOCTYPE html>
-<!--
+<!-- ============================================================================
   solo-artifacts STARTER. Produce ONE self-contained .html file:
-  1. Replace [[PASTE base.css]] with assets/base.css.
-  2. Replace [[PASTE interactions.js]] with needed modules from assets/interactions.js.
-  3. Fill header, input needs, and sections using references/<type>.md.
-  Required: no CDN/external requests, provenance footer, real decisions only.
--->
+    1. Replace  [[PASTE base.css]]        with the full contents of assets/base.css
+    2. Replace  [[PASTE interactions.js]] with ONLY the modules you need from
+       assets/interactions.js (or the whole file — every module self-guards).
+       If the page has zero interactivity, delete the <script> block entirely.
+    3. Fill the header, the "needs your input" box, and the body sections using
+       the component recipes in references/<type>.md.
+  CONVENTIONS (enforced — do not drop):
+    • Self-contained: inline ALL css/js, embed images as data: URIs (lazy-load),
+      no CDN / no external requests. The file must open by double-click, offline.
+    • Provenance footer: which agent + backbone model + date built it.
+    • "What needs your input": list ONLY genuine human-in-the-loop decisions.
+      Never invent questions already resolved. Add a legend wherever a color,
+      letter, or symbol encodes meaning (confusing layout is the #1 failure).
+    • Non-destructive: never edit the user's source files from inside the page;
+      show paste-ready output instead. Redact PII for life-admin tasks.
+    • Publish with: solo artifact publish --task <task-id> --mode <latest|final> --file <html>
+============================================================================= -->
 <html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TITLE - solo-artifacts</title>
-<script>try{var t=localStorage.getItem("solo-artifact-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<title>TITLE — solo-artifacts</title>
+<!-- restore saved theme before first paint (avoids flash) -->
+<script>try{var t=localStorage.getItem("solo-artifact-theme");if(t)document.documentElement.setAttribute("data-theme",t);else if(matchMedia("(prefers-color-scheme: dark)").matches){/* keep light default; flip here if you prefer auto-dark */}}catch(e){}</script>
 <style>
 [[PASTE base.css]]
 </style>
 </head>
 <body>
 
+<!-- optional toolbar: theme toggle + print. Delete if the page is fully static. -->
 <div class="toolbar">
-  <button class="btn" data-theme-toggle title="Toggle theme">Theme</button>
-  <button class="btn" data-print title="Print / PDF">Print</button>
+  <button class="btn" data-theme-toggle title="Toggle theme">🌗</button>
+  <button class="btn" data-print title="Print / PDF">⎙</button>
 </div>
 
 <div class="container">
-  <header class="hero">
-    <p class="eyebrow">Solo Artifact</p>
-    <h1>Review title</h1>
-    <p class="subtitle">One-line conclusion: what happened, what matters, and what the user should decide.</p>
-    <div class="meta-bar">
-      <span>Generated 2026-01-01</span><span>Task #N</span><span>Status: in review</span>
-    </div>
-  </header>
 
-  <section class="needs-input">
-    <h2>What needs your input</h2>
+  <!-- HEADER ------------------------------------------------------------- -->
+  <h1>📊 Report title</h1>
+  <p class="subtitle">One-line thesis: what this page is and what to conclude from it.</p>
+  <div class="meta-bar">
+    <span>Generated 2026-01-01</span><span>·</span>
+    <span>scope: N items</span><span>·</span>
+    <span>status: in progress</span>
+  </div>
+
+  <!-- WHAT NEEDS YOUR INPUT (keep near the top; only REAL decisions) ------ -->
+  <div class="needs-input">
+    <h2>⚡ What needs your input</h2>
     <ol>
-      <li>Real open decision, with the recommended next action.</li>
+      <li>Genuine open question 1 — with the concrete next action / command.</li>
+      <li>Genuine open question 2.</li>
     </ol>
-  </section>
+  </div>
 
-  <section class="section">
-    <div class="section-title">Section</div>
-    <!-- cards / tables / timeline / verdicts / decisions / evidence -->
-  </section>
+  <!-- BODY SECTIONS — assemble from references/<type>.md ------------------- -->
+  <div class="section">
+    <div class="section-title"><span class="section-icon">📦</span> Section</div>
+    <!-- cards / tables / timeline / callouts / decisions / comparison ... -->
+  </div>
 
-  <footer class="footer">
-    Built by &lt;agent&gt; with &lt;model&gt; for Solo · Task &lt;id&gt; · 2026-01-01
-  </footer>
+  <!-- PROVENANCE FOOTER (mandatory) -------------------------------------- -->
+  <div class="footer">
+    <p>Built by &lt;agent / CLI&gt; → &lt;backbone model&gt; · 2026-01-01</p>
+  </div>
+
 </div>
 
 <script>

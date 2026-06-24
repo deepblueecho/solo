@@ -420,14 +420,17 @@ func artifactFilename(mode string) string {
 func renderArtifactAgentPrompt(data artifactRenderData, mode string) string {
 	var b strings.Builder
 	b.WriteString("Generate a Solo artifact for this task.\n\n")
-	b.WriteString("Use the `solo-artifacts` skill from this workspace. Keep the fixed Solo-brutal template/style from that skill; fill it with this task's actual conclusions, review decision, evidence, and provenance.\n\n")
+	b.WriteString("Use the `solo-artifacts` skill from this workspace exactly like a Solo-brutal work-canvas fork: pick the artifact type, read the matching `references/<type>.md`, assemble from `assets/starter.html`, inline `assets/base.css`, and inline the needed `assets/interactions.js` modules.\n\n")
+	b.WriteString("Artifact type selection:\n")
+	b.WriteString("- Use `comparison` when the task/thread compares options, approaches, models, benchmarks, A/B variants, or vendors.\n")
+	b.WriteString("- Use `progress-report` when the task is still in progress, blocked, long-running, multi-subtask, or mainly needs status/timeline/next commands.\n")
+	b.WriteString("- Otherwise use `review-decision`, especially for in-review acceptance/rejection decisions.\n\n")
 	b.WriteString("Write one self-contained HTML file. Then publish it with:\n")
 	b.WriteString("solo artifact publish --task ")
 	b.WriteString(data.Task.ID)
 	b.WriteString(" --mode ")
 	b.WriteString(mode)
 	b.WriteString(" --file <path-to-your-html>\n\n")
-	b.WriteString("Prefer the `review-decision` artifact type unless the thread clearly asks for progress-report or comparison.\n\n")
 	b.WriteString("Task:\n")
 	b.WriteString("- ID: ")
 	b.WriteString(data.Task.ID)
@@ -456,7 +459,7 @@ func renderArtifactAgentPrompt(data artifactRenderData, mode string) string {
 	for _, msg := range data.Thread {
 		writeArtifactPromptMessage(&b, msg)
 	}
-	b.WriteString("\nDo not produce a transcript clone. Make the page useful for a human reviewer inside Solo: conclusions first, decisions explicit, evidence compact, copy-ready commands where relevant.")
+	b.WriteString("\nDo not produce a transcript clone. Follow the selected reference's section order and component recipes. Keep conclusions first, decisions explicit, evidence compact, legends present when visual encodings are used, and copy-ready commands where relevant.")
 	return b.String()
 }
 
