@@ -13,6 +13,7 @@
 'use client';
 
 import {
+  Children,
   useEffect,
   useRef,
   useState,
@@ -144,6 +145,8 @@ function getArtifactReference(value?: string): string | null {
   return null;
 }
 
+const artifactReferencePattern = /(https?:\/\/[^\s)]+\/api\/v1\/artifacts\/[0-9a-f-]+(?:\?[^\s)]*)?|\/[^\s)]+\/\.solo\/artifacts\/[0-9a-f-]+\/[^\s)]+\.html)/gi;
+
 function createMdComponents(onOpenArtifactReference?: (ref: string) => void) {
   const openArtifact = (reference: string) => {
     if (onOpenArtifactReference) {
@@ -152,9 +155,34 @@ function createMdComponents(onOpenArtifactReference?: (ref: string) => void) {
     }
     window.dispatchEvent(new CustomEvent('solo-artifact-reference', { detail: reference }));
   };
+
+  const renderChildren = (children?: React.ReactNode) => (
+    Children.map(children, (child) => {
+      if (typeof child !== 'string') return child;
+      const parts = child.split(artifactReferencePattern);
+      return parts.map((part, index) => {
+        const artifactRef = getArtifactReference(part);
+        if (!artifactRef) return part;
+        return (
+          <button
+            key={`${part}-${index}`}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openArtifact(artifactRef);
+            }}
+            className="inline border-0 bg-transparent p-0 font-bold text-brutal-info underline decoration-2 underline-offset-2 hover:text-brutal-primary"
+          >
+            {part}
+          </button>
+        );
+      });
+    })
+  );
+
   return {
   p({ children }: { children?: React.ReactNode }) {
-    return <p className="my-1 whitespace-pre-wrap break-words">{children}</p>;
+    return <p className="my-1 whitespace-pre-wrap break-words">{renderChildren(children)}</p>;
   },
   strong({ children }: { children?: React.ReactNode }) {
     return <strong className="font-heading font-black">{children}</strong>;
@@ -184,7 +212,7 @@ function createMdComponents(onOpenArtifactReference?: (ref: string) => void) {
     return <ol className="my-1 list-decimal pl-4 space-y-0.5">{children}</ol>;
   },
   li({ children }: { children?: React.ReactNode }) {
-    return <li className="leading-relaxed">{children}</li>;
+    return <li className="leading-relaxed">{renderChildren(children)}</li>;
   },
   blockquote({ children }: { children?: React.ReactNode }) {
     return <blockquote className="my-1.5 border-l-2 border-brutal-primary/50 pl-3 italic text-muted-foreground">{children}</blockquote>;

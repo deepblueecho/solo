@@ -9,8 +9,9 @@ import { InboxItem } from './inbox-item';
 import { Button } from '@/components/ui/button';
 import { TabBar } from '@/components/ui/tab-bar';
 import { apiClient } from '@/lib/api-client';
+import { useToast } from '@/components/ui/toast';
 import type { TabBarTab } from '@/components/ui/tab-bar';
-import type { InboxItem as InboxItemType, Message } from '@/lib/types';
+import type { InboxItem as InboxItemType, Message, TaskArtifact } from '@/lib/types';
 import { t } from '@/lib/i18n';
 
 const ThreadPanel = lazy(() =>
@@ -46,6 +47,7 @@ async function resolveThreadTaskNumber(source: { type: 'channel' | 'dm'; id: str
 
 export function InboxView() {
   const router = useRouter();
+  const { showToast } = useToast();
   const { items, hasMore, isLoading, isLoadingMore, loadMore, markRead, markAllRead, clearAll, typeFilter, setTypeFilter, senderFilter, setSenderFilter } = useInbox();
   useInboxUnread();
 
@@ -128,6 +130,37 @@ export function InboxView() {
     const task = taskNumber ? `&task=${taskNumber}` : '';
     router.push(`/dashboard?${key}=${threadSource.id}&tab=tasks${task}&thread=${threadMessage.id}`);
   }, [router, threadMessage, threadSource]);
+
+  const handleOpenArtifactReference = useCallback(async (ref: string) => {
+    const popup = window.open('about:blank', '_blank');
+    try {
+      let path = '';
+      const url = new URL(ref, window.location.origin);
+      if (url.pathname.startsWith('/api/v1/artifacts/')) {
+        path = `${url.pathname}${url.search}`;
+      } else {
+        const match = ref.match(/\/\.solo\/artifacts\/([^/\s]+)\/([^/\s]+\.html)/);
+        if (match) {
+          const [, taskId, filename] = match;
+          const artifacts = await apiClient.get<TaskArtifact[] | null>(`/api/v1/tasks/${taskId}/artifacts`);
+          const artifact = (artifacts ?? []).find((item) => item.summary !== 'pending' && item.html_path.endsWith(`/${filename}`));
+          path = artifact?.url ?? '';
+        }
+      }
+      if (!path) throw new Error('artifact not found');
+      const html = await apiClient.getText(path);
+      const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      if (popup) {
+        popup.location.href = blobUrl;
+      } else {
+        window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      }
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch {
+      popup?.close();
+      showToast('Could not open artifact link.', 'error');
+    }
+  }, [showToast]);
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -269,6 +302,7 @@ export function InboxView() {
               onViewInChannel={handleViewThreadInSource}
               onViewTask={handleViewTaskInSource}
               showViewTask
+              onOpenArtifactReference={handleOpenArtifactReference}
             />
           </Suspense>
         )}

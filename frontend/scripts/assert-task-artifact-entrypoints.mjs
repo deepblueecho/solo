@@ -18,6 +18,7 @@ const taskActionButtons = read('components/tasks/task-action-buttons.tsx');
 const threadPanel = read('components/dashboard/thread-panel.tsx');
 const channelView = read('components/dashboard/channel-view.tsx');
 const dmView = read('components/dashboard/dm-view.tsx');
+const inboxView = read('components/inbox/inbox-view.tsx');
 const dialog = read('components/ui/dialog.tsx');
 const wsTypes = read('lib/ws-types.ts');
 
@@ -53,8 +54,10 @@ assert(taskColumn.includes('group card-brutal') && taskActionButtons.includes('g
 assert(!threadPanel.includes('onGenerateArtifact') && !threadPanel.includes('isArtifactGenerating') && !threadPanel.includes('taskArtifactActionLabel'), 'ThreadPanel should not expose artifact access');
 assert(threadPanel.includes('getArtifactReference') && threadPanel.includes('\\/api\\/v1\\/artifacts') && threadPanel.includes('\\.solo\\/artifacts'), 'ThreadPanel should detect artifact references inside messages');
 assert(threadPanel.includes('onOpenArtifactReference') && threadPanel.includes('createMdComponents(onOpenArtifactReference)'), 'ThreadPanel should route artifact references to the Solo viewer');
+assert(threadPanel.includes('artifactReferencePattern') && threadPanel.includes('renderChildren(children)'), 'ThreadPanel should linkify bare artifact references in text');
 assert(dialog.includes('createPortal') && dialog.includes('document.body'), 'Dialog should portal to body so transformed cards do not re-anchor fixed modals');
 assert(wsTypes.includes('artifact_status?:'), 'Task websocket events should carry artifact_status for live button updates');
+assert(inboxView.includes('handleOpenArtifactReference') && inboxView.includes('onOpenArtifactReference={handleOpenArtifactReference}'), 'Inbox thread messages should open artifact references with auth');
 assert(channelView.includes('useTaskArtifact') && channelView.includes('handleGenerateArtifact') && channelView.includes('<iframe'), 'Channel view should wire artifact generation into an iframe viewer');
 assert(channelView.includes('artifactHistory') && channelView.includes('showExistingArtifact') && channelView.includes('if (await showExistingArtifact(task.id)) return'), 'Channel view should open existing published artifacts before generating');
 assert(channelView.includes('showToast') && channelView.includes('catch'), 'Channel view should surface artifact generation errors');
