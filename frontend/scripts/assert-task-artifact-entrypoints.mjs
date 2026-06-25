@@ -18,6 +18,7 @@ const taskActionButtons = read('components/tasks/task-action-buttons.tsx');
 const threadPanel = read('components/dashboard/thread-panel.tsx');
 const channelView = read('components/dashboard/channel-view.tsx');
 const dmView = read('components/dashboard/dm-view.tsx');
+const dialog = read('components/ui/dialog.tsx');
 
 assert(types.includes('export interface TaskArtifact'), 'TaskArtifact type should exist');
 assert(apiClient.includes('getText') && apiClient.includes('processTextResponse'), 'ApiClient should fetch protected artifact HTML as text');
@@ -47,8 +48,9 @@ assert(taskColumn.includes('isArtifactGenerating?: (task: Task) => boolean'), 'T
 assert(taskColumn.includes('getTaskArtifactAction') && taskColumn.includes("artifactAction !== 'hidden'"), 'TaskColumn should hide unsupported artifact actions');
 assert(!taskColumn.includes("t('claimed')") && !taskColumn.includes('Decoration'), 'TaskColumn cards should not render claimed badges or corner decorations');
 assert(!taskColumn.includes('{statusConf.label}'), 'TaskColumn cards should not render redundant status badges');
-assert(taskColumn.includes('group card-brutal') && taskActionButtons.includes('group-hover:opacity-100') && taskActionButtons.includes('hover:bg-brutal-danger'), 'TaskColumn cards should reveal close as a danger action on hover');
+assert(taskColumn.includes('group card-brutal') && taskActionButtons.includes('group-hover:opacity-100') && taskActionButtons.includes('<X className='), 'TaskColumn cards should reveal a plain close action on hover');
 assert(!threadPanel.includes('onGenerateArtifact') && !threadPanel.includes('isArtifactGenerating') && !threadPanel.includes('taskArtifactActionLabel'), 'ThreadPanel should not expose artifact access');
+assert(dialog.includes('createPortal') && dialog.includes('document.body'), 'Dialog should portal to body so transformed cards do not re-anchor fixed modals');
 assert(channelView.includes('useTaskArtifact') && channelView.includes('handleGenerateArtifact') && channelView.includes('<iframe'), 'Channel view should wire artifact generation into an iframe viewer');
 assert(channelView.includes('artifactHistory') && channelView.includes('showExistingArtifact') && channelView.includes('if (await showExistingArtifact(task.id)) return'), 'Channel view should open existing published artifacts before generating');
 assert(channelView.includes('showToast') && channelView.includes('catch'), 'Channel view should surface artifact generation errors');

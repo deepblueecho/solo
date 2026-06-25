@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, RotateCcw, XCircle } from 'lucide-react';
+import { Check, RotateCcw, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { apiClient } from '@/lib/api-client';
@@ -169,9 +169,9 @@ function CloseHoverButton({ disabled, onClick }: { disabled?: boolean; onClick: 
         onClick();
       }}
       aria-label="Close task"
-      className="absolute right-2 top-2 z-20 inline-flex h-7 w-7 items-center justify-center border-2 border-black bg-white text-black opacity-0 shadow-brutal-sm transition-all duration-100 hover:bg-brutal-danger hover:text-white focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brutal-danger focus-visible:ring-offset-2 group-hover:opacity-100 disabled:cursor-not-allowed disabled:grayscale disabled:opacity-50"
+      className="absolute right-2 top-2 z-20 inline-flex h-6 w-6 items-center justify-center border-2 border-black bg-white p-0 text-black opacity-0 shadow-brutal-sm transition-all duration-100 hover:-translate-y-px hover:bg-brutal-danger hover:shadow-brutal focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brutal-danger focus-visible:ring-offset-2 group-hover:opacity-100 disabled:cursor-not-allowed disabled:grayscale disabled:opacity-50"
     >
-      <XCircle className="h-4 w-4" />
+      <X className="h-3.5 w-3.5" />
     </button>
   );
 }
