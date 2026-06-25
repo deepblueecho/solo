@@ -144,6 +144,7 @@ func (h *TaskHandler) writeTaskUpdate(w http.ResponseWriter, task *service.Task)
 		UpdatedAt:        task.UpdatedAt.Format(time.RFC3339),
 		SubtaskCount:     task.SubtaskCount,
 		DoneSubtaskCount: task.DoneSubtaskCount,
+		ArtifactStatus:   task.ArtifactStatus,
 	})
 }
 
@@ -249,21 +250,22 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		dueDate = task.DueDate.Format(time.RFC3339)
 	}
 	ws.BroadcastTaskCreated(h.hub, ws.TaskCreatedPayload{
-		ID:          task.ID,
-		TaskNumber:  task.TaskNumber,
-		ChannelID:   task.ChannelID,
-		CreatorID:   task.CreatorID,
-		CreatorName: task.CreatorName,
-		Title:       task.Title,
-		Description: task.Description,
-		Status:      task.Status,
-		ClaimerID:   task.ClaimerID,
-		ClaimerName: task.ClaimerName,
-		Priority:    task.Priority,
-		DueDate:     dueDate,
-		MessageID:   task.MessageID,
-		CreatedAt:   resp.CreatedAt,
-		UpdatedAt:   resp.UpdatedAt,
+		ID:             task.ID,
+		TaskNumber:     task.TaskNumber,
+		ChannelID:      task.ChannelID,
+		CreatorID:      task.CreatorID,
+		CreatorName:    task.CreatorName,
+		Title:          task.Title,
+		Description:    task.Description,
+		Status:         task.Status,
+		ClaimerID:      task.ClaimerID,
+		ClaimerName:    task.ClaimerName,
+		Priority:       task.Priority,
+		DueDate:        dueDate,
+		MessageID:      task.MessageID,
+		ArtifactStatus: task.ArtifactStatus,
+		CreatedAt:      resp.CreatedAt,
+		UpdatedAt:      resp.UpdatedAt,
 	})
 
 	// Broadcast message.updated so the frontend TaskBadge shows task metadata
@@ -428,6 +430,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:        task.UpdatedAt.Format(time.RFC3339),
 		SubtaskCount:     task.SubtaskCount,
 		DoneSubtaskCount: task.DoneSubtaskCount,
+		ArtifactStatus:   task.ArtifactStatus,
 	})
 
 	// Resolve thread ID for syncing system notification to the task's thread.
@@ -594,6 +597,7 @@ func (h *TaskHandler) Claim(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:        task.UpdatedAt.Format(time.RFC3339),
 		SubtaskCount:     task.SubtaskCount,
 		DoneSubtaskCount: task.DoneSubtaskCount,
+		ArtifactStatus:   task.ArtifactStatus,
 	})
 
 	// Claim notification goes to thread only.
@@ -654,17 +658,18 @@ func (h *TaskHandler) Unclaim(w http.ResponseWriter, r *http.Request) {
 		dueDateStr = task.DueDate.Format(time.RFC3339)
 	}
 	ws.BroadcastTaskUpdated(h.hub, ws.TaskUpdatedPayload{
-		ID:          task.ID,
-		TaskNumber:  task.TaskNumber,
-		ChannelID:   task.ChannelID,
-		Title:       task.Title,
-		Description: task.Description,
-		Status:      task.Status,
-		ClaimerID:   "",
-		Priority:    task.Priority,
-		DueDate:     dueDateStr,
-		MessageID:   task.MessageID,
-		UpdatedAt:   task.UpdatedAt.Format(time.RFC3339),
+		ID:             task.ID,
+		TaskNumber:     task.TaskNumber,
+		ChannelID:      task.ChannelID,
+		Title:          task.Title,
+		Description:    task.Description,
+		Status:         task.Status,
+		ClaimerID:      "",
+		Priority:       task.Priority,
+		DueDate:        dueDateStr,
+		MessageID:      task.MessageID,
+		UpdatedAt:      task.UpdatedAt.Format(time.RFC3339),
+		ArtifactStatus: task.ArtifactStatus,
 	})
 
 	// Resolve thread ID for syncing system notification to the task's thread.
@@ -927,21 +932,22 @@ func (h *TaskHandler) ConvertToTask(w http.ResponseWriter, r *http.Request) {
 		dueDate = task.DueDate.Format(time.RFC3339)
 	}
 	ws.BroadcastTaskCreated(h.hub, ws.TaskCreatedPayload{
-		ID:          task.ID,
-		TaskNumber:  task.TaskNumber,
-		ChannelID:   task.ChannelID,
-		CreatorID:   task.CreatorID,
-		CreatorName: task.CreatorName,
-		Title:       task.Title,
-		Description: task.Description,
-		Status:      task.Status,
-		ClaimerID:   task.ClaimerID,
-		ClaimerName: task.ClaimerName,
-		Priority:    task.Priority,
-		DueDate:     dueDate,
-		MessageID:   task.MessageID,
-		CreatedAt:   resp.CreatedAt,
-		UpdatedAt:   resp.UpdatedAt,
+		ID:             task.ID,
+		TaskNumber:     task.TaskNumber,
+		ChannelID:      task.ChannelID,
+		CreatorID:      task.CreatorID,
+		CreatorName:    task.CreatorName,
+		Title:          task.Title,
+		Description:    task.Description,
+		Status:         task.Status,
+		ClaimerID:      task.ClaimerID,
+		ClaimerName:    task.ClaimerName,
+		Priority:       task.Priority,
+		DueDate:        dueDate,
+		MessageID:      task.MessageID,
+		ArtifactStatus: task.ArtifactStatus,
+		CreatedAt:      resp.CreatedAt,
+		UpdatedAt:      resp.UpdatedAt,
 	})
 }
 
@@ -1199,7 +1205,8 @@ func (h *TaskHandler) CreateGlobal(w http.ResponseWriter, r *http.Request) {
 		Title: task.Title, Description: task.Description,
 		Status: task.Status, Priority: task.Priority,
 		DueDate: dueDate, MessageID: task.MessageID,
-		CreatedAt: resp.CreatedAt, UpdatedAt: resp.UpdatedAt,
+		ArtifactStatus: task.ArtifactStatus,
+		CreatedAt:      resp.CreatedAt, UpdatedAt: resp.UpdatedAt,
 	})
 
 	// Broadcast system notification only to thread
@@ -1335,6 +1342,7 @@ func (h *TaskHandler) UpdateGlobal(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:        updated.UpdatedAt.Format(time.RFC3339),
 		SubtaskCount:     updated.SubtaskCount,
 		DoneSubtaskCount: updated.DoneSubtaskCount,
+		ArtifactStatus:   updated.ArtifactStatus,
 	})
 
 	// Resolve thread ID for syncing system notification to the task's thread.

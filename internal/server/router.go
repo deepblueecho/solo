@@ -94,6 +94,7 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 	computerHandler := handler.NewComputerHandler(computerSvc, dm, pool)
 	inboxHandler := handler.NewInboxHandler(inboxSvc)
 	artifactHandler := handler.NewArtifactHandler(artifactSvc)
+	artifactHandler.SetTaskBroadcaster(taskSvc, hub)
 	onboardingHandler := handler.NewOnboardingHandler(pool, agentSvc)
 
 	// Attachment handler

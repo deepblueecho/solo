@@ -1,17 +1,22 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/solo-ai/solo/internal/server/service"
+	"github.com/solo-ai/solo/internal/server/ws"
 )
 
 type ArtifactHandler struct {
-	svc *service.ArtifactService
+	svc     *service.ArtifactService
+	taskSvc *service.TaskService
+	hub     *ws.Hub
 }
 
 type artifactPublishRequest struct {
@@ -21,6 +26,11 @@ type artifactPublishRequest struct {
 
 func NewArtifactHandler(svc *service.ArtifactService) *ArtifactHandler {
 	return &ArtifactHandler{svc: svc}
+}
+
+func (h *ArtifactHandler) SetTaskBroadcaster(taskSvc *service.TaskService, hub *ws.Hub) {
+	h.taskSvc = taskSvc
+	h.hub = hub
 }
 
 func (h *ArtifactHandler) GenerateLatest(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +92,7 @@ func (h *ArtifactHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		writeArtifactError(w, err)
 		return
 	}
+	h.broadcastTaskArtifactStatus(r.Context(), taskID, userID)
 	writeJSON(w, http.StatusCreated, artifact)
 }
 
@@ -156,7 +167,39 @@ func (h *ArtifactHandler) generate(w http.ResponseWriter, r *http.Request, final
 		writeArtifactError(w, err)
 		return
 	}
+	h.broadcastTaskArtifactStatus(r.Context(), taskID, userID)
 	writeJSON(w, http.StatusCreated, artifact)
+}
+
+func (h *ArtifactHandler) broadcastTaskArtifactStatus(ctx context.Context, taskID, userID string) {
+	if h.hub == nil || h.taskSvc == nil {
+		return
+	}
+	task, err := h.taskSvc.GetTaskGlobal(ctx, taskID, userID)
+	if err != nil {
+		return
+	}
+	dueDate := ""
+	if task.DueDate != nil {
+		dueDate = task.DueDate.Format(time.RFC3339)
+	}
+	ws.BroadcastTaskUpdated(h.hub, ws.TaskUpdatedPayload{
+		ID:               task.ID,
+		TaskNumber:       task.TaskNumber,
+		ChannelID:        task.ChannelID,
+		Title:            task.Title,
+		Description:      task.Description,
+		Status:           task.Status,
+		ClaimerID:        task.ClaimerID,
+		ClaimerName:      task.ClaimerName,
+		Priority:         task.Priority,
+		DueDate:          dueDate,
+		MessageID:        task.MessageID,
+		SubtaskCount:     task.SubtaskCount,
+		DoneSubtaskCount: task.DoneSubtaskCount,
+		ArtifactStatus:   task.ArtifactStatus,
+		UpdatedAt:        task.UpdatedAt.Format(time.RFC3339),
+	})
 }
 
 func writeArtifactError(w http.ResponseWriter, err error) {

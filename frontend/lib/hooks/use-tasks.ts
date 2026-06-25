@@ -297,6 +297,7 @@ interface DMTaskResponse {
   priority: string;
   due_date: string | null;
   message_id: string;
+  artifact_status?: 'none' | 'pending' | 'available';
   created_at: string;
   updated_at: string;
 }
@@ -317,6 +318,7 @@ function mapDMTask(resp: DMTaskResponse): Task {
     creator_name: resp.creator_name || undefined,
     message_id: resp.message_id || undefined,
     reply_count: (resp as DMTaskResponse & { reply_count?: number }).reply_count,
+    artifact_status: resp.artifact_status,
     due_date: resp.due_date || undefined,
     created_at: resp.created_at,
     updated_at: resp.updated_at,
@@ -390,6 +392,7 @@ export function useDMTasks(dmId: string | null) {
             priority: event.priority ?? 'normal',
             due_date: event.due_date ?? '',
             message_id: event.message_id ?? '',
+            artifact_status: (event as { artifact_status?: 'none' | 'pending' | 'available' }).artifact_status,
             created_at: event.created_at,
             updated_at: event.updated_at,
           }), ...prev];
@@ -419,6 +422,9 @@ export function useDMTasks(dmId: string | null) {
           if (event.priority !== undefined) updated.priority = event.priority as Task['priority'];
           if (event.due_date !== undefined) updated.due_date = event.due_date || undefined;
           if (event.message_id !== undefined) updated.message_id = event.message_id || undefined;
+          if ((event as { artifact_status?: 'none' | 'pending' | 'available' }).artifact_status !== undefined) {
+            updated.artifact_status = (event as { artifact_status?: 'none' | 'pending' | 'available' }).artifact_status;
+          }
           updated.updated_at = event.updated_at;
           return prev.map((t) => (t.id === event.id ? updated : t));
         });

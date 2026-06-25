@@ -173,6 +173,47 @@ export function DMView({
     return false;
   }, [refreshArtifactHistory, showArtifactPreview]);
 
+  const handleOpenArtifactReference = useCallback(async (ref: string) => {
+    artifactReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    try {
+      const url = new URL(ref, window.location.origin);
+      if (url.pathname.startsWith('/api/v1/artifacts/')) {
+        const id = url.pathname.split('/').pop() || 'artifact';
+        await showArtifactPreview({
+          id,
+          task_id: threadTask?.id ?? '',
+          channel_id: dm.id,
+          kind: 'task_snapshot',
+          title: 'Artifact',
+          html_path: '',
+          url: `${url.pathname}${url.search}`,
+          created_by: '',
+          created_at: '',
+          updated_at: '',
+        });
+        return;
+      }
+
+      const fileMatch = ref.match(/\/\.solo\/artifacts\/([^/\s]+)\/([^/\s]+\.html)/);
+      if (fileMatch) {
+        const [, taskId, filename] = fileMatch;
+        const artifacts = await refreshArtifactHistory(taskId);
+        const artifact = artifacts.find((item) => item.summary !== 'pending' && item.html_path.endsWith(`/${filename}`))
+          ?? artifacts.find((item) => item.summary !== 'pending');
+        if (artifact) {
+          await showArtifactPreview(artifact);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to toast below.
+    }
+    artifactReturnFocusRef.current = null;
+    showToast('Could not open artifact link.', 'error');
+  }, [dm.id, refreshArtifactHistory, showArtifactPreview, showToast, threadTask?.id]);
+
   useEffect(() => {
     if (!artifactPreview) return;
 
@@ -343,7 +384,10 @@ export function DMView({
       if (event.source !== artifactFrameRef.current?.contentWindow) return;
       const data = event.data;
       if (!data || typeof data !== 'object' || data.type !== 'artifact.reviewAction') return;
-      if (data.taskId && data.taskId !== artifactPreview.task_id) return;
+      const taskId = typeof data.taskId === 'string' && data.taskId.trim() !== ''
+        ? data.taskId.trim()
+        : artifactPreview.task_id;
+      if (artifactPreview.task_id && taskId && taskId !== artifactPreview.task_id) return;
       if (data.action !== 'accept' && data.action !== 'reject') return;
       if (artifactReviewBusy) return;
 
@@ -355,7 +399,8 @@ export function DMView({
 
       setArtifactReviewBusy(true);
       try {
-        const path = `/api/v1/tasks/${artifactPreview.task_id}/${data.action === 'accept' ? 'accept' : 'reject'}`;
+        if (!taskId) throw new Error('missing task id');
+        const path = `/api/v1/tasks/${taskId}/${data.action === 'accept' ? 'accept' : 'reject'}`;
         const updated = await apiClient.post<Task>(path, data.action === 'reject' ? { reason } : undefined);
         handleTaskActionComplete(updated);
         closeArtifactPreview();
@@ -711,6 +756,7 @@ export function DMView({
               replyCount={threadMessage.reply_count ?? 0}
               onViewInChannel={handleViewThreadInDM}
               onViewTask={handleViewThreadTask}
+              onOpenArtifactReference={handleOpenArtifactReference}
               onAgentClick={openAgentDetail}
             />
           </Suspense>

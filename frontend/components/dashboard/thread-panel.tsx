@@ -50,6 +50,7 @@ interface ThreadPanelProps {
   onViewInChannel?: () => void;
   onViewTask?: () => void;
   showViewTask?: boolean;
+  onOpenArtifactReference?: (ref: string) => void;
   onAgentClick?: (agent: AgentDetailTarget) => void;
 }
 
@@ -58,10 +59,12 @@ interface ThreadPanelProps {
 function ParentMessageBlock({
   message,
   task,
+  onOpenArtifactReference,
   onAgentClick,
 }: {
   message: Message;
   task?: Task;
+  onOpenArtifactReference?: (ref: string) => void;
   onAgentClick?: (agent: AgentDetailTarget) => void;
 }) {
   const isAgent = message.sender_type === 'agent';
@@ -103,7 +106,7 @@ function ParentMessageBlock({
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeRaw]}
-            components={mdComponents as any}
+            components={createMdComponents(onOpenArtifactReference) as any}
           >
             {message.content}
           </ReactMarkdown>
@@ -133,7 +136,23 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
   );
 }
 
-const mdComponents = {
+function getArtifactReference(value?: string): string | null {
+  if (!value) return null;
+  const text = value.trim();
+  if (/\/api\/v1\/artifacts\/[0-9a-f-]+/i.test(text)) return text;
+  if (/\/\.solo\/artifacts\/[0-9a-f-]+\/[^/\s]+\.html/i.test(text)) return text;
+  return null;
+}
+
+function createMdComponents(onOpenArtifactReference?: (ref: string) => void) {
+  const openArtifact = (reference: string) => {
+    if (onOpenArtifactReference) {
+      onOpenArtifactReference(reference);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('solo-artifact-reference', { detail: reference }));
+  };
+  return {
   p({ children }: { children?: React.ReactNode }) {
     return <p className="my-1 whitespace-pre-wrap break-words">{children}</p>;
   },
@@ -141,6 +160,21 @@ const mdComponents = {
     return <strong className="font-heading font-black">{children}</strong>;
   },
   a({ href, children }: { href?: string; children?: React.ReactNode }) {
+    const artifactRef = getArtifactReference(href);
+    if (artifactRef) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openArtifact(artifactRef);
+          }}
+          className="inline border-0 bg-transparent p-0 font-bold text-brutal-info underline decoration-2 underline-offset-2 hover:text-brutal-primary"
+        >
+          {children}
+        </button>
+      );
+    }
     return <a href={href} target="_blank" rel="noopener noreferrer" className="text-brutal-info font-bold underline decoration-2 underline-offset-2 hover:text-brutal-primary transition-colors">{children}</a>;
   },
   ul({ children }: { children?: React.ReactNode }) {
@@ -158,6 +192,24 @@ const mdComponents = {
   code({ className, children, ...props }: { className?: string; children?: React.ReactNode; [key: string]: unknown }) {
     const isInline = !className;
     if (isInline) {
+      const text = String(children ?? '');
+      const artifactRef = getArtifactReference(text);
+      if (artifactRef) {
+        return (
+          <code className="inline-code-brutal">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openArtifact(artifactRef);
+              }}
+              className="text-brutal-info underline decoration-2 underline-offset-2 hover:text-brutal-primary"
+            >
+              {children}
+            </button>
+          </code>
+        );
+      }
       return <code className="inline-code-brutal">{children}</code>;
     }
     return <CodeBlock className={className}>{children}</CodeBlock>;
@@ -177,7 +229,8 @@ const mdComponents = {
   td({ children }: { children?: React.ReactNode }) {
     return <td className="border-t border-black px-3 py-1.5">{children}</td>;
   },
-};
+  };
+}
 
 // ---- Reply item ----
 
@@ -185,11 +238,13 @@ function ReplyItem({
   message,
   validNames = [],
   isHighlighted,
+  onOpenArtifactReference,
   onAgentClick,
 }: {
   message: { id: string; display_name?: string; sender_id?: string; sender_active?: boolean; content: string; created_at: string; status?: string; sender_type?: string };
   validNames?: string[];
   isHighlighted?: boolean;
+  onOpenArtifactReference?: (ref: string) => void;
   onAgentClick?: (agent: AgentDetailTarget) => void;
 }) {
   const isFailed = message.status === 'failed';
@@ -260,7 +315,7 @@ function ReplyItem({
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
-                components={mdComponents as any}
+                components={createMdComponents(onOpenArtifactReference) as any}
               >
                 {highlightSpecials(message.content, validNames)}
               </ReactMarkdown>
@@ -638,6 +693,7 @@ export function ThreadPanel({
   onViewInChannel,
   onViewTask,
   showViewTask,
+  onOpenArtifactReference,
   onAgentClick,
 }: ThreadPanelProps) {
   const router = useRouter();
@@ -818,6 +874,7 @@ export function ThreadPanel({
           <ParentMessageBlock
             message={parentMessage}
             task={task}
+            onOpenArtifactReference={onOpenArtifactReference}
             onAgentClick={onAgentClick}
           />
 
@@ -840,6 +897,7 @@ export function ThreadPanel({
                     message={reply}
                     validNames={validNames}
                     isHighlighted={highlightedMessageId === reply.id}
+                    onOpenArtifactReference={onOpenArtifactReference}
                     onAgentClick={onAgentClick}
                   />
                 ))}

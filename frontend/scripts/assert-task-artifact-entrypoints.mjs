@@ -19,6 +19,7 @@ const threadPanel = read('components/dashboard/thread-panel.tsx');
 const channelView = read('components/dashboard/channel-view.tsx');
 const dmView = read('components/dashboard/dm-view.tsx');
 const dialog = read('components/ui/dialog.tsx');
+const wsTypes = read('lib/ws-types.ts');
 
 assert(types.includes('export interface TaskArtifact'), 'TaskArtifact type should exist');
 assert(apiClient.includes('getText') && apiClient.includes('processTextResponse'), 'ApiClient should fetch protected artifact HTML as text');
@@ -50,7 +51,10 @@ assert(!taskColumn.includes("t('claimed')") && !taskColumn.includes('Decoration'
 assert(!taskColumn.includes('{statusConf.label}'), 'TaskColumn cards should not render redundant status badges');
 assert(taskColumn.includes('group card-brutal') && taskActionButtons.includes('group-hover:opacity-100') && taskActionButtons.includes('<X className='), 'TaskColumn cards should reveal a plain close action on hover');
 assert(!threadPanel.includes('onGenerateArtifact') && !threadPanel.includes('isArtifactGenerating') && !threadPanel.includes('taskArtifactActionLabel'), 'ThreadPanel should not expose artifact access');
+assert(threadPanel.includes('getArtifactReference') && threadPanel.includes('\\/api\\/v1\\/artifacts') && threadPanel.includes('\\.solo\\/artifacts'), 'ThreadPanel should detect artifact references inside messages');
+assert(threadPanel.includes('onOpenArtifactReference') && threadPanel.includes('createMdComponents(onOpenArtifactReference)'), 'ThreadPanel should route artifact references to the Solo viewer');
 assert(dialog.includes('createPortal') && dialog.includes('document.body'), 'Dialog should portal to body so transformed cards do not re-anchor fixed modals');
+assert(wsTypes.includes('artifact_status?:'), 'Task websocket events should carry artifact_status for live button updates');
 assert(channelView.includes('useTaskArtifact') && channelView.includes('handleGenerateArtifact') && channelView.includes('<iframe'), 'Channel view should wire artifact generation into an iframe viewer');
 assert(channelView.includes('artifactHistory') && channelView.includes('showExistingArtifact') && channelView.includes('if (await showExistingArtifact(task.id)) return'), 'Channel view should open existing published artifacts before generating');
 assert(channelView.includes('showToast') && channelView.includes('catch'), 'Channel view should surface artifact generation errors');
@@ -58,6 +62,7 @@ assert(channelView.includes('URL.createObjectURL') && channelView.includes('URL.
 assert(channelView.includes('handleRegenerateArtifact') && channelView.includes('Regenerate'), 'Channel viewer should expose artifact regeneration');
 assert(channelView.includes('getTaskArtifactAction') && channelView.includes("action === 'read'"), 'Channel view should generate or read artifacts based on task artifact state');
 assert(channelView.includes('artifact.reviewAction') && channelView.includes('apiClient.post<Task>') && channelView.includes("'accept' : 'reject'"), 'Channel viewer should bridge artifact review actions to task lifecycle APIs');
+assert(channelView.includes('handleOpenArtifactReference') && channelView.includes('onOpenArtifactReference={handleOpenArtifactReference}'), 'Channel thread messages should open artifact references inside the Solo viewer');
 assert(!channelView.includes('onGenerateArtifact={threadTask'), 'Channel thread panel should not render artifact access');
 assert(channelView.includes('role="dialog"') && channelView.includes('aria-modal="true"') && channelView.includes("event.key === 'Escape'"), 'Channel artifact viewer should use dialog semantics and Escape close');
 assert(channelView.includes('artifactCloseButtonRef') && channelView.includes('artifactReturnFocusRef'), 'Channel artifact viewer should handle focus on open and close');
@@ -71,6 +76,7 @@ assert(dmView.includes('URL.createObjectURL') && dmView.includes('URL.revokeObje
 assert(dmView.includes('handleRegenerateArtifact') && dmView.includes('Regenerate'), 'DM viewer should expose artifact regeneration');
 assert(dmView.includes('getTaskArtifactAction') && dmView.includes("action === 'read'"), 'DM view should generate or read artifacts based on task artifact state');
 assert(dmView.includes('artifact.reviewAction') && dmView.includes('apiClient.post<Task>') && dmView.includes("'accept' : 'reject'"), 'DM viewer should bridge artifact review actions to task lifecycle APIs');
+assert(dmView.includes('handleOpenArtifactReference') && dmView.includes('onOpenArtifactReference={handleOpenArtifactReference}'), 'DM thread messages should open artifact references inside the Solo viewer');
 assert(!dmView.includes('onGenerateArtifact={threadTask'), 'DM thread panel should not render artifact access');
 assert(dmView.includes('role="dialog"') && dmView.includes('aria-modal="true"') && dmView.includes("event.key === 'Escape'"), 'DM artifact viewer should use dialog semantics and Escape close');
 assert(dmView.includes('artifactCloseButtonRef') && dmView.includes('artifactReturnFocusRef'), 'DM artifact viewer should handle focus on open and close');
