@@ -59,6 +59,7 @@ assert(dialog.includes('createPortal') && dialog.includes('document.body'), 'Dia
 assert(wsTypes.includes('artifact_status?:'), 'Task websocket events should carry artifact_status for live button updates');
 assert(inboxView.includes('handleOpenArtifactReference') && inboxView.includes('onOpenArtifactReference={handleOpenArtifactReference}'), 'Inbox thread messages should open artifact references with auth');
 assert(inboxView.includes('artifact.reviewAction') && inboxView.includes('apiClient.post(path'), 'Inbox artifact viewer should bridge review actions to task lifecycle APIs');
+assert(inboxView.includes('apiClient.get<TaskArtifact>(`${url.pathname}/meta`)'), 'Inbox artifact API links should fetch artifact metadata before opening');
 assert(channelView.includes('useTaskArtifact') && channelView.includes('handleGenerateArtifact') && channelView.includes('<iframe'), 'Channel view should wire artifact generation into an iframe viewer');
 assert(channelView.includes('artifactHistory') && channelView.includes('showExistingArtifact') && channelView.includes('if (await showExistingArtifact(task.id)) return'), 'Channel view should open existing published artifacts before generating');
 assert(channelView.includes('showToast') && channelView.includes('catch'), 'Channel view should surface artifact generation errors');
@@ -68,6 +69,7 @@ assert(channelView.includes('getTaskArtifactAction') && channelView.includes("ac
 assert(channelView.includes('artifact.reviewAction') && channelView.includes('apiClient.post<Task>') && channelView.includes("'accept' : 'reject'"), 'Channel viewer should bridge artifact review actions to task lifecycle APIs');
 assert(channelView.includes('handleOpenArtifactReference') && channelView.includes('onOpenArtifactReference={handleOpenArtifactReference}'), 'Channel thread messages should open artifact references inside the Solo viewer');
 assert(channelView.includes('<MessageList') && channelView.includes('onOpenArtifactReference={handleOpenArtifactReference}'), 'Channel main messages should open artifact references inside the Solo viewer');
+assert(channelView.includes('apiClient.get<TaskArtifact>(`${url.pathname}/meta`)'), 'Channel artifact API links should fetch artifact metadata before opening');
 assert(!channelView.includes('onGenerateArtifact={threadTask'), 'Channel thread panel should not render artifact access');
 assert(channelView.includes('role="dialog"') && channelView.includes('aria-modal="true"') && channelView.includes("event.key === 'Escape'"), 'Channel artifact viewer should use dialog semantics and Escape close');
 assert(channelView.includes('artifactCloseButtonRef') && channelView.includes('artifactReturnFocusRef'), 'Channel artifact viewer should handle focus on open and close');
@@ -83,6 +85,7 @@ assert(dmView.includes('getTaskArtifactAction') && dmView.includes("action === '
 assert(dmView.includes('artifact.reviewAction') && dmView.includes('apiClient.post<Task>') && dmView.includes("'accept' : 'reject'"), 'DM viewer should bridge artifact review actions to task lifecycle APIs');
 assert(dmView.includes('handleOpenArtifactReference') && dmView.includes('onOpenArtifactReference={handleOpenArtifactReference}'), 'DM thread messages should open artifact references inside the Solo viewer');
 assert(dmView.includes('<MessageList') && dmView.includes('onOpenArtifactReference={handleOpenArtifactReference}'), 'DM main messages should open artifact references inside the Solo viewer');
+assert(dmView.includes('apiClient.get<TaskArtifact>(`${url.pathname}/meta`)'), 'DM artifact API links should fetch artifact metadata before opening');
 assert(!dmView.includes('onGenerateArtifact={threadTask'), 'DM thread panel should not render artifact access');
 assert(dmView.includes('role="dialog"') && dmView.includes('aria-modal="true"') && dmView.includes("event.key === 'Escape'"), 'DM artifact viewer should use dialog semantics and Escape close');
 assert(dmView.includes('artifactCloseButtonRef') && dmView.includes('artifactReturnFocusRef'), 'DM artifact viewer should handle focus on open and close');

@@ -156,18 +156,7 @@ export function InboxView() {
       let artifact: TaskArtifact | null = null;
       const url = new URL(ref, window.location.origin);
       if (url.pathname.startsWith('/api/v1/artifacts/')) {
-        artifact = {
-          id: url.pathname.split('/').pop() || 'artifact',
-          task_id: '',
-          channel_id: threadSource?.id ?? '',
-          kind: 'task_snapshot',
-          title: 'Artifact',
-          html_path: '',
-          url: `${url.pathname}${url.search}`,
-          created_by: '',
-          created_at: '',
-          updated_at: '',
-        };
+        artifact = await apiClient.get<TaskArtifact>(`${url.pathname}/meta`);
       } else {
         const match = ref.match(/\/\.solo\/artifacts\/([^/\s]+)\/([^/\s]+\.html)/);
         if (match) {
@@ -187,7 +176,7 @@ export function InboxView() {
     } catch {
       showToast('Could not open artifact link.', 'error');
     }
-  }, [showToast, threadSource?.id]);
+  }, [showToast]);
 
   useEffect(() => {
     if (!artifactPreview) return;

@@ -180,19 +180,8 @@ export function DMView({
     try {
       const url = new URL(ref, window.location.origin);
       if (url.pathname.startsWith('/api/v1/artifacts/')) {
-        const id = url.pathname.split('/').pop() || 'artifact';
-        await showArtifactPreview({
-          id,
-          task_id: threadTask?.id ?? '',
-          channel_id: dm.id,
-          kind: 'task_snapshot',
-          title: 'Artifact',
-          html_path: '',
-          url: `${url.pathname}${url.search}`,
-          created_by: '',
-          created_at: '',
-          updated_at: '',
-        });
+        const artifact = await apiClient.get<TaskArtifact>(`${url.pathname}/meta`);
+        await showArtifactPreview(artifact);
         return;
       }
 
@@ -212,7 +201,7 @@ export function DMView({
     }
     artifactReturnFocusRef.current = null;
     showToast('Could not open artifact link.', 'error');
-  }, [dm.id, refreshArtifactHistory, showArtifactPreview, showToast, threadTask?.id]);
+  }, [refreshArtifactHistory, showArtifactPreview, showToast]);
 
   useEffect(() => {
     if (!artifactPreview) return;

@@ -143,6 +143,25 @@ func (h *ArtifactHandler) Serve(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, artifact.HTMLPath)
 }
 
+func (h *ArtifactHandler) Meta(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	artifactID := chi.URLParam(r, "artifactID")
+	if artifactID == "" {
+		writeError(w, http.StatusBadRequest, "artifact ID is required")
+		return
+	}
+	artifact, err := h.svc.Get(r.Context(), artifactID, userID)
+	if err != nil {
+		writeArtifactError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, artifact)
+}
+
 func (h *ArtifactHandler) generate(w http.ResponseWriter, r *http.Request, final bool) {
 	userID, ok := requireUserID(r)
 	if !ok {
