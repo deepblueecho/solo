@@ -70,6 +70,7 @@ interface MessageListProps {
   scrollKey?: number;
   /** Channel members for @mention whitelist in agent messages. */
   members?: ChannelMember[];
+  onOpenArtifactReference?: (ref: string) => void;
   onAgentClick?: (agent: AgentDetailTarget) => void;
 }
 
@@ -691,6 +692,7 @@ export function MessageList({
   scrollToMessageId,
   scrollKey,
   members = [],
+  onOpenArtifactReference,
   onAgentClick,
 }: MessageListProps) {
   const validNames = buildValidNames(members);
@@ -900,6 +902,7 @@ export function MessageList({
                 onReply={onReply}
                 validNames={validNames}
                 isHighlighted={highlightedMessageId === message.id}
+                onOpenArtifactReference={onOpenArtifactReference}
                 onAgentClick={onAgentClick}
               />
             ) : (

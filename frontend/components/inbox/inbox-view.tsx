@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, InboxIcon, Mail } from 'lucide-react';
 import { useInbox } from '@/lib/hooks/use-inbox';
@@ -17,6 +17,8 @@ import { t } from '@/lib/i18n';
 const ThreadPanel = lazy(() =>
   import('@/components/dashboard/thread-panel').then((m) => ({ default: m.ThreadPanel })),
 );
+
+type ArtifactPreview = TaskArtifact & { previewUrl: string };
 
 const INBOX_TABS: TabBarTab[] = [
   { key: 'all', label: t('inboxTabAll') },
@@ -65,6 +67,24 @@ export function InboxView() {
   const [threadTargetMessageId, setThreadTargetMessageId] = useState<string | undefined>(undefined);
   const [threadSource, setThreadSource] = useState<{ type: 'channel' | 'dm'; id: string } | null>(null);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
+  const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
+  const [artifactReviewBusy, setArtifactReviewBusy] = useState(false);
+  const artifactFrameRef = useRef<HTMLIFrameElement>(null);
+  const artifactPreviewUrlRef = useRef<string | null>(null);
+
+  const closeArtifactPreview = useCallback(() => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      artifactPreviewUrlRef.current = null;
+    }
+    setArtifactPreview(null);
+  }, []);
+
+  useEffect(() => () => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+    }
+  }, []);
 
   const handleItemClick = useCallback(
     async (item: InboxItemType) => {
@@ -132,35 +152,77 @@ export function InboxView() {
   }, [router, threadMessage, threadSource]);
 
   const handleOpenArtifactReference = useCallback(async (ref: string) => {
-    const popup = window.open('about:blank', '_blank');
     try {
-      let path = '';
+      let artifact: TaskArtifact | null = null;
       const url = new URL(ref, window.location.origin);
       if (url.pathname.startsWith('/api/v1/artifacts/')) {
-        path = `${url.pathname}${url.search}`;
+        artifact = {
+          id: url.pathname.split('/').pop() || 'artifact',
+          task_id: '',
+          channel_id: threadSource?.id ?? '',
+          kind: 'task_snapshot',
+          title: 'Artifact',
+          html_path: '',
+          url: `${url.pathname}${url.search}`,
+          created_by: '',
+          created_at: '',
+          updated_at: '',
+        };
       } else {
         const match = ref.match(/\/\.solo\/artifacts\/([^/\s]+)\/([^/\s]+\.html)/);
         if (match) {
           const [, taskId, filename] = match;
           const artifacts = await apiClient.get<TaskArtifact[] | null>(`/api/v1/tasks/${taskId}/artifacts`);
-          const artifact = (artifacts ?? []).find((item) => item.summary !== 'pending' && item.html_path.endsWith(`/${filename}`));
-          path = artifact?.url ?? '';
+          artifact = (artifacts ?? []).find((item) => item.summary !== 'pending' && item.html_path.endsWith(`/${filename}`)) ?? null;
         }
       }
-      if (!path) throw new Error('artifact not found');
-      const html = await apiClient.getText(path);
+      if (!artifact) throw new Error('artifact not found');
+      const html = await apiClient.getText(artifact.url);
       const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-      if (popup) {
-        popup.location.href = blobUrl;
-      } else {
-        window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      if (artifactPreviewUrlRef.current) {
+        URL.revokeObjectURL(artifactPreviewUrlRef.current);
       }
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      artifactPreviewUrlRef.current = blobUrl;
+      setArtifactPreview({ ...artifact, previewUrl: blobUrl });
     } catch {
-      popup?.close();
       showToast('Could not open artifact link.', 'error');
     }
-  }, [showToast]);
+  }, [showToast, threadSource?.id]);
+
+  useEffect(() => {
+    if (!artifactPreview) return;
+
+    const handleArtifactMessage = async (event: MessageEvent) => {
+      if (event.source !== artifactFrameRef.current?.contentWindow) return;
+      const data = event.data;
+      if (!data || typeof data !== 'object' || data.type !== 'artifact.reviewAction') return;
+      const taskId = typeof data.taskId === 'string' && data.taskId.trim() !== ''
+        ? data.taskId.trim()
+        : artifactPreview.task_id;
+      if (!taskId || (data.action !== 'accept' && data.action !== 'reject') || artifactReviewBusy) return;
+
+      const reason = typeof data.reason === 'string' ? data.reason.trim() : '';
+      if (data.action === 'reject' && reason === '') {
+        showToast('Reject comment is required.', 'error');
+        return;
+      }
+
+      setArtifactReviewBusy(true);
+      try {
+        const path = `/api/v1/tasks/${taskId}/${data.action === 'accept' ? 'accept' : 'reject'}`;
+        await apiClient.post(path, data.action === 'reject' ? { reason } : undefined);
+        closeArtifactPreview();
+        showToast(data.action === 'accept' ? 'Task accepted.' : 'Task rejected.', 'success');
+      } catch {
+        showToast(data.action === 'accept' ? 'Could not accept task.' : 'Could not reject task.', 'error');
+      } finally {
+        setArtifactReviewBusy(false);
+      }
+    };
+
+    window.addEventListener('message', handleArtifactMessage);
+    return () => window.removeEventListener('message', handleArtifactMessage);
+  }, [artifactPreview, artifactReviewBusy, closeArtifactPreview, showToast]);
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -307,6 +369,28 @@ export function InboxView() {
           </Suspense>
         )}
       </div>
+
+      {artifactPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inbox-artifact-preview-title"
+          className="fixed inset-4 z-50 flex flex-col border-4 border-black bg-white shadow-brutal-xl"
+        >
+          <div className="flex items-center justify-between border-b-4 border-black px-4 py-2">
+            <div id="inbox-artifact-preview-title" className="font-heading text-sm font-black uppercase">{artifactPreview.title}</div>
+            <button
+              type="button"
+              onClick={closeArtifactPreview}
+              className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
+              aria-label="Close artifact preview"
+            >
+              Close
+            </button>
+          </div>
+          <iframe ref={artifactFrameRef} title={artifactPreview.title} src={artifactPreview.previewUrl} className="min-h-0 flex-1 bg-white" />
+        </div>
+      )}
     </div>
   );
 }

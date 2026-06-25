@@ -653,6 +653,7 @@ export function DMView({
                 scrollToMessageId={scrollToMessageId}
                 scrollKey={scrollMsgKey}
                 members={members}
+                onOpenArtifactReference={handleOpenArtifactReference}
                 onAgentClick={openAgentDetail}
               />
             )}

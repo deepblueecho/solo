@@ -8,6 +8,7 @@
 
 'use client';
 
+import { Children } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -24,6 +25,7 @@ interface AgentMessageProps {
   /** Lowercased display_names that may receive highlight. Empty = no @mentions highlighted. */
   validNames?: string[];
   isHighlighted?: boolean;
+  onOpenArtifactReference?: (ref: string) => void;
   onAgentClick?: (agent: AgentDetailTarget) => void;
 }
 
@@ -54,13 +56,49 @@ function CodeBlock({
 
 /** Wrap @mentions and #task-numbers in HTML spans, protecting code fences */
 
-export function AgentMessage({ message, onReply, validNames = [], isHighlighted, onAgentClick }: AgentMessageProps) {
+function getArtifactReference(value?: string): string | null {
+  if (!value) return null;
+  const text = value.trim();
+  if (/\/api\/v1\/artifacts\/[0-9a-f-]+/i.test(text)) return text;
+  if (/\/\.solo\/artifacts\/[0-9a-f-]+\/[^/\s]+\.html/i.test(text)) return text;
+  return null;
+}
+
+const artifactReferencePattern = /(https?:\/\/[^\s)]+\/api\/v1\/artifacts\/[0-9a-f-]+(?:\?[^\s)]*)?|\/[^\s)]+\/\.solo\/artifacts\/[0-9a-f-]+\/[^\s)]+\.html)/gi;
+
+export function AgentMessage({ message, onReply, validNames = [], isHighlighted, onOpenArtifactReference, onAgentClick }: AgentMessageProps) {
   const time = new Date(message.created_at).toLocaleString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
   });
 
   const hasUnreadThread = message.has_unread_thread === true && (message.reply_count ?? 0) > 0;
+  const openArtifact = (reference: string) => {
+    onOpenArtifactReference?.(reference);
+  };
+  const renderChildren = (children?: React.ReactNode) => (
+    Children.map(children, (child) => {
+      if (typeof child !== 'string') return child;
+      const parts = child.split(artifactReferencePattern);
+      return parts.map((part, index) => {
+        const artifactRef = getArtifactReference(part);
+        if (!artifactRef) return part;
+        return (
+          <button
+            key={`${part}-${index}`}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openArtifact(artifactRef);
+            }}
+            className="inline border-0 bg-transparent p-0 font-bold text-brutal-info underline decoration-2 underline-offset-2 hover:text-brutal-primary"
+          >
+            {part}
+          </button>
+        );
+      });
+    })
+  );
 
   return (
     <div
@@ -109,7 +147,7 @@ export function AgentMessage({ message, onReply, validNames = [], isHighlighted,
               p({ children }) {
                 return (
                   <p className="my-1 whitespace-pre-wrap break-words">
-                    {children}
+                    {renderChildren(children)}
                   </p>
                 );
               },
@@ -128,7 +166,7 @@ export function AgentMessage({ message, onReply, validNames = [], isHighlighted,
                 );
               },
               li({ children }) {
-                return <li className="leading-relaxed">{children}</li>;
+                return <li className="leading-relaxed">{renderChildren(children)}</li>;
               },
               strong({ children }) {
                 return (
@@ -138,6 +176,21 @@ export function AgentMessage({ message, onReply, validNames = [], isHighlighted,
                 );
               },
               a({ href, children }) {
+                const artifactRef = getArtifactReference(href);
+                if (artifactRef) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openArtifact(artifactRef);
+                      }}
+                      className="inline border-0 bg-transparent p-0 font-bold text-brutal-info underline decoration-2 underline-offset-2 hover:text-brutal-primary"
+                    >
+                      {children}
+                    </button>
+                  );
+                }
                 return (
                   <a
                     href={href}
@@ -159,6 +212,23 @@ export function AgentMessage({ message, onReply, validNames = [], isHighlighted,
               code({ className, children, ...props }) {
                 const isInline = !className;
                 if (isInline) {
+                  const artifactRef = getArtifactReference(String(children ?? ''));
+                  if (artifactRef) {
+                    return (
+                      <code className="inline-code-brutal">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openArtifact(artifactRef);
+                          }}
+                          className="text-brutal-info underline decoration-2 underline-offset-2 hover:text-brutal-primary"
+                        >
+                          {children}
+                        </button>
+                      </code>
+                    );
+                  }
                   return (
                     <code className="inline-code-brutal">
                       {children}

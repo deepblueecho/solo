@@ -785,6 +785,7 @@ export function ChannelView({
               scrollToMessageId={scrollToMessageId}
               scrollKey={scrollMsgKey}
               members={members}
+              onOpenArtifactReference={handleOpenArtifactReference}
               onAgentClick={openAgentDetail}
             />
             <MessageInput
