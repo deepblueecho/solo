@@ -34,6 +34,7 @@ interface TaskResponse {
   parent_task_id?: string | null;
   subtask_count?: number;
   done_subtask_count?: number;
+  artifact_status?: 'none' | 'pending' | 'available';
   created_at: string;
   updated_at: string;
 }
@@ -59,6 +60,7 @@ function mapTask(resp: TaskResponse): Task {
     parent_task_id: resp.parent_task_id ?? undefined,
     subtask_count: resp.subtask_count,
     done_subtask_count: resp.done_subtask_count,
+    artifact_status: resp.artifact_status,
     due_date: resp.due_date || undefined,
     created_at: resp.created_at,
     updated_at: resp.updated_at,
@@ -152,6 +154,7 @@ export function useTasks(filters?: TaskFilters) {
             parent_task_id: (event as { parent_task_id?: string }).parent_task_id ?? null,
             subtask_count: (event as { subtask_count?: number }).subtask_count ?? 0,
             done_subtask_count: (event as { done_subtask_count?: number }).done_subtask_count ?? 0,
+            artifact_status: (event as { artifact_status?: 'none' | 'pending' | 'available' }).artifact_status,
             created_at: event.created_at,
             updated_at: event.updated_at,
           }), ...prev];
@@ -177,10 +180,11 @@ export function useTasks(filters?: TaskFilters) {
           if (event.priority !== undefined) updated.priority = event.priority as Task['priority'];
           if (event.due_date !== undefined) updated.due_date = event.due_date || undefined;
           if (event.message_id !== undefined) updated.message_id = event.message_id || undefined;
-          const evt = event as { parent_task_id?: string; subtask_count?: number; done_subtask_count?: number };
+          const evt = event as { parent_task_id?: string; subtask_count?: number; done_subtask_count?: number; artifact_status?: 'none' | 'pending' | 'available' };
           if (evt.parent_task_id !== undefined) updated.parent_task_id = evt.parent_task_id || undefined;
           if (evt.subtask_count !== undefined) updated.subtask_count = evt.subtask_count;
           if (evt.done_subtask_count !== undefined) updated.done_subtask_count = evt.done_subtask_count;
+          if (evt.artifact_status !== undefined) updated.artifact_status = evt.artifact_status;
           updated.updated_at = event.updated_at;
 
           // If status filter is active and the updated task no longer matches, remove it
@@ -293,6 +297,7 @@ interface DMTaskResponse {
   priority: string;
   due_date: string | null;
   message_id: string;
+  artifact_status?: 'none' | 'pending' | 'available';
   created_at: string;
   updated_at: string;
 }
@@ -313,6 +318,7 @@ function mapDMTask(resp: DMTaskResponse): Task {
     creator_name: resp.creator_name || undefined,
     message_id: resp.message_id || undefined,
     reply_count: (resp as DMTaskResponse & { reply_count?: number }).reply_count,
+    artifact_status: resp.artifact_status,
     due_date: resp.due_date || undefined,
     created_at: resp.created_at,
     updated_at: resp.updated_at,
@@ -386,6 +392,7 @@ export function useDMTasks(dmId: string | null) {
             priority: event.priority ?? 'normal',
             due_date: event.due_date ?? '',
             message_id: event.message_id ?? '',
+            artifact_status: (event as { artifact_status?: 'none' | 'pending' | 'available' }).artifact_status,
             created_at: event.created_at,
             updated_at: event.updated_at,
           }), ...prev];
@@ -415,6 +422,9 @@ export function useDMTasks(dmId: string | null) {
           if (event.priority !== undefined) updated.priority = event.priority as Task['priority'];
           if (event.due_date !== undefined) updated.due_date = event.due_date || undefined;
           if (event.message_id !== undefined) updated.message_id = event.message_id || undefined;
+          if ((event as { artifact_status?: 'none' | 'pending' | 'available' }).artifact_status !== undefined) {
+            updated.artifact_status = (event as { artifact_status?: 'none' | 'pending' | 'available' }).artifact_status;
+          }
           updated.updated_at = event.updated_at;
           return prev.map((t) => (t.id === event.id ? updated : t));
         });

@@ -5,6 +5,7 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { t } from '@/lib/i18n';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -47,7 +48,7 @@ export function Dialog({ open, onOpenChange, children, width = 'md' }: DialogPro
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
       onClick={(e) => {
@@ -71,7 +72,8 @@ export function Dialog({ open, onOpenChange, children, width = 'md' }: DialogPro
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

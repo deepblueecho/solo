@@ -8,13 +8,12 @@
 
 'use client';
 
-import { Decoration } from '@/components/ui/decoration';
-
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Clock, ChevronRight, ChevronDown } from 'lucide-react';
+import { Clock, ChevronRight, ChevronDown, FileText } from 'lucide-react';
 import type { Task, TaskStatus } from '@/lib/types';
 import { t } from '@/lib/i18n';
+import { getTaskArtifactAction, taskArtifactActionLabel } from '@/lib/utils/task-artifact';
 import { TaskActionButtons } from './task-action-buttons';
 
 // ---- Status display config ----
@@ -101,6 +100,8 @@ interface TaskCardProps {
   parentTaskNumber?: number;
   onParentClick?: (taskId: string) => void;
   onActionComplete?: (task: Task) => void;
+  onGenerateArtifact?: (task: Task) => void;
+  isArtifactGenerating?: boolean;
 }
 
 function TaskCard({
@@ -110,12 +111,12 @@ function TaskCard({
   parentTaskNumber,
   onParentClick,
   onActionComplete,
+  onGenerateArtifact,
+  isArtifactGenerating,
 }: TaskCardProps) {
   const [subtasksOpen, setSubtasksOpen] = useState(true);
-  const statusConf = STATUS_COLUMN_CONFIG[task.status];
   const taskNum = task.task_number ? `#${task.task_number}` : null;
   const isClaimed = !!task.claimer_id;
-  const isTerminal = task.status === 'done' || task.status === 'closed';
   const hasSubtasks = childTasks.length > 0 || (task.subtask_count ?? 0) > 0;
   const isChild = !!task.parent_task_id;
 
@@ -126,6 +127,7 @@ function TaskCard({
   const claimerDeletedSuffix = task.claimer_deleted ? ' (Deleted)' : '';
 
   const lastActivity = task.updated_at || task.created_at;
+  const artifactAction = getTaskArtifactAction(task, isArtifactGenerating);
 
   return (
     <div
@@ -139,7 +141,7 @@ function TaskCard({
         }
       }}
       className={cn(
-        'card-brutal w-full cursor-pointer text-left',
+        'group card-brutal w-full cursor-pointer text-left',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brutal-primary focus-visible:ring-offset-2',
       )}
       style={{
@@ -151,28 +153,6 @@ function TaskCard({
       }}
     >
       <div className="p-3 relative">
-        {/* v3.3: status-driven sticker in the card corner. done gets a
-            green check, in_progress a pulsing zap, etc. — gives the
-            kanban a tactile "stamped on the card" feel. */}
-        {task.status === 'done' && (
-          <Decoration
-            shape="star"
-            color="success"
-            size="sm"
-            rotation={12}
-            className="absolute -top-2 -right-2 z-10"
-          />
-        )}
-        {task.status === 'in_progress' && (
-          <Decoration
-            shape="zap"
-            color="info"
-            size="sm"
-            animation="pulse"
-            rotation={-8}
-            className="absolute -top-2 -right-2 z-10"
-          />
-        )}
         {/* Task number */}
         {taskNum && (
           <span className="mb-1 block font-mono text-[11px] font-medium text-muted-foreground">
@@ -216,46 +196,22 @@ function TaskCard({
           </div>
         )}
 
-        <span
-          className={cn(
-            'badge-brutal inline-flex items-center gap-0.5',
-            statusConf.bgClass,
-            statusConf.textClass,
-          )}
-          aria-label={statusConf.label}
-        >
-          {statusConf.label}
-        </span>
-
-        {/* Terminal state marker */}
-        {isTerminal ? (
-          <div className="mt-2">
-            <span className="font-mono text-[11px] font-bold text-muted-foreground">
-              {task.status === 'done' ? `✓ ${t('statusDone')}` : `✕ ${t('statusCancelled')}`}
-            </span>
-          </div>
-        ) : (
-          /* Claimer info — display only, no claim/unclaim buttons */
-          <div className="mt-2 flex items-center gap-2">
-            {isClaimed ? (
-              <>
-                <span className="flex h-5 w-5 items-center justify-center border-2 border-black bg-brutal-success font-heading text-[10px] font-bold text-black">
-                  {(claimerDisplay || '?').charAt(0).toUpperCase()}
-                </span>
-                <span className="flex-1 truncate font-body text-[11px] text-foreground font-medium">
-                  {claimerDisplay}{claimerDeletedSuffix}
-                </span>
-                <span className="flex-shrink-0 badge-brutal bg-brutal-success text-black text-[10px]">
-                  {t('claimed')}
-                </span>
-              </>
-            ) : (
-              <span className="font-body text-[11px] text-muted-foreground">
-                {t('unclaimed')}
+        <div className="mt-2 flex items-center gap-2">
+          {isClaimed ? (
+            <>
+              <span className="flex h-5 w-5 items-center justify-center border-2 border-black bg-brutal-success font-heading text-[10px] font-bold text-black">
+                {(claimerDisplay || '?').charAt(0).toUpperCase()}
               </span>
-            )}
-          </div>
-        )}
+              <span className="min-w-0 flex-1 truncate font-body text-[11px] font-medium text-foreground">
+                {claimerDisplay}{claimerDeletedSuffix}
+              </span>
+            </>
+          ) : (
+            <span className="font-body text-[11px] text-muted-foreground">
+              {t('unclaimed')}
+            </span>
+          )}
+        </div>
 
         <TaskActionButtons task={task} onActionComplete={onActionComplete} />
 
@@ -318,9 +274,32 @@ function TaskCard({
         )}
 
         {/* Footer: last activity */}
-        <div className="mt-2 flex items-center text-[11px] text-muted-foreground">
-          <Clock className="mr-1 h-3 w-3" />
-          {formatRelativeTime(lastActivity)}
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          {onGenerateArtifact && artifactAction !== 'hidden' && (
+            <button
+              type="button"
+              disabled={artifactAction === 'pending'}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (artifactAction === 'pending') return;
+                onGenerateArtifact(task);
+              }}
+              className={cn(
+                'inline-flex items-center gap-1 border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm transition-all duration-100 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:pointer-events-none disabled:opacity-80 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-brutal-sm',
+                artifactAction === 'generate' && 'bg-brutal-success text-black',
+                artifactAction === 'pending' && 'bg-brutal-muted text-black',
+                artifactAction === 'read' && 'bg-brutal-primary text-black',
+              )}
+              aria-label={`Generate artifact for ${task.title}`}
+            >
+              <FileText className="h-3 w-3" />
+              {taskArtifactActionLabel(artifactAction)}
+            </button>
+          )}
+          <span className="flex items-center">
+            <Clock className="mr-1 h-3 w-3" />
+            {formatRelativeTime(lastActivity)}
+          </span>
         </div>
       </div>
     </div>
@@ -361,6 +340,8 @@ interface TaskColumnProps {
   onParentClick?: (taskId: string) => void;
   childrenByParent?: Map<string, Task[]>;
   onActionComplete?: (task: Task) => void;
+  onGenerateArtifact?: (task: Task) => void;
+  isArtifactGenerating?: (task: Task) => boolean;
 }
 
 // ---- Component ----
@@ -374,6 +355,8 @@ export function TaskColumn({
   onParentClick,
   childrenByParent,
   onActionComplete,
+  onGenerateArtifact,
+  isArtifactGenerating,
 }: TaskColumnProps) {
   const label = COLUMN_HEADERS[status];
   const count = tasks.length;
@@ -411,6 +394,8 @@ export function TaskColumn({
             parentTaskNumber={task.parent_task_id ? parentTaskMap?.get(task.parent_task_id) : undefined}
             onParentClick={onParentClick}
             onActionComplete={onActionComplete}
+            onGenerateArtifact={onGenerateArtifact}
+            isArtifactGenerating={isArtifactGenerating?.(task)}
           />
         ))}
 

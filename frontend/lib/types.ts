@@ -200,7 +200,23 @@ export interface Task {
   subtask_count?: number;
   /** 已完成的子任务数 (父任务，后端聚合) */
   done_subtask_count?: number;
+  /** Artifact 状态：none / pending / available */
+  artifact_status?: 'none' | 'pending' | 'available';
   due_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskArtifact {
+  id: string;
+  task_id: string;
+  channel_id: string;
+  kind: string;
+  title: string;
+  html_path: string;
+  url: string;
+  summary?: string;
+  created_by: string;
   created_at: string;
   updated_at: string;
 }

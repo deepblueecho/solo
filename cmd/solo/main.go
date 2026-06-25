@@ -16,6 +16,7 @@
 //	solo task reject   -n <number> -c <channel_id> --reason <reason>
 //	solo task close    -n <number> -c <channel_id>
 //	solo task reopen   -n <number> -c <channel_id>
+//	solo artifact publish --task <task_id> --file <artifact.html> [--mode latest|final]
 //	solo channel members -c <channel_id> [--output json]
 //	solo channel join  --target <#channel-name>
 //	solo thread unfollow --target <#channel:shortid>
@@ -92,6 +93,8 @@ func runCLI(args []string) int {
 		handleMessage(args[1:], baseURL, token)
 	case "channel":
 		handleChannel(args[1:], baseURL, token)
+	case "artifact":
+		handleArtifact(args[1:], baseURL, token)
 	case "server":
 		handleServer(args[1:], baseURL, token)
 	case "thread":
@@ -103,6 +106,65 @@ func runCLI(args []string) int {
 	}
 	// Handlers call doExit internally; this return is a safety net.
 	return exitOK
+}
+
+// ---------------------------------------------------------------------------
+// artifact
+// ---------------------------------------------------------------------------
+
+func handleArtifact(args []string, baseURL, token string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "solo: error: artifact subcommand required (publish)")
+		printUsage()
+		doExit(exitUsage)
+	}
+	switch args[0] {
+	case "publish":
+		handleArtifactPublish(args[1:], baseURL, token)
+	default:
+		fmt.Fprintf(os.Stderr, "solo: error: unknown artifact subcommand %q\n", args[0])
+		printUsage()
+		doExit(exitUsage)
+	}
+}
+
+func handleArtifactPublish(args []string, baseURL, token string) {
+	var taskID, filePath, mode string
+	fs := flag.NewFlagSet("artifact publish", flag.ExitOnError)
+	fs.StringVar(&taskID, "task", "", "Task ID")
+	fs.StringVar(&filePath, "file", "", "HTML file to publish")
+	fs.StringVar(&mode, "mode", "latest", "Artifact mode: latest|final")
+	fs.Parse(args)
+
+	if taskID == "" || filePath == "" {
+		fmt.Fprintln(os.Stderr, "solo: error: --task and --file are required")
+		doExit(exitUsage)
+	}
+	if mode != "latest" && mode != "final" {
+		fmt.Fprintf(os.Stderr, "solo: error: invalid --mode value %q (use latest or final)\n", mode)
+		doExit(exitUsage)
+	}
+	htmlBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "solo: error: read artifact file: %v\n", err)
+		doExit(exitUsage)
+	}
+	reqBody, _ := json.Marshal(map[string]string{
+		"mode": mode,
+		"html": string(htmlBytes),
+	})
+	url := fmt.Sprintf("%s/api/v1/tasks/%s/artifact/publish", baseURL, url.PathEscape(taskID))
+	statusCode, body, err := doHTTP(http.MethodPost, url, token, reqBody)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "solo: error: %v\n", err)
+		doExit(exitUsage)
+	}
+	if statusCode < 200 || statusCode >= 300 {
+		fmt.Fprintf(os.Stderr, "solo: error: publish artifact failed (HTTP %d): %s\n", statusCode, string(body))
+		doExit(exitBusiness)
+	}
+	fmt.Println(string(body))
+	doExit(exitOK)
 }
 
 // ---------------------------------------------------------------------------
@@ -1210,6 +1272,7 @@ func printUsage() {
   solo task reject   -n <number> -c <channel_id> --reason <reason>
   solo task close    -n <number> -c <channel_id>
   solo task reopen   -n <number> -c <channel_id>
+  solo artifact publish --task <task_id> --file <artifact.html> [--mode latest|final]
   solo channel members -c <channel_id> [--output json]
   solo channel join  --target <#channel-name>
   solo thread unfollow --target <#channel:shortid>

@@ -1,11 +1,20 @@
 'use client';
 
-import { Check, RotateCcw, XCircle } from 'lucide-react';
+import { Check, RotateCcw, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/components/ui/toast';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogCloseButton,
+} from '@/components/ui/dialog';
 import type { Task } from '@/lib/types';
 
 type TaskAction = 'accept' | 'reject' | 'close' | 'reopen';
@@ -21,6 +30,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
   const [busy, setBusy] = useState<TaskAction | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   const isCreator = !!user?.id && task.creator_id === user.id;
   const disabled = busy !== null;
@@ -31,6 +41,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
       const updated = await apiClient.post<Task>(`/api/v1/tasks/${task.id}/${action}`, body);
       showToast(`Task ${action} succeeded`, 'success');
       onActionComplete?.(updated);
+      if (action === 'close') setConfirmingClose(false);
       setRejecting(false);
       setReason('');
     } catch {
@@ -42,9 +53,10 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
 
   if (task.status === 'in_review') {
     return (
-      <div className="mt-2 space-y-2">
+      <>
+        <CloseHoverButton disabled={disabled} onClick={() => setConfirmingClose(true)} />
         {isCreator && (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <ActionButton disabled={disabled} onClick={() => run('accept')} tone="success">
               <Check className="h-3 w-3" />
               Accept
@@ -56,7 +68,7 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
           </div>
         )}
         {rejecting && (
-          <div className="space-y-1">
+          <div className="mt-2 space-y-1">
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -74,11 +86,14 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
             </ActionButton>
           </div>
         )}
-        <ActionButton disabled={disabled} onClick={() => run('close')} tone="muted">
-          <XCircle className="h-3 w-3" />
-          Close
-        </ActionButton>
-      </div>
+        <CloseTaskDialog
+          open={confirmingClose}
+          disabled={disabled}
+          taskTitle={task.title}
+          onOpenChange={setConfirmingClose}
+          onConfirm={() => run('close')}
+        />
+      </>
     );
   }
 
@@ -95,12 +110,69 @@ export function TaskActionButtons({ task, onActionComplete }: TaskActionButtonsP
   }
 
   return (
-    <div className="mt-2">
-      <ActionButton disabled={disabled} onClick={() => run('close')} tone="muted">
-        <XCircle className="h-3 w-3" />
-        Close
-      </ActionButton>
+    <>
+      <CloseHoverButton disabled={disabled} onClick={() => setConfirmingClose(true)} />
+      <CloseTaskDialog
+        open={confirmingClose}
+        disabled={disabled}
+        taskTitle={task.title}
+        onOpenChange={setConfirmingClose}
+        onConfirm={() => run('close')}
+      />
+    </>
+  );
+}
+
+function CloseTaskDialog({
+  open,
+  disabled,
+  taskTitle,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  disabled?: boolean;
+  taskTitle: string;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogHeader>
+          <DialogTitle>Close Task</DialogTitle>
+          <DialogCloseButton onClick={() => onOpenChange(false)} />
+        </DialogHeader>
+        <DialogDescription>
+          Are you sure you want to close <strong>{taskTitle}</strong>? This will move it out of active work.
+        </DialogDescription>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={disabled}>
+            Cancel
+          </Button>
+          <Button type="button" variant="danger" onClick={onConfirm} disabled={disabled}>
+            {disabled ? 'Closing...' : 'Close Task'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
+  );
+}
+
+function CloseHoverButton({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-label="Close task"
+      className="absolute right-2 top-2 z-20 inline-flex h-6 w-6 items-center justify-center border-2 border-black bg-white p-0 text-black opacity-0 shadow-brutal-sm transition-all duration-100 hover:-translate-y-px hover:bg-brutal-danger hover:shadow-brutal focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brutal-danger focus-visible:ring-offset-2 group-hover:opacity-100 disabled:cursor-not-allowed disabled:grayscale disabled:opacity-50"
+    >
+      <X className="h-3.5 w-3.5" />
+    </button>
   );
 }
 

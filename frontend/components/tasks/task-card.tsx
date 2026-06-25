@@ -8,21 +8,22 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Calendar, User, ChevronRight } from 'lucide-react';
+import { Calendar, User, ChevronRight, FileText } from 'lucide-react';
 import type { Task, TaskStatus, TaskPriority } from '@/lib/types';
 import { t } from '@/lib/i18n';
+import { getTaskArtifactAction, taskArtifactActionLabel } from '@/lib/utils/task-artifact';
 
 // ---- Status display config ----
 // v3.3: shadowClass powers hover color-coded shadow (status as visual info).
 // Static card keeps the neutral 12px black shadow; hover swaps to a tinted
 // 12px shadow in the status color so the list reads like a temperature gauge.
 
-const STATUS_CONFIG: Record<TaskStatus, { label: string; bgClass: string; shadowClass: string }> = {
-  todo: { label: 'TODO', bgClass: 'bg-brutal-warning text-black', shadowClass: 'hover:shadow-brutal-warning' },
-  in_progress: { label: 'IN PROGRESS', bgClass: 'bg-brutal-info text-black', shadowClass: 'hover:shadow-brutal-info' },
-  in_review: { label: 'IN REVIEW', bgClass: 'bg-brutal-violet text-black', shadowClass: 'hover:shadow-brutal-violet' },
-  done: { label: 'DONE', bgClass: 'bg-brutal-success text-black', shadowClass: 'hover:shadow-brutal-success' },
-  closed: { label: 'CLOSED', bgClass: 'bg-brutal-muted text-black', shadowClass: 'hover:shadow-brutal-accent' },
+const STATUS_CONFIG: Record<TaskStatus, { shadowClass: string }> = {
+  todo: { shadowClass: 'hover:shadow-brutal-warning' },
+  in_progress: { shadowClass: 'hover:shadow-brutal-info' },
+  in_review: { shadowClass: 'hover:shadow-brutal-violet' },
+  done: { shadowClass: 'hover:shadow-brutal-success' },
+  closed: { shadowClass: 'hover:shadow-brutal-accent' },
 };
 
 const PRIORITY_CONFIG: Record<TaskPriority, { label: string; bgClass: string }> = {
@@ -56,15 +57,18 @@ interface TaskCardProps {
   parentTaskNumber?: number;
   /** Called when the parent badge is clicked */
   onParentClick?: (taskId: string) => void;
+  onGenerateArtifact?: (task: Task) => void;
+  isArtifactGenerating?: boolean;
 }
 
 // ---- Component ----
 
-export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, onParentClick }: TaskCardProps) {
+export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, onParentClick, onGenerateArtifact, isArtifactGenerating }: TaskCardProps) {
   const statusConf = STATUS_CONFIG[task.status] || STATUS_CONFIG.todo;
   const priorityConf = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.normal;
   const hasSubtasks = (task.subtask_count ?? 0) > 0;
   const isChild = !!task.parent_task_id;
+  const artifactAction = getTaskArtifactAction(task, isArtifactGenerating);
 
   return (
     <div
@@ -72,6 +76,7 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
       tabIndex={0}
       onClick={() => onClick?.(task)}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick?.(task);
@@ -88,11 +93,8 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
       )}
     >
       <div className="p-4">
-        {/* Top row: status + priority badges */}
+        {/* Top row: priority badge */}
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span className={cn('badge-brutal', statusConf.bgClass)}>
-            {statusConf.label}
-          </span>
           <span className={cn('badge-brutal', priorityConf.bgClass)}>
             {priorityConf.label}
           </span>
@@ -159,6 +161,31 @@ export function TaskCard({ task, onClick, showChannel = true, parentTaskNumber, 
 
         {/* Bottom row: assignee + channel + due date */}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {onGenerateArtifact && artifactAction !== 'hidden' && (
+            <button
+              type="button"
+              disabled={artifactAction === 'pending'}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (artifactAction === 'pending') return;
+                onGenerateArtifact(task);
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+              }}
+              className={cn(
+                'inline-flex items-center gap-1 border-2 border-black px-2 py-1 font-mono text-[10px] font-bold uppercase shadow-brutal-sm transition-all duration-100 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:pointer-events-none disabled:opacity-80 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-brutal-sm',
+                artifactAction === 'generate' && 'bg-brutal-success text-black',
+                artifactAction === 'pending' && 'bg-brutal-muted text-black',
+                artifactAction === 'read' && 'bg-brutal-primary text-black',
+              )}
+              aria-label={`Generate artifact for ${task.title}`}
+            >
+              <FileText className="h-3 w-3" />
+              {taskArtifactActionLabel(artifactAction)}
+            </button>
+          )}
+
           {task.assignee_name && (
             <span className="flex items-center gap-1">
               <User className="h-3 w-3" />

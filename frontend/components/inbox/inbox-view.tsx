@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, InboxIcon, Mail } from 'lucide-react';
 import { useInbox } from '@/lib/hooks/use-inbox';
@@ -9,13 +9,16 @@ import { InboxItem } from './inbox-item';
 import { Button } from '@/components/ui/button';
 import { TabBar } from '@/components/ui/tab-bar';
 import { apiClient } from '@/lib/api-client';
+import { useToast } from '@/components/ui/toast';
 import type { TabBarTab } from '@/components/ui/tab-bar';
-import type { InboxItem as InboxItemType, Message } from '@/lib/types';
+import type { InboxItem as InboxItemType, Message, TaskArtifact } from '@/lib/types';
 import { t } from '@/lib/i18n';
 
 const ThreadPanel = lazy(() =>
   import('@/components/dashboard/thread-panel').then((m) => ({ default: m.ThreadPanel })),
 );
+
+type ArtifactPreview = TaskArtifact & { previewUrl: string };
 
 const INBOX_TABS: TabBarTab[] = [
   { key: 'all', label: t('inboxTabAll') },
@@ -46,6 +49,7 @@ async function resolveThreadTaskNumber(source: { type: 'channel' | 'dm'; id: str
 
 export function InboxView() {
   const router = useRouter();
+  const { showToast } = useToast();
   const { items, hasMore, isLoading, isLoadingMore, loadMore, markRead, markAllRead, clearAll, typeFilter, setTypeFilter, senderFilter, setSenderFilter } = useInbox();
   useInboxUnread();
 
@@ -63,6 +67,24 @@ export function InboxView() {
   const [threadTargetMessageId, setThreadTargetMessageId] = useState<string | undefined>(undefined);
   const [threadSource, setThreadSource] = useState<{ type: 'channel' | 'dm'; id: string } | null>(null);
   const [threadPanelWidth, setThreadPanelWidth] = useState(400);
+  const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
+  const [artifactReviewBusy, setArtifactReviewBusy] = useState(false);
+  const artifactFrameRef = useRef<HTMLIFrameElement>(null);
+  const artifactPreviewUrlRef = useRef<string | null>(null);
+
+  const closeArtifactPreview = useCallback(() => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      artifactPreviewUrlRef.current = null;
+    }
+    setArtifactPreview(null);
+  }, []);
+
+  useEffect(() => () => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+    }
+  }, []);
 
   const handleItemClick = useCallback(
     async (item: InboxItemType) => {
@@ -128,6 +150,68 @@ export function InboxView() {
     const task = taskNumber ? `&task=${taskNumber}` : '';
     router.push(`/dashboard?${key}=${threadSource.id}&tab=tasks${task}&thread=${threadMessage.id}`);
   }, [router, threadMessage, threadSource]);
+
+  const handleOpenArtifactReference = useCallback(async (ref: string) => {
+    try {
+      let artifact: TaskArtifact | null = null;
+      const url = new URL(ref, window.location.origin);
+      if (url.pathname.startsWith('/api/v1/artifacts/')) {
+        artifact = await apiClient.get<TaskArtifact>(`${url.pathname.replace(/\/meta$/, '')}/meta`);
+      } else {
+        const match = ref.match(/\/\.solo\/artifacts\/([^/\s]+)\/([^/\s]+\.html)/);
+        if (match) {
+          const [, taskId, filename] = match;
+          const artifacts = await apiClient.get<TaskArtifact[] | null>(`/api/v1/tasks/${taskId}/artifacts`);
+          artifact = (artifacts ?? []).find((item) => item.summary !== 'pending' && item.html_path.endsWith(`/${filename}`)) ?? null;
+        }
+      }
+      if (!artifact) throw new Error('artifact not found');
+      const html = await apiClient.getText(artifact.url);
+      const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      if (artifactPreviewUrlRef.current) {
+        URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      }
+      artifactPreviewUrlRef.current = blobUrl;
+      setArtifactPreview({ ...artifact, previewUrl: blobUrl });
+    } catch {
+      showToast('Could not open artifact link.', 'error');
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (!artifactPreview) return;
+
+    const handleArtifactMessage = async (event: MessageEvent) => {
+      if (event.source !== artifactFrameRef.current?.contentWindow) return;
+      const data = event.data;
+      if (!data || typeof data !== 'object' || data.type !== 'artifact.reviewAction') return;
+      const taskId = typeof data.taskId === 'string' && data.taskId.trim() !== ''
+        ? data.taskId.trim()
+        : artifactPreview.task_id;
+      if (!taskId || (data.action !== 'accept' && data.action !== 'reject') || artifactReviewBusy) return;
+
+      const reason = typeof data.reason === 'string' ? data.reason.trim() : '';
+      if (data.action === 'reject' && reason === '') {
+        showToast('Reject comment is required.', 'error');
+        return;
+      }
+
+      setArtifactReviewBusy(true);
+      try {
+        const path = `/api/v1/tasks/${taskId}/${data.action === 'accept' ? 'accept' : 'reject'}`;
+        await apiClient.post(path, data.action === 'reject' ? { reason } : undefined);
+        closeArtifactPreview();
+        showToast(data.action === 'accept' ? 'Task accepted.' : 'Task rejected.', 'success');
+      } catch {
+        showToast(data.action === 'accept' ? 'Could not accept task.' : 'Could not reject task.', 'error');
+      } finally {
+        setArtifactReviewBusy(false);
+      }
+    };
+
+    window.addEventListener('message', handleArtifactMessage);
+    return () => window.removeEventListener('message', handleArtifactMessage);
+  }, [artifactPreview, artifactReviewBusy, closeArtifactPreview, showToast]);
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -269,10 +353,33 @@ export function InboxView() {
               onViewInChannel={handleViewThreadInSource}
               onViewTask={handleViewTaskInSource}
               showViewTask
+              onOpenArtifactReference={handleOpenArtifactReference}
             />
           </Suspense>
         )}
       </div>
+
+      {artifactPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inbox-artifact-preview-title"
+          className="fixed inset-4 z-50 flex flex-col border-4 border-black bg-white shadow-brutal-xl"
+        >
+          <div className="flex items-center justify-between border-b-4 border-black px-4 py-2">
+            <div id="inbox-artifact-preview-title" className="font-heading text-sm font-black uppercase">{artifactPreview.title}</div>
+            <button
+              type="button"
+              onClick={closeArtifactPreview}
+              className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
+              aria-label="Close artifact preview"
+            >
+              Close
+            </button>
+          </div>
+          <iframe ref={artifactFrameRef} title={artifactPreview.title} src={artifactPreview.previewUrl} className="min-h-0 flex-1 bg-white" />
+        </div>
+      )}
     </div>
   );
 }

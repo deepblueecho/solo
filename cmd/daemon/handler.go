@@ -20,8 +20,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/solo-ai/solo/pkg/agent"
 	"github.com/solo-ai/solo/internal/auth"
+	"github.com/solo-ai/solo/pkg/agent"
 	"github.com/solo-ai/solo/pkg/llm"
 	"github.com/solo-ai/solo/pkg/skillloader"
 )
@@ -169,7 +169,9 @@ func tokenDir() string {
 func (h *daemonHandler) saveTokenToDisk(agentID, token string, _ time.Time) {
 	dir := filepath.Join(tokenDir(), agentID)
 	os.MkdirAll(dir, 0700)
-	if err := os.WriteFile(filepath.Join(dir, "current.token"), []byte(token), 0600); err != nil { slog.Warn("daemon: failed to persist agent token", "agent_id", agentID, "error", err) }
+	if err := os.WriteFile(filepath.Join(dir, "current.token"), []byte(token), 0600); err != nil {
+		slog.Warn("daemon: failed to persist agent token", "agent_id", agentID, "error", err)
+	}
 }
 
 // loadTokenFromDisk reads a persisted token. Returns nil if not found.
@@ -237,7 +239,6 @@ func (h *daemonHandler) fetchChannelAgentWorkspaces(ctx context.Context, channel
 	return result, rows.Err()
 }
 
-
 // holdAndRevise injects pending messages into the agent session so it can
 // revise its draft based on the latest context. Returns the revised content.
 func (h *daemonHandler) holdAndRevise(ctx context.Context, req runTaskRequest, draftContent string, pending []agent.Message) (string, bool) {
@@ -260,7 +261,12 @@ func (h *daemonHandler) holdAndRevise(ctx context.Context, req runTaskRequest, d
 		{Role: agent.RoleUser, Content: revBuilder.String()},
 	}
 
-	sm := h.getSessionManager(req.ModelConfig.Provider); if sm == nil { slog.Warn("task: holdAndRevise: no session manager", "provider", req.ModelConfig.Provider); return draftContent, false }; ps, err := sm.DeliverMessage(ctx, req.AgentID, pendingMsgs)
+	sm := h.getSessionManager(req.ModelConfig.Provider)
+	if sm == nil {
+		slog.Warn("task: holdAndRevise: no session manager", "provider", req.ModelConfig.Provider)
+		return draftContent, false
+	}
+	ps, err := sm.DeliverMessage(ctx, req.AgentID, pendingMsgs)
 	if err != nil {
 		slog.Warn("task: holdAndRevise failed to deliver", "agent_id", req.AgentID, "error", err)
 		return draftContent, false
@@ -285,7 +291,6 @@ func (h *daemonHandler) holdAndRevise(ctx context.Context, req runTaskRequest, d
 	return finalText, true
 }
 
-
 // ProxyRequest handles POST /internal/daemon/proxy
 // Agents call this local endpoint instead of hitting the server API directly.
 // The daemon adds auth and forwards the request to the server. This keeps
@@ -299,14 +304,14 @@ func (h *daemonHandler) ProxyRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		AgentID   string `json:"agent_id"`
-		Action    string `json:"action"`
-		ChannelID string `json:"channel_id"`
-		Content   string `json:"content,omitempty"`
-		ThreadID  string `json:"thread_id,omitempty"`
+		AgentID    string `json:"agent_id"`
+		Action     string `json:"action"`
+		ChannelID  string `json:"channel_id"`
+		Content    string `json:"content,omitempty"`
+		ThreadID   string `json:"thread_id,omitempty"`
 		TaskNumber int    `json:"task_number,omitempty"`
-			TaskID    string `json:"task_id,omitempty"`
-		Status    string `json:"status,omitempty"`
+		TaskID     string `json:"task_id,omitempty"`
+		Status     string `json:"status,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -327,7 +332,9 @@ func (h *daemonHandler) ProxyRequest(w http.ResponseWriter, r *http.Request) {
 	case "message_send":
 		serverPath = fmt.Sprintf("/api/v1/channels/%s/messages", req.ChannelID)
 		bodyMap := map[string]string{"content": req.Content}
-		if req.ThreadID != "" { bodyMap["thread_id"] = req.ThreadID }
+		if req.ThreadID != "" {
+			bodyMap["thread_id"] = req.ThreadID
+		}
 		serverBody, _ = json.Marshal(bodyMap)
 	case "task_claim":
 		if req.TaskID != "" {
@@ -462,15 +469,15 @@ func (h *daemonHandler) getProvider(providerType string) llm.Provider {
 
 // runTaskRequest is the payload sent by the server to the daemon.
 type runTaskRequest struct {
-	TaskID       string             `json:"task_id"`
-	AgentID      string             `json:"agent_id"`
-	ChannelID    string             `json:"channel_id"`
-	ThreadID     string             `json:"thread_id,omitempty"`
-	Messages     []llmMessage       `json:"messages"`
-	SystemPrompt string             `json:"system_prompt"`
-	ModelConfig  modelConfigPayload `json:"model_config"`
-	TaskContext  string             `json:"task_context,omitempty"`   // SOLO-221-B: summary of pending tasks in channel
-	MentionedNames []string         `json:"mentioned_names,omitempty"` // v1.3: names of @mentioned agents
+	TaskID         string             `json:"task_id"`
+	AgentID        string             `json:"agent_id"`
+	ChannelID      string             `json:"channel_id"`
+	ThreadID       string             `json:"thread_id,omitempty"`
+	Messages       []llmMessage       `json:"messages"`
+	SystemPrompt   string             `json:"system_prompt"`
+	ModelConfig    modelConfigPayload `json:"model_config"`
+	TaskContext    string             `json:"task_context,omitempty"`    // SOLO-221-B: summary of pending tasks in channel
+	MentionedNames []string           `json:"mentioned_names,omitempty"` // v1.3: names of @mentioned agents
 }
 
 type llmMessage struct {
@@ -480,8 +487,8 @@ type llmMessage struct {
 }
 
 type modelConfigPayload struct {
-	Provider    string  `json:"provider"`
-	Model       string  `json:"model"`
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
 }
 
 // runTaskResponse is returned after accepting a task.
@@ -577,16 +584,15 @@ func (h *daemonHandler) processTaskWithProvider(ctx context.Context, req runTask
 		}
 	}
 
-
-		// SOLO-221-B: Append task context to the system prompt so agents
-		// can see pending tasks in the channel.
-		systemPrompt := req.SystemPrompt
-		if req.TaskContext != "" {
-			if systemPrompt != "" {
-				systemPrompt += "\n\n"
-			}
-			systemPrompt += req.TaskContext
+	// SOLO-221-B: Append task context to the system prompt so agents
+	// can see pending tasks in the channel.
+	systemPrompt := req.SystemPrompt
+	if req.TaskContext != "" {
+		if systemPrompt != "" {
+			systemPrompt += "\n\n"
 		}
+		systemPrompt += req.TaskContext
+	}
 
 	llmReq := &llm.CompletionRequest{
 		Model:        req.ModelConfig.Model,
@@ -807,19 +813,19 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 	}
 	systemPrompt := agent.BuildSystemPrompt(agentCfg, channelCtx, memoryContent, req.MentionedNames)
 
-		// SOLO-221-B: Include task context (pending channel tasks) in the prompt
-		// so agents can decide whether to claim tasks.
-		if req.TaskContext != "" {
-			systemPrompt += "\n\n" + req.TaskContext
-		}
-
+	// SOLO-221-B: Include task context (pending channel tasks) in the prompt
+	// so agents can decide whether to claim tasks.
+	if req.TaskContext != "" {
+		systemPrompt += "\n\n" + req.TaskContext
+	}
 
 	// Inject runtime configuration into workspace
 	if err := h.workspaceManager.InjectConfig(ctx, req.AgentID, &channelCtx); err != nil {
 		slog.Warn("task: InjectConfig failed (non-fatal)", "task_id", req.TaskID, "error", err)
 	}
-
-
+	if err := agent.SyncSoloSkillsForProvider(soloSkillsRoot(), ws.WorkDir, req.ModelConfig.Provider); err != nil {
+		slog.Warn("task: sync solo skills failed (non-fatal)", "task_id", req.TaskID, "error", err)
+	}
 
 	// Convert messages to agent.Message format
 	msgs := make([]agent.Message, len(req.Messages))
@@ -983,7 +989,6 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 	// v1.3: - only CLI-sent messages appear in channel.
 	// If solo message send was called, API already created the message.
 	// Direct text output is internal thinking, not channel messages.
-	
 
 	// Check context cancellation
 	if ctx.Err() != nil {
@@ -1128,12 +1133,12 @@ func (h *daemonHandler) pushAgentActivity(req runTaskRequest, agentName, provide
 	}
 
 	payload := map[string]interface{}{
-		"channel_id":   req.ChannelID,
-		"agent_id":     req.AgentID,
-		"agent_name":   agentName,
-		"status":       string(status),
+		"channel_id":    req.ChannelID,
+		"agent_id":      req.AgentID,
+		"agent_name":    agentName,
+		"status":        string(status),
 		"activity_text": activityText,
-		"timestamp":    time.Now().UTC().Format(time.RFC3339),
+		"timestamp":     time.Now().UTC().Format(time.RFC3339),
 	}
 	if toolName != "" {
 		payload["tool_name"] = toolName
@@ -1367,6 +1372,16 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	defer d.Close()
 	_, err = io.Copy(d, s)
 	return err
+}
+
+func soloSkillsRoot() string {
+	if dir := os.Getenv("SOLO_SKILLS_DIR"); dir != "" {
+		return dir
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return filepath.Join(wd, "skills")
+	}
+	return "skills"
 }
 
 // ── Skill listing endpoints ──────────────────────────────────────────────────

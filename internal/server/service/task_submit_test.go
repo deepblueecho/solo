@@ -36,6 +36,79 @@ func TestSubmitTaskParentWithOpenSubtaskReturnsGuard(t *testing.T) {
 	}
 }
 
+func TestSubmitTaskTriggersArtifactForParentTaskInReview(t *testing.T) {
+	pool := taskSubmitTestPool(t)
+	ctx := context.Background()
+	creatorID := taskSubmitUser(t, pool)
+	agentID := taskSubmitAgent(t, pool, creatorID)
+	channelID := taskSubmitChannel(t, pool, creatorID)
+	taskSubmitMember(t, pool, channelID, "user", creatorID)
+	taskSubmitMember(t, pool, channelID, "agent", agentID)
+	taskID := taskSubmitTask(t, pool, channelID, creatorID, agentID, TaskStatusInProgress, nil)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tasks WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channel_members WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channels WHERE id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM agents WHERE id = $1`, agentID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, creatorID)
+	})
+
+	var gotTaskID, gotUserID string
+	svc := NewTaskService(pool)
+	svc.SetArtifactGenerator(func(_ context.Context, taskID, userID string) (string, error) {
+		gotTaskID = taskID
+		gotUserID = userID
+		return "pending", nil
+	})
+
+	updated, err := svc.SubmitTask(ctx, channelID, taskID, agentID)
+	if err != nil {
+		t.Fatalf("SubmitTask error = %v", err)
+	}
+	if updated.Status != TaskStatusInReview {
+		t.Fatalf("SubmitTask status = %s, want %s", updated.Status, TaskStatusInReview)
+	}
+	if updated.ArtifactStatus != "pending" {
+		t.Fatalf("SubmitTask artifact status = %q, want pending", updated.ArtifactStatus)
+	}
+	if gotTaskID != taskID || gotUserID != agentID {
+		t.Fatalf("artifact generator called with task=%q user=%q, want task=%q user=%q", gotTaskID, gotUserID, taskID, agentID)
+	}
+}
+
+func TestSubmitTaskDoesNotTriggerArtifactForChildTask(t *testing.T) {
+	pool := taskSubmitTestPool(t)
+	ctx := context.Background()
+	creatorID := taskSubmitUser(t, pool)
+	agentID := taskSubmitAgent(t, pool, creatorID)
+	channelID := taskSubmitChannel(t, pool, creatorID)
+	taskSubmitMember(t, pool, channelID, "user", creatorID)
+	taskSubmitMember(t, pool, channelID, "agent", agentID)
+	parentID := taskSubmitTask(t, pool, channelID, creatorID, "", TaskStatusInProgress, nil)
+	childID := taskSubmitTask(t, pool, channelID, creatorID, agentID, TaskStatusInProgress, &parentID)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tasks WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channel_members WHERE channel_id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM channels WHERE id = $1`, channelID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM agents WHERE id = $1`, agentID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, creatorID)
+	})
+
+	calls := 0
+	svc := NewTaskService(pool)
+	svc.SetArtifactGenerator(func(context.Context, string, string) (string, error) {
+		calls++
+		return "pending", nil
+	})
+
+	if _, err := svc.SubmitTask(ctx, channelID, childID, agentID); err != nil {
+		t.Fatalf("SubmitTask child error = %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("artifact generator calls = %d, want 0", calls)
+	}
+}
+
 func taskSubmitTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")

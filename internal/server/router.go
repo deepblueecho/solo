@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -53,6 +54,28 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 	templateSvc := service.NewTemplateService(pool, relationshipMD)
 	computerSvc := service.NewComputerService(pool)
 	inboxSvc := service.NewInboxService(pool)
+	artifactRoot := os.Getenv("ARTIFACTS_DIR")
+	if artifactRoot == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			artifactRoot = filepath.Join(home, ".solo", "artifacts")
+		} else {
+			artifactRoot = filepath.Join(".", ".solo", "artifacts")
+		}
+	}
+	artifactSvc := service.NewArtifactService(pool, artifactRoot)
+	if agentSvc != nil {
+		artifactSvc.SetAgentArtifactRequester(agentSvc.TriggerAgentForArtifact)
+	}
+	taskSvc.SetArtifactGenerator(func(ctx context.Context, taskID, userID string) (string, error) {
+		artifact, err := artifactSvc.GenerateLatest(ctx, taskID, userID)
+		if err != nil {
+			return "", err
+		}
+		if artifact.Summary == "pending" {
+			return "pending", nil
+		}
+		return "available", nil
+	})
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(pool, agentSvc)
@@ -70,6 +93,8 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 	searchHandler := handler.NewSearchHandler(pool)
 	computerHandler := handler.NewComputerHandler(computerSvc, dm, pool)
 	inboxHandler := handler.NewInboxHandler(inboxSvc)
+	artifactHandler := handler.NewArtifactHandler(artifactSvc)
+	artifactHandler.SetTaskBroadcaster(taskSvc, hub)
 	onboardingHandler := handler.NewOnboardingHandler(pool, agentSvc)
 
 	// Attachment handler
@@ -248,6 +273,13 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 		r.Post("/api/v1/tasks/{taskID}/reject", taskHandler.RejectGlobal)
 		r.Post("/api/v1/tasks/{taskID}/close", taskHandler.CloseGlobal)
 		r.Post("/api/v1/tasks/{taskID}/reopen", taskHandler.ReopenGlobal)
+		r.Post("/api/v1/tasks/{taskID}/artifact", artifactHandler.GenerateLatest)
+		r.Post("/api/v1/tasks/{taskID}/artifact/finalize", artifactHandler.Finalize)
+		r.Post("/api/v1/tasks/{taskID}/artifact/publish", artifactHandler.Publish)
+		r.Get("/api/v1/tasks/{taskID}/artifact/latest", artifactHandler.Latest)
+		r.Get("/api/v1/tasks/{taskID}/artifacts", artifactHandler.List)
+		r.Get("/api/v1/artifacts/{artifactID}/meta", artifactHandler.Meta)
+		r.Get("/api/v1/artifacts/{artifactID}", artifactHandler.Serve)
 
 		// DM routes (SOLO-55-B, SOLO-56-B)
 		r.Route("/api/v1/dm", func(r chi.Router) {

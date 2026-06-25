@@ -112,6 +112,11 @@ export class ApiClient {
     return this.request<T>(url, { method: 'GET' });
   }
 
+  async getText(path: string, params?: Record<string, string>): Promise<string> {
+    const url = params ? this.buildUrlWithParams(path, params) : path;
+    return this.requestText(url, { method: 'GET' });
+  }
+
   async post<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>(path, {
       method: 'POST',
@@ -157,6 +162,26 @@ export class ApiClient {
     /** 内部重试计数，外部调用不应传入 */
     retryCount = 0,
   ): Promise<T> {
+    const response = await this.requestRaw(path, options, retryCount);
+    return this.processResponse<T>(response);
+  }
+
+  private async requestText(
+    path: string,
+    options: RequestInit,
+    /** 内部重试计数，外部调用不应传入 */
+    retryCount = 0,
+  ): Promise<string> {
+    const response = await this.requestRaw(path, options, retryCount);
+    return this.processTextResponse(response);
+  }
+
+  private async requestRaw(
+    path: string,
+    options: RequestInit,
+    /** 内部重试计数，外部调用不应传入 */
+    retryCount = 0,
+  ): Promise<Response> {
     const url = `${this.config.baseUrl}${path}`;
     const accessToken = this.config.getAccessToken();
 
@@ -203,8 +228,7 @@ export class ApiClient {
       if (newToken) {
         // 重试原请求（仅重试一次，避免死循环）
         headers['Authorization'] = `Bearer ${newToken}`;
-        const retryResponse = await fetch(url, { ...options, headers });
-        return this.processResponse<T>(retryResponse);
+        return fetch(url, { ...options, headers });
       }
 
       // Refresh 失败，触发登出
@@ -212,7 +236,7 @@ export class ApiClient {
       throw new ApiError(t('apiAuthExpired'), 401, 'UNAUTHORIZED');
     }
 
-    return this.processResponse<T>(response);
+    return response;
   }
 
   // ---- 响应处理 ----
@@ -237,6 +261,21 @@ export class ApiClient {
     }
 
     return JSON.parse(text) as T;
+  }
+
+  private async processTextResponse(response: Response): Promise<string> {
+    if (!response.ok) {
+      const body = await this.safeParseJson(response);
+      const message = body?.message || this.defaultErrorMessage(response.status);
+      const code = body?.code || this.defaultErrorCode(response.status);
+      throw new ApiError(message, response.status, code);
+    }
+
+    if (response.status === 204) {
+      return '';
+    }
+
+    return response.text();
   }
 
   // ---- Token 刷新 (带并发去重) ----

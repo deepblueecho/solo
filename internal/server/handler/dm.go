@@ -47,32 +47,32 @@ type CreateDMRequest struct {
 }
 
 type DMChannelResponse struct {
-	ID              string  `json:"id"`
-	Name            string  `json:"name"`
-	Description     string  `json:"description,omitempty"`
-	Type            string  `json:"type"`
-	CreatedBy       string  `json:"created_by"`
-	OtherMemberType string  `json:"other_member_type"`
-	OtherMemberID   string  `json:"other_member_id"`
-	OtherMemberName   string `json:"other_member_name"`
-	OtherMemberActive bool   `json:"other_member_active"`
-	IsArchived        bool   `json:"is_archived"`
-	CreatedAt       string  `json:"created_at"`
-	UpdatedAt       string  `json:"updated_at"`
-	LastMessage     string  `json:"last_message,omitempty"`
-	LastMessageAt   *string `json:"last_message_at,omitempty"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	Description       string  `json:"description,omitempty"`
+	Type              string  `json:"type"`
+	CreatedBy         string  `json:"created_by"`
+	OtherMemberType   string  `json:"other_member_type"`
+	OtherMemberID     string  `json:"other_member_id"`
+	OtherMemberName   string  `json:"other_member_name"`
+	OtherMemberActive bool    `json:"other_member_active"`
+	IsArchived        bool    `json:"is_archived"`
+	CreatedAt         string  `json:"created_at"`
+	UpdatedAt         string  `json:"updated_at"`
+	LastMessage       string  `json:"last_message,omitempty"`
+	LastMessageAt     *string `json:"last_message_at,omitempty"`
 }
 
 type DMListResponse struct {
-	ID               string  `json:"id"`
-	Name             string  `json:"name"`
-	OtherMemberType  string  `json:"other_member_type"`
-	OtherMemberID    string  `json:"other_member_id"`
-	OtherMemberName  string  `json:"other_member_name"`
-	OtherMemberActive bool   `json:"other_member_active"`
-	LastMessage      string  `json:"last_message,omitempty"`
-	LastMessageAt    *string `json:"last_message_at,omitempty"`
-	CreatedAt        string  `json:"created_at"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	OtherMemberType   string  `json:"other_member_type"`
+	OtherMemberID     string  `json:"other_member_id"`
+	OtherMemberName   string  `json:"other_member_name"`
+	OtherMemberActive bool    `json:"other_member_active"`
+	LastMessage       string  `json:"last_message,omitempty"`
+	LastMessageAt     *string `json:"last_message_at,omitempty"`
+	CreatedAt         string  `json:"created_at"`
 }
 
 // CreateOrGetDM handles POST /api/v1/dm
@@ -169,17 +169,17 @@ func (h *DMHandler) CreateOrGetDM(w http.ResponseWriter, r *http.Request) {
 		slog.Info("existing DM found", "dm_id", existingChannelID, "user_id", userID, "target_id", req.MemberID)
 
 		writeJSON(w, http.StatusOK, DMChannelResponse{
-			ID:              existingChannelID,
-			Name:            targetName,
-			Type:            "dm",
-			CreatedBy:       userID,
-			OtherMemberType: req.MemberType,
-			OtherMemberID:   req.MemberID,
-			OtherMemberName: targetName,
+			ID:                existingChannelID,
+			Name:              targetName,
+			Type:              "dm",
+			CreatedBy:         userID,
+			OtherMemberType:   req.MemberType,
+			OtherMemberID:     req.MemberID,
+			OtherMemberName:   targetName,
 			OtherMemberActive: true, // target was verified active above
-			IsArchived:      false,
-			CreatedAt:       existingCreatedAt.Format(time.RFC3339),
-			UpdatedAt:       existingUpdatedAt.Format(time.RFC3339),
+			IsArchived:        false,
+			CreatedAt:         existingCreatedAt.Format(time.RFC3339),
+			UpdatedAt:         existingUpdatedAt.Format(time.RFC3339),
 		})
 		return
 	}
@@ -264,17 +264,17 @@ func (h *DMHandler) CreateOrGetDM(w http.ResponseWriter, r *http.Request) {
 	)
 
 	writeJSON(w, http.StatusCreated, DMChannelResponse{
-		ID:              channelID,
-		Name:            targetName,
-		Type:            "dm",
-		CreatedBy:       userID,
-		OtherMemberType: req.MemberType,
-		OtherMemberID:   req.MemberID,
-		OtherMemberName: targetName,
+		ID:                channelID,
+		Name:              targetName,
+		Type:              "dm",
+		CreatedBy:         userID,
+		OtherMemberType:   req.MemberType,
+		OtherMemberID:     req.MemberID,
+		OtherMemberName:   targetName,
 		OtherMemberActive: true, // target was verified active above
-		IsArchived:      false,
-		CreatedAt:       createdAt.Format(time.RFC3339),
-		UpdatedAt:       updatedAt.Format(time.RFC3339),
+		IsArchived:        false,
+		CreatedAt:         createdAt.Format(time.RFC3339),
+		UpdatedAt:         updatedAt.Format(time.RFC3339),
 	})
 }
 
@@ -371,16 +371,16 @@ func (h *DMHandler) GetDM(w http.ResponseWriter, r *http.Request) {
 
 	// Check user is a DM participant
 	var (
-		channelID    string
-		channelName  string
-		description  string
-		createdBy    string
-		isArchived   bool
+		channelID            string
+		channelName          string
+		description          string
+		createdBy            string
+		isArchived           bool
 		createdAt, updatedAt time.Time
-		otherType    string
-		otherID      string
-		otherName    string
-		otherActive  bool
+		otherType            string
+		otherID              string
+		otherName            string
+		otherActive          bool
 	)
 	err := h.pool.QueryRow(r.Context(),
 		`SELECT c.id, c.name, COALESCE(c.description, ''), c.created_by, c.is_archived,
@@ -411,18 +411,18 @@ func (h *DMHandler) GetDM(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, DMChannelResponse{
-		ID:              channelID,
-		Name:            channelName,
-		Description:     description,
-		Type:            "dm",
-		CreatedBy:       createdBy,
-		OtherMemberType: otherType,
-		OtherMemberID:   otherID,
-		OtherMemberName: otherName,
+		ID:                channelID,
+		Name:              channelName,
+		Description:       description,
+		Type:              "dm",
+		CreatedBy:         createdBy,
+		OtherMemberType:   otherType,
+		OtherMemberID:     otherID,
+		OtherMemberName:   otherName,
 		OtherMemberActive: otherActive,
-		IsArchived:      isArchived,
-		CreatedAt:       createdAt.Format(time.RFC3339),
-		UpdatedAt:       updatedAt.Format(time.RFC3339),
+		IsArchived:        isArchived,
+		CreatedAt:         createdAt.Format(time.RFC3339),
+		UpdatedAt:         updatedAt.Format(time.RFC3339),
 	})
 }
 
@@ -529,7 +529,7 @@ func (h *DMHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		var createdAt time.Time
 		err := rows.Scan(&msg.ID, &msg.ChannelID, &msg.SenderType, &msg.SenderID,
 			&msg.SenderName, &msg.SenderActive, &msg.Content, &msg.ContentType, &msg.AttachmentIDs,
-&msg.TaskNumber, &msg.TaskStatus, &msg.TaskClaimerName, &msg.TaskClaimerDeleted, &msg.ReplyCount, &createdAt)
+			&msg.TaskNumber, &msg.TaskStatus, &msg.TaskClaimerName, &msg.TaskClaimerDeleted, &msg.ReplyCount, &createdAt)
 		if err != nil {
 			slog.Error("failed to scan message row", "error", err)
 			continue
@@ -744,6 +744,7 @@ func (h *DMHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			ClaimerName:      task.ClaimerName,
 			Priority:         task.Priority,
 			MessageID:        task.MessageID,
+			ArtifactStatus:   task.ArtifactStatus,
 			CreatedAt:        taskResp.CreatedAt,
 			UpdatedAt:        taskResp.UpdatedAt,
 			SubtaskCount:     task.SubtaskCount,
@@ -813,19 +814,19 @@ func (h *DMHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		go h.notifyInboxForDMParticipants(context.Background(), dmID, userID)
 	}
 
-		// Resolve user @mentions and broadcast inbox.updated to mentioned users (v1.5).
-		if h.mentionSvc != nil && h.hub != nil {
-			go func() {
-				mentionedUsers, err := h.mentionSvc.ResolveUserMentions(context.Background(), content, messageID)
-				if err != nil {
-					slog.Warn("failed to resolve user mentions in DM", "error", err)
-					return
-				}
-				for _, uid := range mentionedUsers {
-					ws.BroadcastInboxUpdated(h.hub, uid)
-				}
-			}()
-		}
+	// Resolve user @mentions and broadcast inbox.updated to mentioned users (v1.5).
+	if h.mentionSvc != nil && h.hub != nil {
+		go func() {
+			mentionedUsers, err := h.mentionSvc.ResolveUserMentions(context.Background(), content, messageID)
+			if err != nil {
+				slog.Warn("failed to resolve user mentions in DM", "error", err)
+				return
+			}
+			for _, uid := range mentionedUsers {
+				ws.BroadcastInboxUpdated(h.hub, uid)
+			}
+		}()
+	}
 
 	// Trigger agent auto-response for DM (SOLO-58-B)
 	// In DM, the agent responds to all messages (no @mention needed)
@@ -836,7 +837,7 @@ func (h *DMHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			messageID,
 			"user",
 			userID,
-			nil,  // no @mentions in DM
+			nil,   // no @mentions in DM
 			false, // hasMentions = false
 			nil,   // agentChain: fresh trigger from human
 		)
@@ -1141,6 +1142,7 @@ func (h *DMHandler) ConvertMessageToTask(w http.ResponseWriter, r *http.Request)
 		Priority:         task.Priority,
 		DueDate:          dueDate,
 		MessageID:        task.MessageID,
+		ArtifactStatus:   task.ArtifactStatus,
 		CreatedAt:        resp.CreatedAt,
 		UpdatedAt:        resp.UpdatedAt,
 		SubtaskCount:     task.SubtaskCount,
@@ -1259,7 +1261,6 @@ func (h *DMHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	// Create thread for the task message (align with channel task.go Create)
 	threadSvc := service.NewThreadService(h.pool)
 	_, _, threadErr := threadSvc.GetOrCreateThread(r.Context(), dmID, task.MessageID)
@@ -1281,6 +1282,7 @@ func (h *DMHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		ClaimerName:      task.ClaimerName,
 		Priority:         task.Priority,
 		MessageID:        task.MessageID,
+		ArtifactStatus:   task.ArtifactStatus,
 		CreatedAt:        taskResp.CreatedAt,
 		UpdatedAt:        taskResp.UpdatedAt,
 		SubtaskCount:     task.SubtaskCount,
@@ -1457,6 +1459,7 @@ func (h *DMHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:        task.UpdatedAt.Format(time.RFC3339),
 		SubtaskCount:     task.SubtaskCount,
 		DoneSubtaskCount: task.DoneSubtaskCount,
+		ArtifactStatus:   task.ArtifactStatus,
 	})
 
 	if req.Status != nil && *req.Status != "" {
@@ -1535,6 +1538,7 @@ func (h *DMHandler) ClaimTask(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:        task.UpdatedAt.Format(time.RFC3339),
 		SubtaskCount:     task.SubtaskCount,
 		DoneSubtaskCount: task.DoneSubtaskCount,
+		ArtifactStatus:   task.ArtifactStatus,
 	})
 
 	h.broadcastDMTaskThreadSystemMessage(r.Context(), dmID, task.MessageID, task.TaskNumber, task.Title, fmt.Sprintf("claimed by <@%s>", userID))
@@ -1607,6 +1611,7 @@ func (h *DMHandler) UnclaimTask(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:        task.UpdatedAt.Format(time.RFC3339),
 		SubtaskCount:     task.SubtaskCount,
 		DoneSubtaskCount: task.DoneSubtaskCount,
+		ArtifactStatus:   task.ArtifactStatus,
 	})
 
 	h.broadcastDMTaskThreadSystemMessage(r.Context(), dmID, task.MessageID, task.TaskNumber, task.Title, fmt.Sprintf("released by <@%s>", userID))

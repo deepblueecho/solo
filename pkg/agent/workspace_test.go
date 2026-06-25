@@ -201,6 +201,33 @@ func TestInjectConfig_InvalidID(t *testing.T) {
 	}
 }
 
+func TestSyncSoloSkillsForProviderCopiesWorkspaceSkill(t *testing.T) {
+	basePath := t.TempDir()
+	skillsRoot := filepath.Join(t.TempDir(), "skills")
+	sourceSkill := filepath.Join(skillsRoot, "solo-artifacts")
+	if err := os.MkdirAll(sourceSkill, 0o755); err != nil {
+		t.Fatalf("create source skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceSkill, "SKILL.md"), []byte("---\nname: solo-artifacts\n---\n"), 0o644); err != nil {
+		t.Fatalf("write source skill: %v", err)
+	}
+
+	wm := NewWorkspaceManager(basePath)
+	ws, err := wm.Prepare("agent-1", &AgentConfig{AgentID: "agent-1", Provider: "codex"})
+	if err != nil {
+		t.Fatalf("Prepare failed: %v", err)
+	}
+
+	if err := SyncSoloSkillsForProvider(skillsRoot, ws.WorkDir, "codex"); err != nil {
+		t.Fatalf("SyncSoloSkillsForProvider failed: %v", err)
+	}
+
+	got := filepath.Join(ws.WorkDir, ".codex", "skills", "solo-artifacts", "SKILL.md")
+	if _, err := os.Stat(got); err != nil {
+		t.Fatalf("expected copied skill at %s: %v", got, err)
+	}
+}
+
 func TestWorkspacePath(t *testing.T) {
 	basePath := t.TempDir()
 	wm := NewWorkspaceManager(basePath)

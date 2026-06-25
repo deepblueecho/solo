@@ -12,6 +12,9 @@ import { useMessages } from '@/lib/hooks/use-messages';
 import { useChannelMembers } from '@/lib/hooks/use-channel-members';
 import { useWebSocket } from '@/lib/ws-context';
 import { useTasks } from '@/lib/hooks/use-tasks';
+import { TaskArtifactStillPendingError, useTaskArtifact } from '@/lib/hooks/use-task-artifact';
+import { getTaskArtifactAction } from '@/lib/utils/task-artifact';
+import { apiClient } from '@/lib/api-client';
 import { MessageList } from './message-list';
 import { MessageInput } from './message-input';
 import { MemberList } from './member-list';
@@ -31,7 +34,9 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { WizardCard } from '@/components/onboarding/wizard-card';
 import { t } from '@/lib/i18n';
-import type { AgentDetailTarget, Channel, Message, Task } from '@/lib/types';
+import type { AgentDetailTarget, Channel, Message, Task, TaskArtifact } from '@/lib/types';
+
+type ArtifactPreview = TaskArtifact & { previewUrl: string };
 
 // SOLO-63-F: Lazy-load ThreadPanel (only rendered when a thread is open)
 const ThreadPanel = lazy(() =>
@@ -111,6 +116,9 @@ export function ChannelView({
   const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
   const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentDetailTarget | null>(null);
   const [threadTask, setThreadTask] = useState<Task | null>(null);
+  const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
+  const [artifactHistory, setArtifactHistory] = useState<TaskArtifact[]>([]);
+  const [artifactReviewBusy, setArtifactReviewBusy] = useState(false);
   const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
   const rightPanelOpen = activeRightPanel !== null;
 
@@ -130,6 +138,129 @@ export function ChannelView({
   const [isMemberPopoverOpen, setIsMemberPopoverOpen] = useState(false);
 
   const { showToast } = useToast();
+  const { generateArtifact, regenerateArtifact, fetchArtifactHTML, listArtifacts, isGeneratingTask } = useTaskArtifact();
+  const artifactOpenLinkRef = useRef<HTMLAnchorElement>(null);
+  const artifactRegenerateButtonRef = useRef<HTMLButtonElement>(null);
+  const artifactFrameRef = useRef<HTMLIFrameElement>(null);
+  const artifactCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const artifactReturnFocusRef = useRef<HTMLElement | null>(null);
+  const artifactPreviewUrlRef = useRef<string | null>(null);
+
+  const closeArtifactPreview = useCallback(() => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      artifactPreviewUrlRef.current = null;
+    }
+    setArtifactPreview(null);
+  }, []);
+
+  useEffect(() => () => {
+    if (artifactPreviewUrlRef.current) {
+      URL.revokeObjectURL(artifactPreviewUrlRef.current);
+      artifactPreviewUrlRef.current = null;
+    }
+  }, []);
+
+  const showArtifactPreview = useCallback(async (artifact: TaskArtifact) => {
+    const html = await fetchArtifactHTML(artifact);
+    const previewUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const previousPreviewUrl = artifactPreviewUrlRef.current;
+    artifactPreviewUrlRef.current = previewUrl;
+    setArtifactPreview({ ...artifact, previewUrl });
+    if (previousPreviewUrl) {
+      URL.revokeObjectURL(previousPreviewUrl);
+    }
+  }, [fetchArtifactHTML]);
+
+  const refreshArtifactHistory = useCallback(async (taskId: string) => {
+    const artifacts = await listArtifacts(taskId);
+    setArtifactHistory(artifacts);
+    return artifacts;
+  }, [listArtifacts]);
+
+  const showExistingArtifact = useCallback(async (taskId: string) => {
+    const artifacts = await refreshArtifactHistory(taskId);
+    const published = artifacts.find((artifact) => artifact.summary !== 'pending');
+    if (published) {
+      await showArtifactPreview(published);
+      return true;
+    }
+    return false;
+  }, [refreshArtifactHistory, showArtifactPreview]);
+
+  const handleOpenArtifactReference = useCallback(async (ref: string) => {
+    artifactReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    try {
+      const url = new URL(ref, window.location.origin);
+      if (url.pathname.startsWith('/api/v1/artifacts/')) {
+        const artifact = await apiClient.get<TaskArtifact>(`${url.pathname.replace(/\/meta$/, '')}/meta`);
+        await showArtifactPreview(artifact);
+        return;
+      }
+
+      const fileMatch = ref.match(/\/\.solo\/artifacts\/([^/\s]+)\/([^/\s]+\.html)/);
+      if (fileMatch) {
+        const [, taskId, filename] = fileMatch;
+        const artifacts = await refreshArtifactHistory(taskId);
+        const artifact = artifacts.find((item) => item.summary !== 'pending' && item.html_path.endsWith(`/${filename}`))
+          ?? artifacts.find((item) => item.summary !== 'pending');
+        if (artifact) {
+          await showArtifactPreview(artifact);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to toast below.
+    }
+    artifactReturnFocusRef.current = null;
+    showToast('Could not open artifact link.', 'error');
+  }, [refreshArtifactHistory, showArtifactPreview, showToast]);
+
+  useEffect(() => {
+    if (!artifactPreview) return;
+
+    artifactCloseButtonRef.current?.focus();
+    const handleArtifactPreviewKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeArtifactPreview();
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        const controls = ([artifactOpenLinkRef.current, artifactRegenerateButtonRef.current, artifactFrameRef.current, artifactCloseButtonRef.current] as Array<HTMLElement | null>).filter(
+          (control): control is HTMLElement => Boolean(control),
+        );
+        if (controls.length === 0) return;
+
+        const firstControl = controls[0];
+        const lastControl = controls[controls.length - 1];
+        const activeElement = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+
+        if (event.shiftKey && activeElement === firstControl) {
+          event.preventDefault();
+          lastControl.focus();
+        } else if (!event.shiftKey && activeElement === lastControl) {
+          event.preventDefault();
+          firstControl.focus();
+        } else if (!activeElement || !controls.includes(activeElement)) {
+          event.preventDefault();
+          firstControl.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleArtifactPreviewKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleArtifactPreviewKeyDown);
+      artifactReturnFocusRef.current?.focus();
+      artifactReturnFocusRef.current = null;
+    };
+  }, [artifactPreview, closeArtifactPreview]);
 
   const openAgentDetail = useCallback((agent: AgentDetailTarget) => {
     setSelectedAgentDetail(agent);
@@ -467,6 +598,91 @@ export function ChannelView({
     refetchTasks();
   }, [refetchTasks]);
 
+  useEffect(() => {
+    if (!artifactPreview) return;
+
+    const handleArtifactMessage = async (event: MessageEvent) => {
+      if (event.source !== artifactFrameRef.current?.contentWindow) return;
+      const data = event.data;
+      if (!data || typeof data !== 'object' || data.type !== 'artifact.reviewAction') return;
+      const taskId = typeof data.taskId === 'string' && data.taskId.trim() !== ''
+        ? data.taskId.trim()
+        : artifactPreview.task_id;
+      if (artifactPreview.task_id && taskId && taskId !== artifactPreview.task_id) return;
+      if (data.action !== 'accept' && data.action !== 'reject') return;
+      if (artifactReviewBusy) return;
+
+      const reason = typeof data.reason === 'string' ? data.reason.trim() : '';
+      if (data.action === 'reject' && reason === '') {
+        showToast('Reject comment is required.', 'error');
+        return;
+      }
+
+      setArtifactReviewBusy(true);
+      try {
+        if (!taskId) throw new Error('missing task id');
+        const path = `/api/v1/tasks/${taskId}/${data.action === 'accept' ? 'accept' : 'reject'}`;
+        const updated = await apiClient.post<Task>(path, data.action === 'reject' ? { reason } : undefined);
+        handleTaskActionComplete(updated);
+        closeArtifactPreview();
+        showToast(data.action === 'accept' ? 'Task accepted.' : 'Task rejected.', 'success');
+      } catch {
+        showToast(data.action === 'accept' ? 'Could not accept task.' : 'Could not reject task.', 'error');
+      } finally {
+        setArtifactReviewBusy(false);
+      }
+    };
+
+    window.addEventListener('message', handleArtifactMessage);
+    return () => window.removeEventListener('message', handleArtifactMessage);
+  }, [artifactPreview, artifactReviewBusy, closeArtifactPreview, handleTaskActionComplete, showToast]);
+
+  const handleGenerateArtifact = useCallback(async (task: Task) => {
+    const action = getTaskArtifactAction(task, isGeneratingTask(task.id));
+    if (action === 'hidden' || action === 'pending') return;
+    artifactReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    try {
+      if (action === 'read') {
+        await showExistingArtifact(task.id);
+        return;
+      }
+      if (await showExistingArtifact(task.id)) return;
+      const artifact = await generateArtifact(task.id);
+      await refreshArtifactHistory(task.id);
+      await showArtifactPreview(artifact);
+    } catch (error) {
+      if (error instanceof TaskArtifactStillPendingError) {
+        const showedExisting = await showExistingArtifact(task.id);
+        if (!showedExisting) {
+          artifactReturnFocusRef.current = null;
+          showToast('Artifact is still generating. Try again in a moment.', 'error');
+        }
+        return;
+      }
+      artifactReturnFocusRef.current = null;
+      showToast('Could not generate artifact. Please try again.', 'error');
+    }
+  }, [generateArtifact, isGeneratingTask, refreshArtifactHistory, showArtifactPreview, showExistingArtifact, showToast]);
+
+  const handleRegenerateArtifact = useCallback(async () => {
+    if (!artifactPreview || isGeneratingTask(artifactPreview.task_id)) return;
+
+    try {
+      const artifact = await regenerateArtifact(artifactPreview.task_id);
+      await refreshArtifactHistory(artifactPreview.task_id);
+      await showArtifactPreview(artifact);
+    } catch (error) {
+      if (error instanceof TaskArtifactStillPendingError) {
+        showToast('Artifact is still regenerating. Try again in a moment.', 'error');
+        return;
+      }
+      showToast('Could not regenerate artifact. Please try again.', 'error');
+    }
+  }, [artifactPreview, regenerateArtifact, isGeneratingTask, refreshArtifactHistory, showArtifactPreview, showToast]);
+
   // SOLO-island PR2: removed agentActivities aggregation — the
   // TypingIndicator it fed is now replaced by AgentIsland, which
   // subscribes to agent.activity events directly.
@@ -558,6 +774,7 @@ export function ChannelView({
               scrollToMessageId={scrollToMessageId}
               scrollKey={scrollMsgKey}
               members={members}
+              onOpenArtifactReference={handleOpenArtifactReference}
               onAgentClick={openAgentDetail}
             />
             <MessageInput
@@ -649,6 +866,8 @@ export function ChannelView({
                 onTaskClick={handleTaskClickInTab}
                 onRefetch={refetchTasks}
                 onActionComplete={handleTaskActionComplete}
+                onGenerateArtifact={handleGenerateArtifact}
+                isArtifactGenerating={(task) => isGeneratingTask(task.id)}
               />
             </div>
           </div>
@@ -698,6 +917,7 @@ export function ChannelView({
               onMarkRead={handleThreadMarkRead}
               onViewInChannel={handleViewThreadInChannel}
               onViewTask={handleViewThreadTask}
+              onOpenArtifactReference={handleOpenArtifactReference}
               onAgentClick={openAgentDetail}
             />
           </Suspense>
@@ -714,6 +934,49 @@ export function ChannelView({
           />
         )}
       </div>
+
+      {artifactPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="channel-artifact-preview-title"
+          className="fixed inset-4 z-50 flex flex-col border-4 border-black bg-white shadow-brutal-xl"
+        >
+          <div className="flex items-center justify-between border-b-4 border-black px-4 py-2">
+            <div id="channel-artifact-preview-title" className="font-heading text-sm font-black uppercase">{artifactPreview.title}</div>
+            <div className="flex items-center gap-2">
+              <a
+                ref={artifactOpenLinkRef}
+                href={artifactPreview.previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
+              >
+                Open
+              </a>
+              <button
+                ref={artifactRegenerateButtonRef}
+                type="button"
+                onClick={handleRegenerateArtifact}
+                disabled={isGeneratingTask(artifactPreview.task_id)}
+                className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm disabled:opacity-50"
+              >
+                Regenerate
+              </button>
+              <button
+                ref={artifactCloseButtonRef}
+                type="button"
+                onClick={closeArtifactPreview}
+                className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase shadow-brutal-sm"
+                aria-label="Close artifact preview"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <iframe ref={artifactFrameRef} title={artifactPreview.title} src={artifactPreview.previewUrl} tabIndex={0} className="min-h-0 flex-1 bg-white" />
+        </div>
+      )}
 
       {/* Add Agent to Channel modal */}
       <AddAgentModal

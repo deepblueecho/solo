@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!-- ============================================================================
+  solo-artifacts STARTER. Produce ONE self-contained .html file:
+    1. Replace  [[PASTE base.css]]        with the full contents of assets/base.css
+    2. Replace  [[PASTE interactions.js]] with ONLY the modules you need from
+       assets/interactions.js (or the whole file — every module self-guards).
+       If the page has zero interactivity, delete the <script> block entirely.
+    3. Fill the header, the "needs your input" box, and the body sections using
+       the component recipes in references/<type>.md.
+  CONVENTIONS (enforced — do not drop):
+    • Self-contained: inline ALL css/js, embed images as data: URIs (lazy-load),
+      no CDN / no external requests. The file must open by double-click, offline.
+    • Provenance footer: which agent + backbone model + date built it.
+    • "What needs your input": list ONLY genuine human-in-the-loop decisions.
+      Never invent questions already resolved. Add a legend wherever a color,
+      letter, or symbol encodes meaning (confusing layout is the #1 failure).
+    • Non-destructive: never edit the user's source files from inside the page;
+      show paste-ready output instead. Redact PII for life-admin tasks.
+    • Publish with: solo artifact publish --task <task-id> --mode <latest|final> --file <html>
+============================================================================= -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TITLE — solo-artifacts</title>
+<style>
+[[PASTE base.css]]
+</style>
+</head>
+<body>
+
+<!-- optional toolbar: print. Delete if the page is fully static. -->
+<div class="toolbar">
+  <button class="btn" data-print title="Print / PDF">⎙</button>
+</div>
+
+<div class="container">
+
+  <!-- HEADER ------------------------------------------------------------- -->
+  <h1>📊 Report title</h1>
+  <p class="subtitle">One-line thesis: what this page is and what to conclude from it.</p>
+  <div class="meta-bar">
+    <span>Generated 2026-01-01</span><span>·</span>
+    <span>scope: N items</span><span>·</span>
+    <span>status: in progress</span>
+  </div>
+
+  <!-- WHAT NEEDS YOUR INPUT (keep near the top; only REAL decisions) ------ -->
+  <div class="needs-input">
+    <h2>⚡ What needs your input</h2>
+    <ol>
+      <li>Genuine open question 1 — with the concrete next action / command.</li>
+      <li>Genuine open question 2.</li>
+    </ol>
+  </div>
+
+  <!-- BODY SECTIONS — assemble from references/<type>.md ------------------- -->
+  <div class="section">
+    <div class="section-title"><span class="section-icon">📦</span> Section</div>
+    <!-- cards / tables / timeline / callouts / decisions / comparison ... -->
+  </div>
+
+  <!-- PROVENANCE FOOTER (mandatory) -------------------------------------- -->
+  <div class="footer">
+    <p>Built by &lt;agent / CLI&gt; → &lt;backbone model&gt; · 2026-01-01</p>
+  </div>
+
+</div>
+
+<script>
+[[PASTE interactions.js]]
+</script>
+</body>
+</html>
