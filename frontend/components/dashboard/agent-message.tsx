@@ -64,7 +64,7 @@ function getArtifactReference(value?: string): string | null {
   return null;
 }
 
-const artifactReferencePattern = /(https?:\/\/[^\s)]+\/api\/v1\/artifacts\/[0-9a-f-]+(?:\?[^\s)]*)?|\/[^\s)]+\/\.solo\/artifacts\/[0-9a-f-]+\/[^\s)]+\.html)/gi;
+const artifactReferencePattern = /(https?:\/\/[^\s)]+\/api\/v1\/artifacts\/[0-9a-f-]+(?:\/meta)?(?:\?[^\s)]*)?|\/[^\s)]+\/\.solo\/artifacts\/[0-9a-f-]+\/[^\s)]+\.html)/gi;
 
 export function AgentMessage({ message, onReply, validNames = [], isHighlighted, onOpenArtifactReference, onAgentClick }: AgentMessageProps) {
   const time = new Date(message.created_at).toLocaleString('en-US', {

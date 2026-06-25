@@ -195,7 +195,7 @@ export function ChannelView({
     try {
       const url = new URL(ref, window.location.origin);
       if (url.pathname.startsWith('/api/v1/artifacts/')) {
-        const artifact = await apiClient.get<TaskArtifact>(`${url.pathname}/meta`);
+        const artifact = await apiClient.get<TaskArtifact>(`${url.pathname.replace(/\/meta$/, '')}/meta`);
         await showArtifactPreview(artifact);
         return;
       }

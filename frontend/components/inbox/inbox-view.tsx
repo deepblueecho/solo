@@ -156,7 +156,7 @@ export function InboxView() {
       let artifact: TaskArtifact | null = null;
       const url = new URL(ref, window.location.origin);
       if (url.pathname.startsWith('/api/v1/artifacts/')) {
-        artifact = await apiClient.get<TaskArtifact>(`${url.pathname}/meta`);
+        artifact = await apiClient.get<TaskArtifact>(`${url.pathname.replace(/\/meta$/, '')}/meta`);
       } else {
         const match = ref.match(/\/\.solo\/artifacts\/([^/\s]+)\/([^/\s]+\.html)/);
         if (match) {
