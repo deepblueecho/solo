@@ -165,7 +165,7 @@ td.best { font-weight: 700; color: var(--green); }
 .commentbox { border: 2px dashed var(--text); border-radius: var(--radius); padding: .6rem .8rem; min-height: 2.4rem; font-family: var(--mono); font-size: .85rem; color: var(--text); background: color-mix(in srgb, var(--bg-accent) 50%, transparent); }
 .commentbox:empty::before { content: "Comment\2026"; color: var(--text-muted); }
 .commentbox:focus { outline: 2px solid var(--accent); }
-.review-actions { display: grid; grid-template-columns: 1fr auto; gap: .75rem; align-items: center; margin: 1.25rem 0; padding: 1rem; border: 3px solid var(--card-border); background: var(--card); box-shadow: var(--shadow-sm); }
+.review-actions { display: grid; grid-template-columns: auto auto 1fr; gap: .75rem; align-items: center; margin: 1.25rem 0; padding: 1rem; border: 3px solid var(--card-border); background: var(--card); box-shadow: var(--shadow-sm); }
 .review-actions textarea { grid-column: 1 / -1; width: 100%; min-height: 5rem; resize: vertical; border: 3px solid var(--ink); border-radius: var(--radius); padding: .65rem .75rem; font-family: var(--mono); font-size: .9rem; background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); }
 
 /* ---- timeline ------------------------------------------------------------ */

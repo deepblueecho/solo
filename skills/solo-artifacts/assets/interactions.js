@@ -159,8 +159,19 @@ function initPersist() {
    Needs:
    <button data-solo-action="accept" data-task-id="...">Accept</button>
    <button data-solo-action="reject" data-task-id="..." data-reason="#rejectReason">Reject</button>
-   Optional comment inputs: [data-solo-comment] */
+   Optional comment inputs: [data-solo-comment data-question="Original question text"] */
 function initSoloReviewActions() {
+  function commentText(el) {
+    const answer = (el.value ?? el.innerText ?? "").trim();
+    if (el.type === "checkbox") {
+      if (!el.checked) return "";
+      return (el.dataset.question || el.dataset.comment || el.closest("label")?.innerText || "").trim();
+    }
+    if (!answer) return "";
+    const question = (el.dataset.question || el.closest(".decision-item")?.querySelector(".decision-q")?.innerText || "").trim();
+    return question ? question + "\n" + answer : answer;
+  }
+
   document.querySelectorAll("[data-solo-action]").forEach(btn => {
     btn.addEventListener("click", () => {
       const action = btn.dataset.soloAction;
@@ -168,10 +179,7 @@ function initSoloReviewActions() {
       const reasonSource = btn.dataset.reason ? document.querySelector(btn.dataset.reason) : null;
       const comments = [...document.querySelectorAll("[data-solo-comment]")]
         .filter(el => el !== reasonSource)
-        .map(el => {
-          if (el.type === "checkbox") return el.checked ? (el.closest("label")?.innerText || el.dataset.comment || "").trim() : "";
-          return (el.value ?? el.innerText ?? "").trim();
-        })
+        .map(commentText)
         .filter(Boolean);
       const reason = [
         reasonSource ? (reasonSource.value ?? reasonSource.innerText ?? "").trim() : "",

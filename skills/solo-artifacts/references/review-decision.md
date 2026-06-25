@@ -22,12 +22,13 @@ before discussing — i.e. the HTML is a decision-forcing function, not a passiv
 <div class="decision-item">
   <div class="decision-q">D1 · Should we phase the cache rollout?</div>
   <p>Context / recommendation in one or two lines.</p>
-  <label><input type="checkbox" data-persist data-solo-comment id="d1"> Request this follow-up on reject</label>
-  <div class="commentbox" contenteditable data-persist data-solo-comment id="d1-comment"></div>
+  <label><input type="checkbox" data-persist data-solo-comment data-question="D1 · Should we phase the cache rollout?" id="d1"> Request this follow-up on reject</label>
+  <div class="commentbox" contenteditable data-persist data-solo-comment data-question="D1 · Should we phase the cache rollout?" id="d1-comment"></div>
 </div>
 ```
 `data-persist` + `id` make the comment survive a reload (via `initPersist`). `data-solo-comment`
-marks text that is appended to the reject reason. Verdict card:
+marks text that is appended to the reject reason. Add `data-question` so reject comments include
+both the question and the user's answer. Verdict card:
 ```html
 <div class="verdict pursue"><span class="verdict-badge">Pursue — with pivot</span>
   <p>One-paragraph recommendation and the main tradeoff.</p></div>
@@ -35,8 +36,8 @@ marks text that is appended to the reject reason. Verdict card:
 Review action buttons, when the artifact is embedded inside Solo:
 ```html
 <div class="review-actions">
-  <button class="btn success" data-solo-action="accept" data-task-id="TASK_ID">Accept</button>
   <textarea id="rejectReason" data-persist data-solo-comment placeholder="Rejection reason (required)"></textarea>
+  <button class="btn success" data-solo-action="accept" data-task-id="TASK_ID">Accept</button>
   <button class="btn warning" data-solo-action="reject" data-task-id="TASK_ID" data-reason="#rejectReason">Reject & submit comment</button>
 </div>
 ```

@@ -32,7 +32,9 @@ assert(hook.includes('isGeneratingTask') && hook.includes('generatingTaskIds.has
 assert(artifactAction.includes("status === 'available'") && artifactAction.includes("return 'read'"), 'Artifact action helper should read existing artifact history from any parent task status');
 assert(artifactAction.includes("task.status === 'in_review'") && artifactAction.includes("return 'generate'"), 'Artifact action helper should generate only in review');
 assert(artifactInteractions.includes('data-solo-action') && artifactInteractions.includes('window.parent.postMessage'), 'Artifact interactions should post review actions to the Solo viewer');
+assert(artifactInteractions.includes('data-question') && artifactInteractions.includes('.decision-q'), 'Artifact interactions should include the question text with reject comments');
 assert(reviewDecision.includes('data-solo-action="accept"') && reviewDecision.includes('data-solo-action="reject"'), 'Review decision reference should document accept/reject artifact actions');
+assert(reviewDecision.indexOf('textarea id="rejectReason"') < reviewDecision.indexOf('data-solo-action="accept"'), 'Review action buttons should appear after the reject comment field');
 assert(taskCard.includes('onGenerateArtifact?: (task: Task) => void') && taskCard.includes('FileText'), 'TaskCard should expose an artifact action');
 assert(taskCard.includes('getTaskArtifactAction') && taskCard.includes('bg-brutal-success') && taskCard.includes('bg-brutal-primary'), 'TaskCard should distinguish generate/read/pending artifact actions');
 assert(taskCard.includes("artifactAction !== 'hidden'"), 'TaskCard should hide artifact action when unsupported');
