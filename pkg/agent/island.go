@@ -8,57 +8,44 @@ import (
 )
 
 // ============================================================================
-// Island status inference (SOLO-island PR1)
+// Run status inference
 //
-// Translates internal OutputChunk events into the product-facing
-// "island status" used by the AgentIsland UI. Kept as pure functions so
-// both daemon and server can use them without taking on extra dependencies.
-//
-// The shape mirrors Kanan's 3-state hook protocol (to_review / to_in_progress
-// / activity) — Solo collapses it into a single activity event carrying
-// both status and a one-line activity_text summary.
+// Translates internal OutputChunk events into the canonical agent run status
+// used by agent_runs.status and agent.run.* WebSocket events. The Agent Island
+// is only a view of this run status; it does not own a separate status machine.
 // ============================================================================
 
-// IslandStatus is the product-facing agent state shown in the island UI.
-// It is derived from OutputChunk events on the daemon side and broadcast
-// over the agent.activity WebSocket event.
-type IslandStatus string
+type RunStatus string
 
 const (
-	// IslandStatusIdle — agent is online but not working on anything.
-	IslandStatusIdle IslandStatus = "idle"
-	// IslandStatusThinking — LLM is doing internal reasoning (no tool call yet).
-	IslandStatusThinking IslandStatus = "thinking"
-	// IslandStatusRunning — agent is invoking tools (between tool_use and tool_result).
-	IslandStatusRunning IslandStatus = "running"
-	// IslandStatusStreaming — agent is producing visible text (text chunk / agent_typing).
-	IslandStatusStreaming IslandStatus = "streaming"
-	// IslandStatusWaitingApproval — agent is blocked on user permission (reserved,
-	// not produced by any backend yet — see PRD v1.x approval flow).
-	IslandStatusWaitingApproval IslandStatus = "waiting_approval"
-	// IslandStatusError — agent hit a tool error or LLM stream error.
-	IslandStatusError IslandStatus = "error"
+	RunStatusQueued          RunStatus = "queued"
+	RunStatusThinking        RunStatus = "thinking"
+	RunStatusRunning         RunStatus = "running"
+	RunStatusStreaming       RunStatus = "streaming"
+	RunStatusWaitingInput    RunStatus = "waiting_input"
+	RunStatusWaitingApproval RunStatus = "waiting_approval"
+	RunStatusCompleted       RunStatus = "completed"
+	RunStatusFailed          RunStatus = "failed"
+	RunStatusCancelled       RunStatus = "cancelled"
+	RunStatusTimeout         RunStatus = "timeout"
 )
 
-// InferIslandStatusFromChunk maps an OutputChunk onto an IslandStatus.
-// Status-only chunks and unknown types fall back to idle (no UI change).
-func InferIslandStatusFromChunk(chunk OutputChunk) IslandStatus {
+// InferRunStatusFromChunk maps an OutputChunk onto a run status. The bool is
+// false for chunks that should not update run status.
+func InferRunStatusFromChunk(chunk OutputChunk) (RunStatus, bool) {
 	switch chunk.Type {
 	case string(MessageThinking):
-		return IslandStatusThinking
+		return RunStatusThinking, true
 	case string(MessageText):
-		return IslandStatusStreaming
+		return RunStatusStreaming, true
 	case string(MessageToolUse):
-		return IslandStatusRunning
+		return RunStatusRunning, true
 	case string(MessageToolResult):
-		if chunk.Tool != nil && chunk.Tool.IsError {
-			return IslandStatusError
-		}
-		return IslandStatusRunning
+		return RunStatusRunning, true
 	case string(MessageError):
-		return IslandStatusError
+		return RunStatusFailed, true
 	}
-	return IslandStatusIdle
+	return "", false
 }
 
 // InferActivityText returns a short Chinese summary suitable for the island

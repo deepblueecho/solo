@@ -1,284 +1,229 @@
 'use client';
 
-// ============================================================================
-// useAgentIsland (SOLO-island PR1) — derives a per-agent status map from
-// WebSocket events for the AgentIsland floating UI.
-//
-// Inputs (channel-scoped):
-//   - agent.activity  — derived by the daemon, carries status + activity_text
-//   - agent.done      — terminal signal (PR0); clears the active flag
-//   - message.new     — agent's final message arrived; triggers the 5s
-//                       "completed" short-flash before idle removal
-//
-// The hook owns the React state, the WS subscription, and the per-agent
-// flash timers. It's intentionally scoped to a single channel (matching
-// the product decision: the island is current-channel only, not global).
-// ============================================================================
-
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { t } from '@/lib/i18n';
+import { apiClient } from '@/lib/api-client';
 import { useWebSocket } from '@/lib/ws-context';
 
-export type IslandAgentStatus =
-  | 'idle'
+export type AgentRunStatus =
+  | 'queued'
   | 'thinking'
   | 'running'
   | 'streaming'
+  | 'waiting_input'
   | 'waiting_approval'
-  | 'error';
-
-/** Terminal outcome of a task, mirrored from server-side final_state. */
-export type IslandFinalState =
   | 'completed'
   | 'failed'
-  | 'aborted'
-  | 'timeout'
-  | 'cancelled';
+  | 'cancelled'
+  | 'timeout';
 
 export interface IslandAgent {
+  runId: string;
+  sessionId: string | null;
   agentId: string;
   agentName: string;
-  status: IslandAgentStatus;
+  taskId: string | null;
+  channelId: string | null;
+  threadId: string | null;
+  status: AgentRunStatus;
   activityText: string;
   toolName: string | null;
   toolInputSummary: string | null;
   source: string | null;
-  /** Last update timestamp (ms epoch). */
   updatedAt: number;
-  /** True while the agent is in the "active" set shown by the island. */
-  isActive: boolean;
-  /** Set when the agent has finished a turn and is in the 5s "completed" flash. */
+  startedAt: number | null;
   completedAt: number | null;
-  /** Mirrors agent.done's final_state. Set on terminal signal. */
-  finalState: IslandFinalState | null;
 }
 
+interface AgentRunResponse {
+  id: string;
+  session_id?: string;
+  agent_id: string;
+  channel_id?: string;
+  thread_id?: string;
+  status: AgentRunStatus;
+  activity_text?: string;
+  tool_name?: string;
+  tool_input_summary?: string;
+  source?: string;
+  started_at?: string;
+  updated_at?: string;
+}
+
+const FLASH_STATUSES = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled', 'timeout']);
 const COMPLETED_FLASH_MS = 5000;
 
-export function useAgentIsland(channelId: string | null) {
+function timestampMs(value?: string): number {
+  if (!value) return Date.now();
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+}
+
+function fromRunResponse(run: AgentRunResponse): IslandAgent {
+  return {
+    runId: run.id,
+    sessionId: run.session_id ?? null,
+    agentId: run.agent_id,
+    agentName: 'Agent',
+    taskId: null,
+    channelId: run.channel_id ?? null,
+    threadId: run.thread_id ?? null,
+    status: run.status,
+    activityText: run.activity_text ?? '',
+    toolName: run.tool_name ?? null,
+    toolInputSummary: run.tool_input_summary ?? null,
+    source: run.source ?? null,
+    updatedAt: timestampMs(run.updated_at),
+    startedAt: run.started_at ? timestampMs(run.started_at) : null,
+    completedAt: FLASH_STATUSES.has(run.status) ? Date.now() : null,
+  };
+}
+
+export function useAgentIsland() {
   const [agents, setAgents] = useState<Map<string, IslandAgent>>(new Map());
   const { onEvent } = useWebSocket();
   const completedTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  useEffect(() => {
-    if (!channelId) {
-      setAgents(new Map());
-      return;
+  const scheduleRemoval = useCallback((runId: string) => {
+    const existing = completedTimers.current.get(runId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      setAgents((prev) => {
+        const current = prev.get(runId);
+        if (!current || !FLASH_STATUSES.has(current.status)) return prev;
+        const next = new Map(prev);
+        next.delete(runId);
+        return next;
+      });
+      completedTimers.current.delete(runId);
+    }, COMPLETED_FLASH_MS);
+    completedTimers.current.set(runId, timer);
+  }, []);
+
+  const upsertRun = useCallback((event: {
+    run_id: string;
+    session_id?: string;
+    agent_id: string;
+    agent_name?: string;
+    task_id?: string;
+    channel_id?: string;
+    thread_id?: string;
+    status: AgentRunStatus;
+    activity_text?: string;
+    tool_name?: string;
+    tool_input_summary?: string;
+    source?: string;
+    timestamp?: string;
+  }) => {
+    setAgents((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(event.run_id);
+      const updated: IslandAgent = {
+        runId: event.run_id,
+        sessionId: event.session_id ?? existing?.sessionId ?? null,
+        agentId: event.agent_id,
+        agentName: event.agent_name ?? existing?.agentName ?? 'Agent',
+        taskId: event.task_id ?? existing?.taskId ?? null,
+        channelId: event.channel_id ?? existing?.channelId ?? null,
+        threadId: event.thread_id ?? existing?.threadId ?? null,
+        status: event.status,
+        activityText: event.activity_text ?? existing?.activityText ?? '',
+        toolName: event.tool_name ?? existing?.toolName ?? null,
+        toolInputSummary: event.tool_input_summary ?? existing?.toolInputSummary ?? null,
+        source: event.source ?? existing?.source ?? null,
+        updatedAt: timestampMs(event.timestamp),
+        startedAt: existing?.startedAt ?? null,
+        completedAt: FLASH_STATUSES.has(event.status) ? Date.now() : null,
+      };
+      next.set(event.run_id, updated);
+      return next;
+    });
+
+    if (FLASH_STATUSES.has(event.status)) {
+      scheduleRemoval(event.run_id);
+    } else {
+      const timer = completedTimers.current.get(event.run_id);
+      if (timer) {
+        clearTimeout(timer);
+        completedTimers.current.delete(event.run_id);
+      }
     }
-    setAgents(new Map());
+  }, [scheduleRemoval]);
 
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.get<AgentRunResponse[]>('/api/v1/agent-runs/active')
+      .then((runs) => {
+        if (cancelled) return;
+        setAgents(new Map(runs.map((run) => [run.id, fromRunResponse(run)])));
+      })
+      .catch(() => {
+        if (!cancelled) setAgents(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const unsub = onEvent((event) => {
-      if (!('channel_id' in event) || event.channel_id !== channelId) {
-        // DEBUG: log why events are being filtered out for DM island
-        if (event.type === 'agent.activity' || event.type === 'agent.thinking' || event.type === 'agent.done' || (event.type === 'message.new' && event.sender_type === 'agent')) {
-          console.debug('[useAgentIsland] FILTERED event', {
-            eventType: event.type,
-            eventChannelId: ('channel_id' in event) ? event.channel_id : 'MISSING',
-            hookChannelId: channelId,
-            hasChannelId: 'channel_id' in event,
-          });
-        }
-        return;
-      }
-
-      // agent.thinking — initial trigger and LLM thinking chunks.
-      // Shows the island immediately when the agent receives a message,
-      // before the first agent.activity chunk arrives.
-      if (event.type === 'agent.thinking' && event.agent_id) {
-        console.debug('[useAgentIsland] RECEIVED agent.thinking', {
-          agentId: event.agent_id,
-          agentName: event.agent_name,
-          channelId: event.channel_id,
-          thought: event.thought,
-        });
-        const agentId = event.agent_id;
-        setAgents((prev) => {
-          const next = new Map(prev);
-          const existing = next.get(agentId);
-          const timer = completedTimers.current.get(agentId);
-          if (timer) {
-            clearTimeout(timer);
-            completedTimers.current.delete(agentId);
-          }
-          next.set(agentId, {
-            agentId,
-            agentName: event.agent_name ?? existing?.agentName ?? '...',
-            status: 'thinking',
-            activityText: event.thought ?? t('agentThinkingShort'),
-            toolName: existing?.toolName ?? null,
-            toolInputSummary: existing?.toolInputSummary ?? null,
-            source: existing?.source ?? null,
-            updatedAt: Date.now(),
-            isActive: true,
-            completedAt: null,
-            finalState: null,
-          });
-          return next;
-        });
-        return;
-      }
-
-      // agent.activity — primary event. Update or insert the per-agent view.
-      if (event.type === 'agent.activity' && event.agent_id) {
-        console.debug('[useAgentIsland] RECEIVED agent.activity', {
-          agentId: event.agent_id,
-          agentName: event.agent_name,
-          channelId: event.channel_id,
-          status: event.status,
-        });
-        const agentId = event.agent_id;
-        setAgents((prev) => {
-          const next = new Map(prev);
-          const existing = next.get(agentId);
-          // Clear any pending completed-flash timer — new activity means
-          // the agent is back in business.
-          const timer = completedTimers.current.get(agentId);
-          if (timer) {
-            clearTimeout(timer);
-            completedTimers.current.delete(agentId);
-          }
-          next.set(agentId, {
-            agentId,
-            agentName: event.agent_name ?? existing?.agentName ?? '...',
-            status: event.status,
-            activityText: event.activity_text,
-            toolName: event.tool_name ?? null,
-            toolInputSummary: event.tool_input_summary ?? null,
-            source: event.source ?? null,
-            updatedAt: Date.now(),
-            isActive: true,
-            completedAt: null,
-            // New activity overrides any prior terminal outcome.
-            finalState: null,
-          });
-          return next;
-        });
-        return;
-      }
-
-      // message.new from agent — short-flash "completed" state for 5s.
-      // We treat this as a separate signal because the user gets immediate
-      // visual feedback ("agent finished!") before the daemon's
-      // agent.done lands a moment later.
       if (
-        event.type === 'message.new' &&
-        event.sender_type === 'agent' &&
-        event.sender_id
+        event.type === 'agent.run.started' ||
+        event.type === 'agent.run.updated' ||
+        event.type === 'agent.run.finished'
       ) {
-        const agentId = event.sender_id;
-        setAgents((prev) => {
-          const next = new Map(prev);
-          const existing = next.get(agentId);
-          if (!existing) {
-            return prev; // No prior activity — nothing to flash for
-          }
-          next.set(agentId, {
-            ...existing,
-            status: 'idle',
-            isActive: false,
-            activityText: t('agentDone'),
-            completedAt: Date.now(),
-            // message.new alone doesn't tell us completed vs failed — leave
-            // finalState untouched (could be set later by agent.done).
-          });
-          return next;
-        });
-        // Schedule removal after the flash window. If a new activity event
-        // arrives in the meantime, the timer is cleared by the activity
-        // handler above and the agent re-enters the active set.
-        const existingTimer = completedTimers.current.get(agentId);
-        if (existingTimer) clearTimeout(existingTimer);
-        const timer = setTimeout(() => {
-          setAgents((prev) => {
-            const a = prev.get(agentId);
-            // Only delete if still in the completed/idle state — if a new
-            // activity bumped it back, leave it alone.
-            if (!a || a.isActive || a.completedAt == null) {
-              return prev;
-            }
-            const next = new Map(prev);
-            next.delete(agentId);
-            return next;
-          });
-          completedTimers.current.delete(agentId);
-        }, COMPLETED_FLASH_MS);
-        completedTimers.current.set(agentId, timer);
-        return;
-      }
-
-      // agent.done — terminal signal. Replaces the 3s inactivity heuristic.
-      // The agent is no longer active; we keep it visible (idle) until the
-      // next message.new (which triggers the 5s flash) or until the user
-      // navigates away. We also cancel any pending flash so we don't
-      // double-remove the entry.
-      if (event.type === 'agent.done' && event.agent_id) {
-        const agentId = event.agent_id;
-        const existingTimer = completedTimers.current.get(agentId);
-        if (existingTimer) {
-          clearTimeout(existingTimer);
-          completedTimers.current.delete(agentId);
-        }
-        setAgents((prev) => {
-          const next = new Map(prev);
-          const a = next.get(agentId);
-          if (a) {
-            next.set(agentId, {
-              ...a,
-              status: 'idle',
-              isActive: false,
-              completedAt: Date.now(),
-              // Record the terminal outcome for UI differentiation
-              // (failure/aborted should look distinct from success).
-              finalState: event.final_state,
-            });
-          }
-          return next;
-        });
-        // If no message.new follows, the entry would linger forever. Start
-        // the same 5s removal timer so a silent-done still gets cleaned up.
-        const timer = setTimeout(() => {
-          setAgents((prev) => {
-            const a = prev.get(agentId);
-            if (!a || a.isActive) return prev;
-            const next = new Map(prev);
-            next.delete(agentId);
-            return next;
-          });
-          completedTimers.current.delete(agentId);
-        }, COMPLETED_FLASH_MS);
-        completedTimers.current.set(agentId, timer);
+        upsertRun(event);
       }
     });
 
     return () => {
       unsub();
-      completedTimers.current.forEach((t) => clearTimeout(t));
+      completedTimers.current.forEach((timer) => clearTimeout(timer));
       completedTimers.current.clear();
     };
-  }, [channelId, onEvent]);
+  }, [onEvent, upsertRun]);
 
-  const clearAgent = useCallback((agentId: string) => {
-    const timer = completedTimers.current.get(agentId);
+  const clearAgent = useCallback((runId: string) => {
+    const timer = completedTimers.current.get(runId);
     if (timer) {
       clearTimeout(timer);
-      completedTimers.current.delete(agentId);
+      completedTimers.current.delete(runId);
     }
     setAgents((prev) => {
       const next = new Map(prev);
-      next.delete(agentId);
+      next.delete(runId);
       return next;
     });
   }, []);
 
   const clearAll = useCallback(() => {
-    completedTimers.current.forEach((t) => clearTimeout(t));
+    completedTimers.current.forEach((timer) => clearTimeout(timer));
     completedTimers.current.clear();
     setAgents(new Map());
   }, []);
 
-  // Derive the active subset for the island pill. Idle/completed entries
-  // are filtered out — only currently-working agents are surfaced.
-  const activeAgents = Array.from(agents.values()).filter((a) => a.isActive);
+  const priority: Record<AgentRunStatus, number> = {
+    running: 0,
+    streaming: 1,
+    thinking: 2,
+    queued: 3,
+    waiting_input: 4,
+    waiting_approval: 5,
+    failed: 6,
+    timeout: 7,
+    completed: 8,
+    cancelled: 9,
+  };
+  const sortedAgents = Array.from(agents.values()).sort((a, b) => {
+    const byPriority = priority[a.status] - priority[b.status];
+    return byPriority !== 0 ? byPriority : b.updatedAt - a.updatedAt;
+  });
+  const groupedAgents = new Map<string, IslandAgent>();
+  for (const agent of sortedAgents) {
+    if (!groupedAgents.has(agent.agentId)) {
+      groupedAgents.set(agent.agentId, agent);
+    }
+  }
+  const activeAgents = Array.from(groupedAgents.values());
 
   return { agents, activeAgents, clearAgent, clearAll };
 }

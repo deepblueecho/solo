@@ -126,28 +126,6 @@ func BroadcastAgentChunk(hub realtime.Broadcaster, channelID, agentID, agentName
 	hub.BroadcastToChannel(channelID, envelope)
 }
 
-// BroadcastAgentDone broadcasts an agent.done event to channel subscribers when
-// a task terminates. The frontend uses this as the authoritative terminal
-// signal (replaces the previous 3s inactivity heuristic).
-func BroadcastAgentDone(hub realtime.Broadcaster, channelID, agentID, agentName, taskID, finalState string) {
-	payload := AgentDonePayload{
-		ChannelID:  channelID,
-		AgentID:    agentID,
-		AgentName:  agentName,
-		TaskID:     taskID,
-		FinalState: finalState,
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
-	}
-	envelope := Envelope(EventAgentDone, payload)
-	hub.BroadcastToChannel(channelID, envelope)
-
-	slog.Debug("broadcast agent done",
-		"channel_id", channelID,
-		"agent_id", agentID,
-		"final_state", finalState,
-	)
-}
-
 // BroadcastAgentActivity broadcasts an agent.activity event to channel
 // subscribers. Carries the island-facing status and a short activity_text
 // summary derived from the agent's OutputChunk. Powers the AgentIsland

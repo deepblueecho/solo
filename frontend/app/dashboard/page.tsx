@@ -15,6 +15,7 @@ import { NavBar } from "@/components/ui/navbar";
 import { CreateChannelModal } from "@/components/dashboard/create-channel-modal";
 import { CreateDMModal } from "@/components/dashboard/create-dm-modal";
 import { DeleteChannelDialog } from "@/components/dashboard/delete-channel-dialog";
+import { AgentIsland } from "@/components/agents/agent-island";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -125,11 +126,6 @@ function DashboardContent() {
   const [agentViewVisible, setAgentViewVisible] = useState(false);
   const [agentViewWidth, setAgentViewWidth] = useState(320);
   const [agentViewFocusedAgentId, setAgentViewFocusedAgentId] = useState<string | null>(null);
-
-  const handleInvokeAgent = useCallback((agentId: string) => {
-    setAgentViewFocusedAgentId(agentId);
-    setAgentViewVisible(true);
-  }, []);
 
   // Toggling to false should also clear the focused-agent highlight so
   // a later reopen starts from a clean state. Forwarded to ChannelView as
@@ -425,9 +421,8 @@ function DashboardContent() {
         onCreateDM={() => setIsCreateDMModalOpen(true)}
         inboxSelected={inboxFromUrl}
         onSelectInbox={handleSelectInbox}
-        activeChannelId={selectedChannelId ?? selectedDmId ?? null}
-        onInvokeAgent={handleInvokeAgent}
       />
+      <AgentIsland />
 
       {/* Main content area */}
       <main className="flex flex-1 flex-col overflow-hidden">

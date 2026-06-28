@@ -30,16 +30,16 @@ type ExecuteRequest struct {
 
 // ExecuteOptions configures a single execution.
 type ExecuteOptions struct {
-	SystemPrompt string            `json:"system_prompt,omitempty"`
-	WorkspaceDir string            `json:"workspace_dir,omitempty"`
-	Model        string            `json:"model,omitempty"`
-	Effort           string            `json:"effort,omitempty"`             // thinking effort level (Claude Code --effort, OpenClaw --thinking)
-	MaxTurns         int               `json:"max_turns,omitempty"`          // max agentic turns (Claude Code --max-turns)
-	ResumeSessionID  string            `json:"resume_session_id,omitempty"`  // ACP session/resume ID for protocol-level resume
+	SystemPrompt              string            `json:"system_prompt,omitempty"`
+	WorkspaceDir              string            `json:"workspace_dir,omitempty"`
+	Model                     string            `json:"model,omitempty"`
+	Effort                    string            `json:"effort,omitempty"`            // thinking effort level (Claude Code --effort, OpenClaw --thinking)
+	MaxTurns                  int               `json:"max_turns,omitempty"`         // max agentic turns (Claude Code --max-turns)
+	ResumeSessionID           string            `json:"resume_session_id,omitempty"` // ACP session/resume ID for protocol-level resume
 	Env                       map[string]string `json:"env,omitempty"`
 	CustomArgs                []string          `json:"custom_args,omitempty"`
-	ExtraArgs                 []string          `json:"extra_args,omitempty"`                   // daemon-level global default args
-	SemanticInactivityTimeout time.Duration     `json:"semantic_inactivity_timeout,omitempty"`  // 0 = disabled
+	ExtraArgs                 []string          `json:"extra_args,omitempty"`                  // daemon-level global default args
+	SemanticInactivityTimeout time.Duration     `json:"semantic_inactivity_timeout,omitempty"` // 0 = disabled
 }
 
 // Session represents a running agent execution.
@@ -53,13 +53,16 @@ type Session struct {
 	Result <-chan *Result
 	// Stop cancels the running execution. It is safe to call multiple times.
 	Stop func() error
+	// SessionID is the provider session identifier when the backend exposes one.
+	SessionID string
 }
 
 // OutputChunk is a single event emitted by an agent during execution.
 type OutputChunk struct {
-	Type    string    `json:"type"`            // text, thinking, tool_use, tool_result, status, error
-	Content string    `json:"content"`         // text content for text/thinking/error types
-	Tool    *ToolInfo `json:"tool,omitempty"`  // tool call information
+	Type      string    `json:"type"`                 // text, thinking, tool_use, tool_result, status, error
+	Content   string    `json:"content"`              // text content for text/thinking/error types
+	Tool      *ToolInfo `json:"tool,omitempty"`       // tool call information
+	SessionID string    `json:"session_id,omitempty"` // provider session id when discovered mid-stream
 }
 
 // ToolInfo represents a tool call or tool result emitted by an agent.
@@ -99,11 +102,11 @@ const (
 // Result is the final outcome after an agent session completes.
 // It is delivered through the Session.Result channel.
 type Result struct {
-	Status     string                 `json:"status"`               // "completed", "failed", "aborted", "timeout", "cancelled"
-	Output     string                 `json:"output"`               // accumulated text output
-	Error      string                 `json:"error,omitempty"`      // error message if failed
-	DurationMs int64                  `json:"duration_ms"`          // execution duration in milliseconds
-	Usage      map[string]TokenUsage  `json:"usage,omitempty"`      // token usage keyed by model name
+	Status     string                `json:"status"`          // "completed", "failed", "aborted", "timeout", "cancelled"
+	Output     string                `json:"output"`          // accumulated text output
+	Error      string                `json:"error,omitempty"` // error message if failed
+	DurationMs int64                 `json:"duration_ms"`     // execution duration in milliseconds
+	Usage      map[string]TokenUsage `json:"usage,omitempty"` // token usage keyed by model name
 	// InitInfo carries backend-specific session initialization metadata —
 	// e.g. the Claude Code `system/init` event payload (model name, loaded
 	// MCP servers with their status, plugin errors). Keyed by field name.

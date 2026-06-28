@@ -95,9 +95,9 @@ func TestBuiltins_UnknownTypeError(t *testing.T) {
 func TestBuiltins_PersistentBackend(t *testing.T) {
 	reg := GlobalRegistry()
 
-	// claude, codex, opencode, hermes, kimi, kiro, and openclaw
+	// claude/local, codex, opencode, hermes, kimi, kiro, and openclaw
 	// implement PersistentBackend.
-	for _, typ := range []string{"claude", "codex", "opencode", "hermes", "kimi", "kiro", "openclaw"} {
+	for _, typ := range []string{"claude", "local", "codex", "opencode", "hermes", "kimi", "kiro", "openclaw"} {
 		b, err := reg.Create(typ, BackendConfig{ProviderType: typ})
 		if err != nil {
 			t.Fatalf("Create(%q): %v", typ, err)
@@ -123,7 +123,7 @@ func TestBuiltins_PersistentBackend(t *testing.T) {
 
 func TestBuiltins_NewPersistentBackend(t *testing.T) {
 	// Persistent types should succeed.
-	for _, typ := range []string{"claude", "codex", "opencode", "hermes", "kimi", "kiro", "openclaw"} {
+	for _, typ := range []string{"claude", "local", "codex", "opencode", "hermes", "kimi", "kiro", "openclaw"} {
 		pb, err := NewPersistentBackend(typ)
 		if err != nil {
 			t.Fatalf("NewPersistentBackend(%q): unexpected error: %v", typ, err)

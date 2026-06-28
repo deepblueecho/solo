@@ -83,3 +83,24 @@ func TestSelectWakeAgentIDsMatchesCurrentTaskRouting(t *testing.T) {
 		})
 	}
 }
+
+func TestShouldTriggerAgentForSender(t *testing.T) {
+	tests := []struct {
+		name        string
+		senderType  string
+		mentions    []string
+		wantTrigger bool
+	}{
+		{name: "user message triggers", senderType: "user", wantTrigger: true},
+		{name: "system message can trigger", senderType: "system", mentions: []string{"lead"}, wantTrigger: true},
+		{name: "agent message without mention does not trigger", senderType: "agent", wantTrigger: false},
+		{name: "agent message with mention can trigger", senderType: "agent", mentions: []string{"worker"}, wantTrigger: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldTriggerAgentForSender(tt.senderType, tt.mentions); got != tt.wantTrigger {
+				t.Fatalf("got %v, want %v", got, tt.wantTrigger)
+			}
+		})
+	}
+}

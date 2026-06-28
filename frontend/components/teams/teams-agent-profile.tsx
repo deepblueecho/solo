@@ -18,6 +18,7 @@ import { Trash2 } from 'lucide-react';
 import { AgentProfileTab } from '@/components/agents/agent-profile-tab';
 import { AgentRuntimeTab } from '@/components/agents/agent-runtime-tab';
 import { AgentSkillsTab } from '@/components/agents/agent-skills-tab';
+import { AgentObservabilityTab } from '@/components/agents/agent-observability-tab';
 import { Button } from '@/components/ui/button';
 import { detailSectionClass } from '@/components/ui/detail-section';
 import {
@@ -36,6 +37,7 @@ interface TeamsAgentProfileProps {
   agentId: string;
   redirectAfterDelete?: boolean;
   showProfileHeader?: boolean;
+  showObservability?: boolean;
   /**
    * Called after the delete API returns success. The parent owns the
    * canonical agent list (sidebar) and should refetch + clear its
@@ -48,6 +50,7 @@ export function TeamsAgentProfile({
   agentId,
   redirectAfterDelete = true,
   showProfileHeader = true,
+  showObservability = false,
   onAgentDeleted,
 }: TeamsAgentProfileProps) {
   const router = useRouter();
@@ -84,6 +87,11 @@ export function TeamsAgentProfile({
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <AgentProfileTab agentId={agentId} showHeader={showProfileHeader} />
+        {showObservability && (
+          <div className={detailSectionClass()}>
+            <AgentObservabilityTab agentId={agentId} />
+          </div>
+        )}
         <div className={detailSectionClass()}>
           <AgentRuntimeTab agentId={agentId} />
         </div>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { t } from '@/lib/i18n';
 import { usePathname } from 'next/navigation';
 import {
+  Gauge,
   MessageSquare,
   Users,
   Monitor,
@@ -13,9 +14,10 @@ import { useAuth } from '@/lib/auth-context';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 
 const NAV_ITEMS = [
-  { href: '/dashboard', icon: MessageSquare, label: t('navChannels') },
-  { href: '/teams', icon: Users, label: t('navTeams') },
-  { href: '/computers', icon: Monitor, label: t('navComputers') },
+  { href: '/dashboard', icon: MessageSquare, label: t('navChannels'), key: 'chat' },
+  { href: '/teams', icon: Users, label: t('navTeams'), key: 'teams' },
+  { href: '/observability/live', icon: Gauge, label: t('observabilityDashboard'), key: 'dashboard' },
+  { href: '/computers', icon: Monitor, label: t('navComputers'), key: 'computers' },
 ] as const;
 
 export function NavBar() {
@@ -38,7 +40,11 @@ export function NavBar() {
 
       {/* Nav items */}
       {NAV_ITEMS.map((item) => {
-        const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+        const isActive = item.key === 'dashboard'
+          ? pathname.startsWith('/observability')
+          : item.key === 'chat'
+            ? pathname === '/dashboard'
+            : pathname === item.href || pathname.startsWith(item.href + '/');
         return (
           <Link
             key={item.href}
