@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -158,6 +159,32 @@ func TestCodexPersistentStartDoesNotPrependSystemPrompt(t *testing.T) {
 
 	if strings.Contains(string(src), `prompt = opts.SystemPrompt + "\n\n---\n\n" + prompt`) {
 		t.Fatal("persistent Codex must pass SystemPrompt via developerInstructions only, not prepend it to user input")
+	}
+}
+
+func TestCodexClientCompletesOnSnakeCaseFinalAnswer(t *testing.T) {
+	done := false
+	c := &codexClient{
+		logger:      slog.Default(),
+		turnStarted: true,
+		onTurnDone: func(aborted bool) {
+			if aborted {
+				t.Fatal("aborted = true, want false")
+			}
+			done = true
+		},
+	}
+
+	c.handleRawNotification("item/completed", map[string]any{
+		"item": map[string]any{
+			"type":  "agent_message",
+			"text":  "Done.",
+			"phase": "final_answer",
+		},
+	})
+
+	if !done {
+		t.Fatal("onTurnDone was not called")
 	}
 }
 

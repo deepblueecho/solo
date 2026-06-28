@@ -337,10 +337,11 @@ func (b *ClaudeBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Ex
 	}
 
 	return &PersistentSession{
-		Messages: turn.msgCh,
-		Result:   turn.resCh,
-		Stop:     stop,
-		state:    state,
+		Messages:  turn.msgCh,
+		Result:    turn.resCh,
+		Stop:      stop,
+		SessionID: state.sessionID,
+		state:     state,
 	}, nil
 }
 
@@ -414,13 +415,12 @@ func (b *ClaudeBackend) persistentStreamLoop(
 					}
 				}
 			}
-			if msg.SessionID != "" && state.sessionID == "" {
-				state.sessionID = msg.SessionID
-			}
+			updateClaudeSessionID(state, msg.SessionID)
 			if turn != nil {
 				trySend(turn.msgCh, OutputChunk{
-					Type:    string(MessageStatus),
-					Content: "running",
+					Type:      string(MessageStatus),
+					Content:   "running",
+					SessionID: msg.SessionID,
 				})
 			}
 
@@ -487,6 +487,12 @@ func (b *ClaudeBackend) persistentStreamLoop(
 	)
 }
 
+func updateClaudeSessionID(state *claudePersistentState, sessionID string) {
+	if sessionID != "" {
+		state.sessionID = sessionID
+	}
+}
+
 func (b *ClaudeBackend) handleAssistantPersistent(msg claudeSDKMessage, turn *turnState, state *claudePersistentState) {
 	var content claudeMessageContent
 	if err := json.Unmarshal(msg.Message, &content); err != nil {
@@ -512,8 +518,12 @@ func (b *ClaudeBackend) handleAssistantPersistent(msg claudeSDKMessage, turn *tu
 				trySend(turn.msgCh, OutputChunk{Type: string(MessageText), Content: block.Text})
 			}
 		case "thinking":
-			if block.Text != "" {
-				trySend(turn.msgCh, OutputChunk{Type: string(MessageThinking), Content: block.Text})
+			text := block.Text
+			if text == "" {
+				text = block.Thinking
+			}
+			if text != "" {
+				trySend(turn.msgCh, OutputChunk{Type: string(MessageThinking), Content: text})
 			}
 		case "tool_use":
 			var input map[string]any
@@ -743,8 +753,9 @@ func (b *ClaudeBackend) streamLoop(
 				sessionID = msg.SessionID
 			}
 			trySend(msgCh, OutputChunk{
-				Type:    string(MessageStatus),
-				Content: "running",
+				Type:      string(MessageStatus),
+				Content:   "running",
+				SessionID: msg.SessionID,
 			})
 		case "result":
 			if msg.ResultText != "" {
@@ -824,8 +835,12 @@ func (b *ClaudeBackend) handleAssistant(msg claudeSDKMessage, ch chan<- OutputCh
 				trySend(ch, OutputChunk{Type: string(MessageText), Content: block.Text})
 			}
 		case "thinking":
-			if block.Text != "" {
-				trySend(ch, OutputChunk{Type: string(MessageThinking), Content: block.Text})
+			text := block.Text
+			if text == "" {
+				text = block.Thinking
+			}
+			if text != "" {
+				trySend(ch, OutputChunk{Type: string(MessageThinking), Content: text})
 			}
 		case "tool_use":
 			var input map[string]any
@@ -995,7 +1010,7 @@ func buildClaudeInput(prompt string) ([]byte, error) {
 func buildEnv(extra map[string]string) []string {
 	env := mergeEnv(os.Environ(), extra)
 	// Prepend CWD to PATH so the solo binary (copied to workspace root) is
-	// directly accessible as "solo", 
+	// directly accessible as "solo",
 	// Claude Code sets CWD to workspace root via cmd.Dir.
 	return env
 }
@@ -1115,11 +1130,11 @@ type claudeSDKMessage struct {
 //
 // See: https://code.claude.com/docs/en/agent-sdk/overview (stream-json protocol)
 type claudeInitEvent struct {
-	Subtype      string          `json:"subtype"`
-	Model        string          `json:"model,omitempty"`
-	Tools        []string        `json:"tools,omitempty"`
-	MCPServers   []claudeMCPServ `json:"mcp_servers,omitempty"`
-	Plugins      []string        `json:"plugins,omitempty"`
+	Subtype      string              `json:"subtype"`
+	Model        string              `json:"model,omitempty"`
+	Tools        []string            `json:"tools,omitempty"`
+	MCPServers   []claudeMCPServ     `json:"mcp_servers,omitempty"`
+	Plugins      []string            `json:"plugins,omitempty"`
 	PluginErrors []claudePluginError `json:"plugin_errors,omitempty"`
 }
 
@@ -1306,6 +1321,7 @@ type claudeUsage struct {
 type claudeContentBlock struct {
 	Type      string          `json:"type"`
 	Text      string          `json:"text,omitempty"`
+	Thinking  string          `json:"thinking,omitempty"`
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`

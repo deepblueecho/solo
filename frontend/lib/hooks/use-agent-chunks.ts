@@ -73,11 +73,8 @@ export function useAgentChunks(channelId: string | null) {
         return;
       }
 
-      // Handle agent.done (SOLO-island PR0) — authoritative terminal signal.
-      // Immediately remove the agent from the active list. Replaces the
-      // previous 3s inactivity heuristic that was both slow and prone to
-      // premature eviction during long-running tool calls.
-      if (event.type === 'agent.done' && event.channel_id === channelId && event.agent_id) {
+      // agent.run.finished is the authoritative terminal signal.
+      if (event.type === 'agent.run.finished' && event.channel_id === channelId && event.agent_id) {
         const agentId = event.agent_id;
         setActiveAgentIds(prev => prev.filter(id => id !== agentId));
         // Note: we keep agentTracks populated for now so the user can scroll

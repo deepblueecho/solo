@@ -878,12 +878,16 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 	// For Claude backend, use persistent sessions via AgentSessionManager.
 	// Falls back to backend.Execute() for non-persistent backends.
 	var session *agent.Session
+	var providerSessionID string
+	var transcriptPath string
 	if _, isPersistent := backend.(agent.PersistentBackend); isPersistent && h.getSessionManager(req.ModelConfig.Provider) != nil {
 		if h.getSessionManager(req.ModelConfig.Provider).IsActive(req.AgentID) {
 			slog.Info("task: reusing persistent session", "agent_id", req.AgentID)
 			ps, psErr := h.getSessionManager(req.ModelConfig.Provider).DeliverMessage(ctx, req.AgentID, msgs)
 			if psErr == nil {
-				session = &agent.Session{Messages: ps.Messages, Result: ps.Result, Stop: ps.Stop}
+				providerSessionID = ps.SessionID
+				transcriptPath = transcriptPathForProvider(req.ModelConfig.Provider, ws.WorkDir, providerSessionID)
+				session = &agent.Session{Messages: ps.Messages, Result: ps.Result, Stop: ps.Stop, SessionID: providerSessionID}
 			} else {
 				slog.Warn("task: session delivery failed", "agent_id", req.AgentID, "error", psErr)
 			}
@@ -892,7 +896,9 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 			slog.Info("task: creating persistent session", "agent_id", req.AgentID)
 			ps, psErr := h.getSessionManager(req.ModelConfig.Provider).GetOrCreateSession(ctx, req.AgentID, agentCfg, channelCtx, msgs, req.MentionedNames)
 			if psErr == nil {
-				session = &agent.Session{Messages: ps.Messages, Result: ps.Result, Stop: ps.Stop}
+				providerSessionID = ps.SessionID
+				transcriptPath = transcriptPathForProvider(req.ModelConfig.Provider, ws.WorkDir, providerSessionID)
+				session = &agent.Session{Messages: ps.Messages, Result: ps.Result, Stop: ps.Stop, SessionID: providerSessionID}
 			} else {
 				slog.Warn("task: session creation failed, falling back to Execute", "agent_id", req.AgentID, "error", psErr)
 			}
@@ -913,14 +919,44 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 			return
 		}
 	}
+	if providerSessionID == "" && session.SessionID != "" {
+		providerSessionID = session.SessionID
+		transcriptPath = transcriptPathForProvider(req.ModelConfig.Provider, ws.WorkDir, providerSessionID)
+	}
+	if providerSessionID != "" || transcriptPath != "" {
+		h.pushEventJSON(req.TaskID, "session", map[string]interface{}{
+			"agent_id":            req.AgentID,
+			"external_session_id": providerSessionID,
+			"transcript_path":     transcriptPath,
+		})
+	}
 
 	// Stream output chunks
 	var fullContent string
 	var messageSentViaCLI bool
 
 	for chunk := range session.Messages {
-		// SOLO-island PR1: emit agent.activity for every chunk the island UI
-		// cares about. Skips empty activity text internally.
+		if chunk.SessionID != "" && chunk.SessionID != providerSessionID {
+			providerSessionID = chunk.SessionID
+			transcriptPath = transcriptPathForProvider(req.ModelConfig.Provider, ws.WorkDir, providerSessionID)
+			h.pushEventJSON(req.TaskID, "session", map[string]interface{}{
+				"agent_id":            req.AgentID,
+				"external_session_id": providerSessionID,
+				"transcript_path":     transcriptPath,
+			})
+		}
+		if providerSessionID != "" && transcriptPath == "" {
+			if path := transcriptPathForProvider(req.ModelConfig.Provider, ws.WorkDir, providerSessionID); path != "" {
+				transcriptPath = path
+				h.pushEventJSON(req.TaskID, "session", map[string]interface{}{
+					"agent_id":            req.AgentID,
+					"external_session_id": providerSessionID,
+					"transcript_path":     transcriptPath,
+				})
+			}
+		}
+
+		// Emit a run update for every chunk the UI cares about.
 		h.pushAgentActivity(req, agentInfo.Name, req.ModelConfig.Provider, chunk)
 
 		switch chunk.Type {
@@ -1027,11 +1063,14 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 	}
 
 	h.taskManager.UpdateStatus(req.TaskID, taskStatusCompleted)
+	transcriptPath = refreshTranscriptPathForProvider(req.ModelConfig.Provider, ws.WorkDir, providerSessionID, transcriptPath)
 
 	// Push complete event — notification only (no content, no persist).
 	// Real messages arrive via solo message send → daemon proxy → server API → message.new.
 	h.pushEventJSON(req.TaskID, "complete", map[string]interface{}{
-		"agent_id": req.AgentID,
+		"agent_id":            req.AgentID,
+		"external_session_id": providerSessionID,
+		"transcript_path":     transcriptPath,
 		"usage": map[string]int{
 			"input_tokens":  inputTokens,
 			"output_tokens": outputTokens,
@@ -1042,6 +1081,17 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 	// subscribers in order, eliminating the need for a delay.
 	h.pushEventJSON(req.TaskID, "done", map[string]interface{}{})
 	h.taskManager.CloseAllSubscribers(req.TaskID)
+}
+
+func transcriptPathForProvider(provider, workspaceDir, sessionID string) string {
+	return agent.TranscriptPath(provider, workspaceDir, sessionID)
+}
+
+func refreshTranscriptPathForProvider(provider, workspaceDir, sessionID, current string) string {
+	if current != "" || sessionID == "" {
+		return current
+	}
+	return transcriptPathForProvider(provider, workspaceDir, sessionID)
 }
 
 // agentInfo holds agent metadata fetched from the database.
@@ -1101,11 +1151,8 @@ func (h *daemonHandler) pushEventJSON(taskID, event string, data interface{}) {
 	})
 }
 
-// pushAgentActivity (SOLO-island PR1) translates a backend OutputChunk
-// into an agent.activity SSE event for the AgentIsland UI. Skips push
-// when the chunk produces no activity text (mirrors Kanan's "best effort,
-// skip empty" pattern). Payload matches ws.AgentActivityPayload on the
-// server side; server passes it through to WebSocket unchanged.
+// pushAgentActivity translates a backend OutputChunk into a run status update.
+// Skips push when the chunk produces no activity text or no run status.
 //
 // Per-CLI adaptation (SOLO-island PR-fix): uses
 // InferActivityTextForBackend so ACP backends (Kimi/Kiro/Hermes)
@@ -1120,7 +1167,10 @@ func (h *daemonHandler) pushAgentActivity(req runTaskRequest, agentName, provide
 	if activityText == "" {
 		return
 	}
-	status := agent.InferIslandStatusFromChunk(chunk)
+	status, ok := agent.InferRunStatusFromChunk(chunk)
+	if !ok {
+		return
+	}
 
 	var toolName, toolInputSummary string
 	if chunk.Tool != nil {
@@ -1150,8 +1200,8 @@ func (h *daemonHandler) pushAgentActivity(req runTaskRequest, agentName, provide
 		payload["source"] = provider
 	}
 
-	slog.Debug("daemon: pushing agent.activity", "task_id", req.TaskID, "channel_id", req.ChannelID, "agent_id", req.AgentID, "status", status, "activity_text", activityText)
-	h.pushEventJSON(req.TaskID, "agent.activity", payload)
+	slog.Debug("daemon: pushing agent.run.updated", "task_id", req.TaskID, "channel_id", req.ChannelID, "agent_id", req.AgentID, "status", status, "activity_text", activityText)
+	h.pushEventJSON(req.TaskID, "agent.run.updated", payload)
 }
 
 // --- SSE endpoint ---

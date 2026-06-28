@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -47,6 +49,58 @@ func TestOpenCodeExecute_ExecLookPathNotFound(t *testing.T) {
 	}
 }
 
+func TestOpenCodeStartReturnsAfterSessionNewBeforePromptCompletes(t *testing.T) {
+	fake := filepath.Join(t.TempDir(), "opencode")
+	script := `#!/bin/sh
+while IFS= read -r line; do
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '{"jsonrpc":"2.0","id":0,"result":{}}\n'
+      ;;
+    *'"method":"session/new"'*)
+      printf '{"jsonrpc":"2.0","id":1,"result":{"sessionId":"opencode-session-1"}}\n'
+      ;;
+    *'"method":"session/prompt"'*)
+      sleep 5
+      ;;
+  esac
+done
+`
+	if err := os.WriteFile(fake, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	b := NewOpenCodeBackend(fake, slog.Default())
+	done := make(chan *PersistentSession, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		ps, err := b.Start(ctx, &ExecuteRequest{
+			AgentID:  "agent-1",
+			Messages: []Message{{Role: RoleUser, Content: "hello"}},
+		}, &ExecuteOptions{})
+		if err != nil {
+			errCh <- err
+			return
+		}
+		done <- ps
+	}()
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("Start returned error: %v", err)
+	case ps := <-done:
+		defer b.Close(ps)
+		if ps.SessionID != "opencode-session-1" {
+			t.Fatalf("SessionID = %q, want opencode-session-1", ps.SessionID)
+		}
+	case <-time.After(500 * time.Millisecond):
+		cancel()
+		t.Fatal("Start did not return before session/prompt completed")
+	}
+}
+
 func TestOpenCodeExportedHelpers(t *testing.T) {
 	// Verify asserts are compatible.
 	t.Run("assertContains", func(t *testing.T) {
@@ -56,4 +110,3 @@ func TestOpenCodeExportedHelpers(t *testing.T) {
 		assertNotContains(t, []string{"a", "b", "c"}, "z")
 	})
 }
-

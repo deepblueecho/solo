@@ -1,496 +1,281 @@
 'use client';
 
-// ============================================================================
-// AgentIsland (SOLO-island PR2) — iPhone Dynamic Island-style floating UI
-// that surfaces real-time agent status in the current channel.
-//
-// Visual: a brutalist bar fixed at the bottom of the sidebar (left second
-// column), matching its 220px width — like how the iPhone Dynamic Island
-// matches the notch width. Collapsed by default; shows the most recent
-// activity for the first active agent. Expands (on click) into a list of
-// all active agents, growing upward from the bottom.
-//
-// Disappears entirely when no agent is active (on-demand).
-//
-// Exit animation (SOLO-island PR-fix): when activeAgents empties, the bar
-// stays mounted for 200ms while playing a height-collapse + fade animation
-// (pure CSS via Tailwind transition classes — no framer-motion to keep the
-// bundle lean), then unmounts.
-// ============================================================================
-
-import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  Brain,
-  Loader2,
-  Bot,
-  AlertTriangle,
-  Eye,
-  EyeOff,
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle, Bot, Brain, CheckCircle2, Clock, Eye, EyeOff, Loader2, XCircle } from 'lucide-react';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
-import { t } from '@/lib/i18n';
-import { useAgentIsland, type IslandAgent, type IslandAgentStatus } from '@/lib/hooks/use-agent-island';
+import { useAgentIsland, type AgentRunStatus, type IslandAgent } from '@/lib/hooks/use-agent-island';
+import { displayAgentActivity } from '@/lib/agent-activity';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
-// ---- Final-state badge config (for agent.done with non-ok outcomes) ----
-
-const FINAL_STATE_BADGE: Record<
-  NonNullable<IslandAgent['finalState']>,
-  { label: string; className: string }
-> = {
-  completed: { label: t('runCompleted'), className: 'bg-brutal-success text-black' },
-  failed: { label: t('runFailed'), className: 'bg-brutal-danger text-white' },
-  aborted: { label: t('runInterrupted'), className: 'bg-brutal-muted text-white' },
-  timeout: { label: t('runTimeout'), className: 'bg-brutal-warning text-black' },
-  cancelled: { label: t('runCancelled'), className: 'bg-brutal-muted text-white' },
+type StatusVisuals = {
+  icon: typeof Brain;
+  dotClass: string;
+  iconClass: string;
+  badgeClass: string;
+  label: string;
+  spin?: boolean;
+  pulse?: boolean;
 };
 
-// ---- Status visual config ----
-
-interface StatusVisuals {
-  /** Lucide icon component. */
-  icon: typeof Brain;
-  /** Color class for the status dot. */
-  dotClass: string;
-  /** Color class for the icon. */
-  iconClass: string;
-  /** Whether the icon should be spinning (Loader2-style). */
-  spin: boolean;
-  /** v3.1: use slow 10s rotation instead of default 1s. For long-running
-   *  tool calls the fast spin reads as anxious; slow reads as deliberate. */
-  slowSpin?: boolean;
-  /** Whether the icon should pulse. */
-  pulse: boolean;
-  /** Short Chinese label used in badges and aria text. */
-  label: string;
-  /** Tailwind class for the inline status badge background. */
-  badgeClass: string;
-}
-
-const STATUS_VISUALS: Record<IslandAgentStatus, StatusVisuals> = {
-  idle: {
-    icon: Bot,
+const STATUS_VISUALS: Record<AgentRunStatus, StatusVisuals> = {
+  queued: {
+    icon: Clock,
     dotClass: 'bg-brutal-muted',
     iconClass: 'text-foreground',
-    spin: false,
-    pulse: false,
-    label: t('agentIdle'),
     badgeClass: 'bg-brutal-muted text-white',
+    label: t('agentQueued'),
   },
   thinking: {
     icon: Brain,
     dotClass: 'bg-brutal-accent',
     iconClass: 'text-yellow-600',
-    spin: false,
-    pulse: true,
-    label: t('agentThinkingShort'),
     badgeClass: 'bg-brutal-accent text-black',
+    label: t('agentThinking'),
+    pulse: true,
   },
   running: {
     icon: Loader2,
     dotClass: 'bg-brutal-info',
     iconClass: 'text-cyan-600',
-    // v3.1: spin-slow (10s/rev) is calmer than the default animate-spin.
-    // An agent executing a long tool call rotating fast reads as anxious;
-    // a slow turn reads as deliberate. Killed by prefers-reduced-motion.
-    spin: true,
-    slowSpin: true,
-    pulse: false,
-    label: t('agentExecuting'),
     badgeClass: 'bg-brutal-info text-black',
+    label: t('agentExecuting'),
+    spin: true,
   },
   streaming: {
     icon: Bot,
     dotClass: 'bg-brutal-success',
     iconClass: 'text-green-600',
-    spin: false,
-    pulse: true,
-    label: t('agentGenerating'),
     badgeClass: 'bg-brutal-success text-black',
+    label: t('agentGenerating'),
+    pulse: true,
   },
-  // waiting_approval: reserved per PRD v1.x approval flow — UI not implemented yet
+  waiting_input: {
+    icon: AlertTriangle,
+    dotClass: 'bg-brutal-warning',
+    iconClass: 'text-orange-600',
+    badgeClass: 'bg-brutal-warning text-black',
+    label: t('agentWaitingInput'),
+    pulse: true,
+  },
   waiting_approval: {
     icon: AlertTriangle,
     dotClass: 'bg-brutal-warning',
     iconClass: 'text-orange-600',
-    spin: false,
-    pulse: true,
-    label: t('agentWaitingApproval'),
     badgeClass: 'bg-brutal-warning text-black',
+    label: t('agentWaitingApproval'),
+    pulse: true,
   },
-  error: {
+  completed: {
+    icon: CheckCircle2,
+    dotClass: 'bg-brutal-success',
+    iconClass: 'text-green-700',
+    badgeClass: 'bg-brutal-success text-black',
+    label: t('agentDone'),
+  },
+  failed: {
+    icon: XCircle,
+    dotClass: 'bg-brutal-danger',
+    iconClass: 'text-red-600',
+    badgeClass: 'bg-brutal-danger text-white',
+    label: t('runFailed'),
+  },
+  cancelled: {
+    icon: XCircle,
+    dotClass: 'bg-brutal-muted',
+    iconClass: 'text-foreground',
+    badgeClass: 'bg-brutal-muted text-white',
+    label: t('runCancelled'),
+  },
+  timeout: {
     icon: AlertTriangle,
     dotClass: 'bg-brutal-danger',
     iconClass: 'text-red-600',
-    spin: false,
-    pulse: false,
-    label: t('agentErrored'),
     badgeClass: 'bg-brutal-danger text-white',
+    label: t('runTimeout'),
   },
 };
 
-interface AgentIslandProps {
-  /**
-   * The current channel/DM ID the island should reflect. Pass null to
-   * disable the island entirely (e.g. on pages without a channel scope).
-   */
-  channelId: string | null;
-  /**
-   * SOLO-island PR3 — invoked when the user clicks an agent row in the
-   * expanded panel. Parent is expected to open the AgentViewPanel and
-   * focus the corresponding agent's trace.
-   */
-  onInvokeAgent?: (agentId: string) => void;
-}
-
-// ============================================================================
-// AgentIsland — root component
-// ============================================================================
-
-export function AgentIsland({ channelId, onInvokeAgent }: AgentIslandProps) {
-  const { activeAgents, clearAll } = useAgentIsland(channelId);
+export function AgentIsland() {
+  const router = useRouter();
+  const { activeAgents, clearAll } = useAgentIsland();
   const [expanded, setExpanded] = useState(false);
-
-  // ---- Exit-animation state machine ----
-  //
-  // `mounted` controls whether the component renders DOM at all.
-  // `closing` controls whether the exit animation is playing.
-  //
-  // Lifecycle:
-  //   activeAgents.length > 0
-  //     → mounted=true, closing=false (visible, entering or stable)
-  //   activeAgents.length === 0
-  //     → mounted=true, closing=true  (playing exit animation)
-  //     → 200ms later: mounted=false   (fully unmounted)
-  //
-  // We mount first (closing=false → closing=true) so React renders the
-  // element, then the next render adds the exit classes; without the
-  // mount-first trick the browser would never see the entering frame
-  // and couldn't transition to the exit frame.
-  const [mounted, setMounted] = useState(activeAgents.length > 0);
-  const [closing, setClosing] = useState(false);
-  const unmountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Remember the last primary agent so the closing frame still has
-  // something to render. Without this, when activeAgents empties the
-  // collapsed pill would briefly render with `primary = undefined` and
-  // trip the PixelAvatar / STATUS_VISUALS lookups.
-  const lastPrimaryRef = useRef<IslandAgent | null>(null);
-  const lastOverflowRef = useRef<number>(0);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
-    console.debug('[AgentIsland] effect running', { activeCount: activeAgents.length, mounted, channelId });
-    if (activeAgents.length > 0) {
-      // Re-entering — cancel any in-flight unmount and reveal.
-      if (unmountTimerRef.current) {
-        clearTimeout(unmountTimerRef.current);
-        unmountTimerRef.current = null;
-      }
-      setMounted(true);
-      setClosing(false);
-      console.debug('[AgentIsland] mounting island', { agentCount: activeAgents.length });
-      return;
-    }
+    const id = setInterval(() => setTick((v) => v + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
-    // No active agents — play exit animation, then unmount.
-    if (!mounted) return;
-    setClosing(true);
-    unmountTimerRef.current = setTimeout(() => {
-      setMounted(false);
-      setClosing(false);
-      lastPrimaryRef.current = null;
-      lastOverflowRef.current = 0;
-      unmountTimerRef.current = null;
-    }, 200);
+  if (activeAgents.length === 0) return null;
 
-    return () => {
-      if (unmountTimerRef.current) {
-        clearTimeout(unmountTimerRef.current);
-        unmountTimerRef.current = null;
-      }
-    };
-  }, [activeAgents.length, mounted]);
+  const primary = activeAgents[0];
+  const overflow = activeAgents.length - 1;
 
-  if (!mounted) {
-    return null;
-  }
-
-  // Use the current active agent when available, otherwise fall back to
-  // the last-seen one so the exit animation can play with valid data.
-  if (activeAgents.length > 0) {
-    lastPrimaryRef.current = activeAgents[0];
-    lastOverflowRef.current = activeAgents.length - 1;
-  }
-  const primary = activeAgents[0] ?? lastPrimaryRef.current;
-  const overflow =
-    activeAgents.length > 0 ? activeAgents.length - 1 : lastOverflowRef.current;
-
-  // Defensive: first render with no last-primary (shouldn't happen since
-  // `mounted` initialises to `activeAgents.length > 0`, but guards
-  // against channel-switch races).
-  if (!primary) {
-    return null;
-  }
+  const openRun = (runId: string) => {
+    router.push(`/observability/live?run_id=${encodeURIComponent(runId)}`);
+  };
 
   return (
-    <div
-      className={cn(
-        // Anchored to the sidebar bottom-left: navbar (w-14 = 56px) +
-        // sidebar width (220px). Fixed so it overlays and stays put
-        // regardless of sidebar scroll.
-        'fixed bottom-0 left-[56px] z-50 w-[220px] border-r-2 border-black transition-all duration-200 ease-out',
-        closing
-          ? 'max-h-0 opacity-0'
-          : 'max-h-[500px] opacity-100',
-      )}
-      role="region"
-      aria-label={t('agentRealTimeStatus')}
-      aria-hidden={closing}
-    >
+    <div className="fixed bottom-0 left-[56px] z-50 w-[220px] border-r-2 border-black">
       {expanded ? (
         <ExpandedPanel
-          // Remount on collapse→expand so the height transition plays
-          // cleanly (CSS transition needs the entering frame to differ
-          // from the leaving frame).
-          key="expanded"
           agents={activeAgents}
+          onOpenRun={openRun}
           onCollapse={() => setExpanded(false)}
           onClearAll={clearAll}
-          onInvokeAgent={onInvokeAgent}
         />
       ) : (
         <CollapsedPill
-          key="collapsed"
           primary={primary}
           overflow={overflow}
-          onClick={() => setExpanded(true)}
+          onExpand={() => setExpanded(true)}
+          onOpenRun={() => openRun(primary.runId)}
         />
       )}
     </div>
   );
 }
 
-// ============================================================================
-// Collapsed bar — single-agent summary, full sidebar width
-// ============================================================================
-
 function CollapsedPill({
   primary,
   overflow,
-  onClick,
+  onExpand,
+  onOpenRun,
 }: {
   primary: IslandAgent;
   overflow: number;
-  onClick: () => void;
+  onExpand: () => void;
+  onOpenRun: () => void;
 }) {
-  const vis = STATUS_VISUALS[primary.status];
-  const Icon = vis.icon;
+  const visual = STATUS_VISUALS[primary.status];
+  const Icon = visual.icon;
+  const activity = displayAgentActivity(primary.status, primary.activityText, primary.toolInputSummary, visual.label);
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex w-full flex-col border-t-2 border-black bg-brutal-cream px-3 py-2 transition-colors hover:bg-brutal-muted-light"
-      aria-label={t('agentClickForDetail', { name: primary.agentName, status: STATUS_VISUALS[primary.status].label })}
-    >
-      {/* Row 1: Avatar + Name */}
-      <div className="flex w-full items-center gap-2">
-        <PixelAvatar agentId={primary.agentId} avatarUrl={null} size="sm" />
-
-        <span className="min-w-0 flex-1 truncate text-left font-heading text-xs font-bold text-foreground">
-          {primary.agentName}
-        </span>
-
-        {/* Overflow indicator */}
-        {overflow > 0 && (
-          <span className="flex h-4 min-w-[16px] flex-shrink-0 items-center justify-center border-2 border-black bg-brutal-primary px-1 font-mono text-[9px] font-bold text-black">
-            +{overflow}
+    <div className="border-t-2 border-black bg-brutal-cream px-3 py-2">
+      <button
+        type="button"
+        onClick={onOpenRun}
+        className="group flex w-full flex-col text-left"
+        aria-label={`${primary.agentName} ${visual.label}`}
+      >
+        <div className="flex w-full items-center gap-2">
+          <PixelAvatar agentId={primary.agentId} avatarUrl={null} size="sm" />
+          <span className="min-w-0 flex-1 truncate font-heading text-xs font-bold text-foreground">
+            {primary.agentName}
           </span>
-        )}
+          <span className={cn('badge-brutal px-1.5 py-0 text-[9px]', visual.badgeClass)}>
+            {visual.label}
+          </span>
+          {overflow > 0 && (
+            <span className="border-2 border-black bg-brutal-primary px-1 font-mono text-[9px] font-bold text-black">
+              +{overflow}
+            </span>
+          )}
+        </div>
 
-        {/* Expand hint — reserved space */}
-        <span className="w-3 flex-shrink-0">
-          <Eye className="h-3 w-3 text-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-        </span>
-      </div>
+        <div className="mt-1 flex w-full items-center gap-2">
+          <span className="inline-flex w-7 flex-shrink-0 items-center justify-center gap-0.5">
+            <span className={cn('h-2.5 w-2.5 rounded-full', visual.dotClass, visual.pulse && 'animate-pulse')} />
+            <Icon className={cn('h-3.5 w-3.5', visual.iconClass, visual.spin && 'animate-spin-slow')} />
+          </span>
+          <span className="min-w-0 flex-1 truncate font-heading text-xs font-bold text-foreground">
+            {activity}
+          </span>
+          <span className="font-mono text-[9px] text-foreground">{elapsed(primary)}</span>
+        </div>
 
-      {/* Row 2: Status + Activity */}
-      <div className="mt-1 flex w-full items-center gap-2">
-        {/* Left decoration: dot + icon, same width as avatar column (28px) */}
-        <span className="inline-flex w-7 flex-shrink-0 items-center justify-center gap-0.5">
-          <span
-            className={cn(
-              'h-2.5 w-2.5 flex-shrink-0 rounded-full',
-              vis.dotClass,
-              vis.pulse && 'animate-pulse',
-            )}
-            aria-hidden
-          />
-          <Icon
-            className={cn(
-              'h-3.5 w-3.5 flex-shrink-0',
-              vis.iconClass,
-              vis.spin && (vis.slowSpin ? 'animate-spin-slow' : 'animate-spin'),
-            )}
-            aria-hidden
-          />
-        </span>
-
-        <span className="min-w-0 flex-1 truncate text-left font-heading text-xs font-bold text-foreground">
-          {primary.activityText || STATUS_VISUALS[primary.status].label}
-        </span>
-
-        {/* Mirror right-side reserved space from row 1 */}
-        <span className="w-3 flex-shrink-0" />
-      </div>
-    </button>
+        <div className="mt-1 flex items-center gap-1 pl-9 font-mono text-[9px] text-foreground">
+          {primary.taskId ? <span>{t('agentTaskRef', { id: primary.taskId.slice(0, 8) })}</span> : <span>{t('agentSessionRef', { id: primary.sessionId?.slice(0, 8) ?? '-' })}</span>}
+        </div>
+      </button>
+      {overflow > 0 && (
+        <button
+          type="button"
+          onClick={onExpand}
+          className="mt-1 flex w-full items-center justify-center border-t-2 border-black pt-1 font-heading text-[10px] font-bold hover:text-brutal-primary"
+        >
+          <Eye className="mr-1 h-3 w-3" />
+          {t('agentExpandAll')}
+        </button>
+      )}
+    </div>
   );
 }
 
-// ============================================================================
-// Expanded panel — multi-agent list
-// ============================================================================
-
 function ExpandedPanel({
   agents,
+  onOpenRun,
   onCollapse,
   onClearAll,
-  onInvokeAgent,
 }: {
   agents: IslandAgent[];
+  onOpenRun: (runId: string) => void;
   onCollapse: () => void;
   onClearAll: () => void;
-  onInvokeAgent?: (agentId: string) => void;
 }) {
   return (
-    <div className="w-full border-t-2 border-black bg-brutal-cream">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b-2 border-black bg-brutal-cream px-2.5 py-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="flex h-4 w-4 items-center justify-center border-2 border-black bg-brutal-primary">
-            <Eye className="h-2.5 w-2.5 text-white" />
-          </span>
-          <span className="font-heading text-xs font-bold">Agent View</span>
-          <span className="font-mono text-[9px] text-foreground">
-            {agents.length}
-          </span>
-        </div>
+    <div className="border-t-2 border-black bg-brutal-cream">
+      <div className="flex items-center justify-between border-b-2 border-black px-2.5 py-1.5">
+        <span className="font-heading text-xs font-bold">{t('agentLive')}</span>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onClearAll}
-            className="btn-flat h-5 px-1.5 text-[9px]"
-            aria-label={t('agentClearAll')}
-            title={t('agentClearAll')}
-          >
-            {t('clear')}
+          <button type="button" onClick={onClearAll} className="btn-flat h-5 px-1.5 text-[9px]">
+            {t('agentClearAll')}
           </button>
           <button
             type="button"
             onClick={onCollapse}
             className="flex h-5 w-5 items-center justify-center border-2 border-black bg-brutal-cream hover:bg-brutal-muted-light"
             aria-label={t('agentCollapse')}
-            title={t('agentCollapse')}
           >
             <EyeOff className="h-2.5 w-2.5" />
           </button>
         </div>
       </div>
 
-      {/* Agent list */}
-      <div className="max-h-64 divide-y-2 divide-black overflow-y-auto">
+      <div className="max-h-72 divide-y-2 divide-black overflow-y-auto">
         {agents.map((agent) => (
-          <AgentRow
-            key={agent.agentId}
-            agent={agent}
-            onClick={onInvokeAgent ? () => onInvokeAgent(agent.agentId) : undefined}
-          />
+          <AgentRow key={agent.runId} agent={agent} onClick={() => onOpenRun(agent.runId)} />
         ))}
       </div>
     </div>
   );
 }
 
-// ============================================================================
-// Agent row in the expanded list
-// ============================================================================
-
-function AgentRow({ agent, onClick }: { agent: IslandAgent; onClick?: () => void }) {
-  const vis = STATUS_VISUALS[agent.status];
-  const Icon = vis.icon;
-
-  const interactive = !!onClick;
+function AgentRow({ agent, onClick }: { agent: IslandAgent; onClick: () => void }) {
+  const visual = STATUS_VISUALS[agent.status];
+  const Icon = visual.icon;
+  const activity = displayAgentActivity(agent.status, agent.activityText, agent.toolInputSummary, visual.label);
 
   return (
-    <div
-      className={cn(
-        'flex items-start gap-2 px-2.5 py-1.5 transition-colors',
-        interactive && 'cursor-pointer hover:bg-brutal-cream',
-      )}
-      onClick={onClick}
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onKeyDown={
-        interactive
-          ? (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onClick?.();
-              }
-            }
-          : undefined
-      }
-      aria-label={interactive ? t('agentViewTrace', { name: agent.agentName }) : undefined}
-    >
+    <button type="button" onClick={onClick} className="flex w-full items-start gap-2 px-2.5 py-1.5 text-left hover:bg-brutal-muted-light">
       <PixelAvatar agentId={agent.agentId} avatarUrl={null} size="sm" />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1 flex-wrap">
-          <span
-            className={cn(
-              'h-1.5 w-1.5 flex-shrink-0 rounded-full',
-              vis.dotClass,
-              vis.pulse && 'animate-pulse',
-            )}
-            aria-hidden
-          />
-          <Icon
-            className={cn(
-              'h-2.5 w-2.5 flex-shrink-0',
-              vis.iconClass,
-              vis.spin && (vis.slowSpin ? 'animate-spin-slow' : 'animate-spin'),
-            )}
-            aria-hidden
-          />
-          <span className="truncate font-heading text-[11px] font-bold">
-            {agent.agentName}
-          </span>
-          <span
-            className={cn(
-              'badge-brutal px-1 py-0 text-[8px]',
-              STATUS_VISUALS[agent.status].badgeClass,
-            )}
-          >
-            {STATUS_VISUALS[agent.status].label}
-          </span>
-          {agent.status === 'idle' && agent.finalState && (
-            <span
-              className={cn(
-                'badge-brutal px-1 py-0 text-[8px]',
-                FINAL_STATE_BADGE[agent.finalState].className,
-              )}
-            >
-              {FINAL_STATE_BADGE[agent.finalState].label}
-            </span>
-          )}
+        <div className="flex items-center gap-1">
+          <span className={cn('h-1.5 w-1.5 rounded-full', visual.dotClass, visual.pulse && 'animate-pulse')} />
+          <Icon className={cn('h-2.5 w-2.5', visual.iconClass, visual.spin && 'animate-spin-slow')} />
+          <span className="truncate font-heading text-[11px] font-bold">{agent.agentName}</span>
+          <span className={cn('badge-brutal px-1 py-0 text-[8px]', visual.badgeClass)}>{visual.label}</span>
+          <span className="ml-auto font-mono text-[9px]">{elapsed(agent)}</span>
         </div>
         <p className="mt-0.5 truncate font-mono text-[10px] text-foreground">
-          {agent.activityText}
+          {activity}
         </p>
-        {agent.toolInputSummary && (
-          <p className="mt-0.5 truncate font-mono text-[9px] text-cyan-700">
-            {agent.toolInputSummary}
-          </p>
-        )}
+        <p className="mt-0.5 truncate font-mono text-[9px] text-cyan-700">
+          {agent.taskId ? t('agentTaskRef', { id: agent.taskId.slice(0, 8) }) : t('agentSessionRef', { id: agent.sessionId?.slice(0, 8) ?? '-' })}
+        </p>
       </div>
-    </div>
+    </button>
   );
+}
+
+function elapsed(agent: IslandAgent): string {
+  const from = agent.startedAt ?? agent.updatedAt;
+  const seconds = Math.max(0, Math.floor((Date.now() - from) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}m${rest.toString().padStart(2, '0')}s`;
 }

@@ -224,6 +224,7 @@ func (b *KiroBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *Ex
 
 		c.sessionID = sessionID
 		b.logger.Info("kiro session created", "session_id", sessionID)
+		trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: sessionID})
 
 		// 3. Set model if specified.
 		if opts.Model != "" {
@@ -509,12 +510,12 @@ func (b *KiroBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Exec
 		}, promptBlocks...)
 	}
 
-	// 5. Send the initial prompt.
-	_, err = cl.request(ctx, "session/prompt", map[string]any{
+	trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: sessionID})
+
+	if _, err := cl.request(ctx, "session/prompt", map[string]any{
 		"sessionId": sessionID,
 		"prompt":    promptBlocks,
-	})
-	if err != nil {
+	}); err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			handleError(fmt.Sprintf("kiro timed out during initial prompt"))
 		} else if errors.Is(ctx.Err(), context.Canceled) {
@@ -522,10 +523,9 @@ func (b *KiroBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Exec
 		} else {
 			handleError(fmt.Sprintf("kiro session/prompt failed: %v", err))
 		}
-		return &PersistentSession{Messages: msgCh, Result: resCh, state: state}, nil
+		return &PersistentSession{Messages: msgCh, Result: resCh, SessionID: sessionID, state: state}, nil
 	}
 
-	// Collect prompt result (usage, stop reason).
 	var usage TokenUsage
 	select {
 	case pr := <-turnDone:
@@ -556,7 +556,6 @@ func (b *KiroBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Exec
 
 	var stopOnce sync.Once
 	stop := func() error { stopOnce.Do(func() { runner.cancel() }); return nil }
-
 	return &PersistentSession{
 		Messages:  msgCh,
 		Result:    resCh,
@@ -589,22 +588,22 @@ func (b *KiroBackend) Send(ctx context.Context, ps *PersistentSession, messages 
 	// Redirect client callbacks to this turn's channels.
 	state.client.setCallbacks(
 		func(chunk OutputChunk) {
-		if chunk.Type == string(MessageToolUse) {
-			chunk.Tool.Name = kiroToolNameFromTitle(chunk.Tool.Name)
-		}
-		if chunk.Type == string(MessageText) && chunk.Content != "" {
-			outputMu.Lock()
-			output.WriteString(chunk.Content)
-			outputMu.Unlock()
-		}
-		trySend(msgCh, chunk)
-	},
+			if chunk.Type == string(MessageToolUse) {
+				chunk.Tool.Name = kiroToolNameFromTitle(chunk.Tool.Name)
+			}
+			if chunk.Type == string(MessageText) && chunk.Content != "" {
+				outputMu.Lock()
+				output.WriteString(chunk.Content)
+				outputMu.Unlock()
+			}
+			trySend(msgCh, chunk)
+		},
 		func(pr acpPromptResult) {
-		select {
-		case turnDone <- pr:
-		default:
-		}
-	},
+			select {
+			case turnDone <- pr:
+			default:
+			}
+		},
 	)
 
 	startTime := time.Now()

@@ -16,7 +16,7 @@ type Config struct {
 	LogLevel   string
 
 	// Daemon-specific configuration (used by cmd/daemon)
-	ServerURL   string // Server URL for daemon registration (e.g., "http://localhost:8080")
+	ServerURL   string // Server URL for daemon registration (e.g., "http://127.0.0.1:8080")
 	DaemonID    string // Unique ID for this daemon instance
 	LLMAPIKey   string // API key for LLM provider
 	LLMProvider string // LLM provider type ("openai" | "anthropic")
@@ -66,12 +66,12 @@ func LoadDotenv() error {
 func Load() *Config {
 	return &Config{
 		Port:      getEnv("PORT", "8080"),
-		DBURL:     getEnv("DATABASE_URL", "postgres://solo:solo@localhost:5432/solo?sslmode=disable"),
+		DBURL:     getEnv("DATABASE_URL", "postgres://solo:solo-dev@localhost:5432/solo?sslmode=disable"),
 		JWTSecret: getEnv("JWT_SECRET", "solo-dev-secret-change-in-production"),
 		LogLevel:  getEnv("LOG_LEVEL", "debug"),
 
 		// Daemon config
-		ServerURL:   getEnv("DAEMON_SERVER_URL", "http://localhost:8080"),
+		ServerURL:   getEnv("DAEMON_SERVER_URL", "http://127.0.0.1:8080"),
 		DaemonID:    getEnv("DAEMON_ID", "daemon-01"),
 		LLMAPIKey:   getEnv("LLM_API_KEY", ""),
 		LLMProvider: getEnv("LLM_PROVIDER", "anthropic"),

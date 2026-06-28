@@ -54,14 +54,15 @@ const (
 	// Agent chunk events (SOLO-agent-view)
 	EventAgentChunk = "agent.chunk"
 
-	// Agent done event (SOLO-island PR0) — terminal signal after task
-	// finishes, replaces the previous 3s heuristic on the frontend.
-	EventAgentDone = "agent.done"
-
 	// Agent activity event (SOLO-island PR1) — derived from OutputChunk
 	// events, carries the island-facing status and a short activity_text
 	// summary. Powers the AgentIsland floating UI.
 	EventAgentActivity = "agent.activity"
+
+	EventAgentRunStarted  = "agent.run.started"
+	EventAgentRunUpdated  = "agent.run.updated"
+	EventAgentRunEvent    = "agent.run.event"
+	EventAgentRunFinished = "agent.run.finished"
 
 	// DM events (SOLO-57-B)
 	EventDMMessageNew = "dm.message.new"
@@ -191,18 +192,6 @@ type AgentChunkPayload struct {
 	Tool      *ToolRef `json:"tool,omitempty"`
 }
 
-// AgentDonePayload is broadcast on agent.done when a task ends (success or failure).
-// The frontend uses this as the authoritative terminal signal to remove the agent
-// from the "active" list — replaces the previous 3s inactivity heuristic.
-type AgentDonePayload struct {
-	ChannelID  string `json:"channel_id"`
-	AgentID    string `json:"agent_id"`
-	AgentName  string `json:"agent_name,omitempty"`
-	TaskID     string `json:"task_id,omitempty"`
-	FinalState string `json:"final_state"` // "completed" | "failed" | "aborted" | "timeout" | "cancelled"
-	Timestamp  string `json:"timestamp"`
-}
-
 // AgentActivityPayload is broadcast on agent.activity. It carries the
 // island-facing status and a one-line activity_text summary, derived by
 // the daemon from agent.OutputChunk events. Powers the AgentIsland
@@ -218,6 +207,37 @@ type AgentActivityPayload struct {
 	ToolInputSummary string `json:"tool_input_summary,omitempty"` // e.g. "Bash: npm test"
 	Source           string `json:"source,omitempty"`             // claude | codex | gemini | kiro | ...; metadata only, not shown in UI
 	Timestamp        string `json:"timestamp"`
+}
+
+type AgentRunPayload struct {
+	RunID            string `json:"run_id"`
+	SessionID        string `json:"session_id,omitempty"`
+	AgentID          string `json:"agent_id"`
+	AgentName        string `json:"agent_name,omitempty"`
+	TaskID           string `json:"task_id,omitempty"`
+	ChannelID        string `json:"channel_id,omitempty"`
+	ThreadID         string `json:"thread_id,omitempty"`
+	Status           string `json:"status"`
+	ActivityText     string `json:"activity_text,omitempty"`
+	ToolName         string `json:"tool_name,omitempty"`
+	ToolInputSummary string `json:"tool_input_summary,omitempty"`
+	Source           string `json:"source,omitempty"`
+	Timestamp        string `json:"timestamp"`
+}
+
+type AgentRunEventPayload struct {
+	RunID     string         `json:"run_id"`
+	SessionID string         `json:"session_id,omitempty"`
+	AgentID   string         `json:"agent_id"`
+	AgentName string         `json:"agent_name,omitempty"`
+	ChannelID string         `json:"channel_id,omitempty"`
+	ThreadID  string         `json:"thread_id,omitempty"`
+	Seq       int            `json:"seq"`
+	Type      string         `json:"event_type"`
+	Message   string         `json:"message,omitempty"`
+	ToolName  string         `json:"tool_name,omitempty"`
+	Payload   map[string]any `json:"payload,omitempty"`
+	Timestamp string         `json:"timestamp"`
 }
 
 // ToolRef carries tool call metadata in an agent chunk.

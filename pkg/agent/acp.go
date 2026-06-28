@@ -3,12 +3,15 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // ── Shared JSON-RPC types ──
@@ -30,18 +33,82 @@ type acpPromptResult struct {
 	usage      TokenUsage
 }
 
+type acpInitialPromptTurn struct {
+	ctx          context.Context
+	provider     string
+	model        string
+	sessionID    string
+	promptBlocks []map[string]any
+	client       *acpClient
+	msgCh        chan OutputChunk
+	resCh        chan *Result
+	turnDone     <-chan acpPromptResult
+	output       *strings.Builder
+	outputMu     *sync.Mutex
+	turnFin      *atomic.Bool
+	startTime    time.Time
+}
+
+func startACPInitialPromptTurn(turn acpInitialPromptTurn) {
+	go func() {
+		if _, err := turn.client.request(turn.ctx, "session/prompt", map[string]any{
+			"sessionId": turn.sessionID,
+			"prompt":    turn.promptBlocks,
+		}); err != nil {
+			msg := fmt.Sprintf("%s session/prompt failed: %v", turn.provider, err)
+			if errors.Is(turn.ctx.Err(), context.DeadlineExceeded) {
+				msg = fmt.Sprintf("%s timed out during initial prompt", turn.provider)
+			} else if errors.Is(turn.ctx.Err(), context.Canceled) {
+				msg = "execution cancelled"
+			}
+			finishACPInitialPromptTurn(turn, &Result{
+				Status:     "failed",
+				Error:      msg,
+				DurationMs: time.Since(turn.startTime).Milliseconds(),
+			})
+			return
+		}
+
+		var usage TokenUsage
+		select {
+		case pr := <-turn.turnDone:
+			usage = pr.usage
+		default:
+		}
+
+		turn.outputMu.Lock()
+		finalOutput := turn.output.String()
+		turn.outputMu.Unlock()
+
+		finishACPInitialPromptTurn(turn, &Result{
+			Status:     "completed",
+			Output:     finalOutput,
+			DurationMs: time.Since(turn.startTime).Milliseconds(),
+			Usage:      buildACPUsageMap(usage, turn.model),
+		})
+	}()
+}
+
+func finishACPInitialPromptTurn(turn acpInitialPromptTurn, result *Result) {
+	if turn.turnFin.CompareAndSwap(false, true) {
+		turn.resCh <- result
+		close(turn.msgCh)
+		close(turn.resCh)
+	}
+}
+
 // ── ACP Client ──
 
 // acpClient implements the ACP (Agent Communication Protocol) JSON-RPC 2.0
 // transport over stdin/stdout. It is shared by Kimi, Kiro, and Hermes backends.
 type acpClient struct {
-	logger       *slog.Logger
-	stdin        interface{ Write([]byte) (int, error) }
-	writeMu      sync.Mutex
-	mu           sync.Mutex
-	nextID       int
-	pending      map[int]*pendingRPC
-	sessionID    string
+	logger    *slog.Logger
+	stdin     interface{ Write([]byte) (int, error) }
+	writeMu   sync.Mutex
+	mu        sync.Mutex
+	nextID    int
+	pending   map[int]*pendingRPC
+	sessionID string
 
 	cbMu         sync.Mutex // protects onChunk + onPromptDone (replaced per-turn by Send)
 	onChunk      func(OutputChunk)

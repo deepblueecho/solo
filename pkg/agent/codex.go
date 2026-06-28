@@ -68,6 +68,7 @@ func (b *CodexBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Exe
 
 	// Start reader goroutine for process lifetime.
 	go func() {
+		defer close(runner.done)
 		scanner := bufio.NewScanner(runner.stdout)
 		scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
 		for scanner.Scan() {
@@ -97,6 +98,7 @@ func (b *CodexBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Exe
 		return nil, fmt.Errorf("codex persistent thread/start: %w", err)
 	}
 	c.threadID = threadID
+	trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: threadID})
 
 	// First turn.
 	if _, err := c.request(ctx, "turn/start", map[string]any{
@@ -117,10 +119,11 @@ func (b *CodexBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Exe
 	stop := func() error { stopOnce.Do(func() { runner.cancel() }); return nil }
 
 	return &PersistentSession{
-		Messages: msgCh,
-		Result:   resCh,
-		Stop:     stop,
-		state:    state,
+		Messages:  msgCh,
+		Result:    resCh,
+		Stop:      stop,
+		SessionID: threadID,
+		state:     state,
 	}, nil
 }
 
@@ -386,6 +389,7 @@ func (b *CodexBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *E
 		}
 		c.threadID = threadID
 		b.logger.Info("codex thread started", "thread_id", threadID)
+		trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: threadID})
 
 		// 3. Send turn and wait for completion.
 		_, err = c.request(runCtx, "turn/start", map[string]any{
@@ -504,18 +508,18 @@ func (c *codexClient) startThread(ctx context.Context, opts *ExecuteOptions) (st
 		}
 	}
 	startResult, err := c.request(ctx, "thread/start", map[string]any{
-		"model":                  nilIfEmpty(opts.Model),
-		"modelProvider":          nil,
-		"profile":                nil,
-		"cwd":                    nilIfEmpty(opts.WorkspaceDir),
-		"approvalPolicy":         nil,
-		"sandbox":                nil,
-		"config":                 nil,
-		"baseInstructions":       nil,
-		"developerInstructions":  nilIfEmpty(opts.SystemPrompt),
-		"compactPrompt":          nil,
-		"includeApplyPatchTool":  nil,
-		"experimentalRawEvents":  false,
+		"model":                 nilIfEmpty(opts.Model),
+		"modelProvider":         nil,
+		"profile":               nil,
+		"cwd":                   nilIfEmpty(opts.WorkspaceDir),
+		"approvalPolicy":        nil,
+		"sandbox":               nil,
+		"config":                nil,
+		"baseInstructions":      nil,
+		"developerInstructions": nilIfEmpty(opts.SystemPrompt),
+		"compactPrompt":         nil,
+		"includeApplyPatchTool": nil,
+		"experimentalRawEvents": false,
 	})
 	if err != nil {
 		return "", fmt.Errorf("codex thread/start failed: %w", err)
@@ -945,7 +949,7 @@ func (c *codexClient) handleItemNotification(method string, params map[string]an
 			})
 		}
 
-	case method == "item/completed" && itemType == "agentMessage":
+	case method == "item/completed" && (itemType == "agentMessage" || itemType == "agent_message"):
 		text, _ := item["text"].(string)
 		if text != "" && c.onChunk != nil {
 			c.onChunk(OutputChunk{Type: string(MessageText), Content: text})

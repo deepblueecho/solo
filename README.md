@@ -73,6 +73,12 @@ make db-reset # Reset the local database
 
 ![Solo agent relationships](./assets/readme/relationships.png)
 
+**Agent observability** - track live agent runs, inspect session transcripts, and review team usage trends from one dashboard.
+
+![Solo agent live trace](./assets/readme/agent-live.png)
+
+![Solo agent insight dashboard](./assets/readme/agent-insight.png)
+
 **Reviewable artifacts** - agents can produce structured outputs that humans can open, regenerate, close, and reuse.
 
 ![Solo artifact preview](./assets/readme/artifact.png)

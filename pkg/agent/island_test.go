@@ -9,79 +9,84 @@ import (
 )
 
 // ============================================================================
-// Island inference (SOLO-island PR1 + PR-fix)
+// Run activity inference.
 //
-// Pure-function tests for the three island helpers. They run with no
-// dependencies and pin the contract that the daemon relies on to push
-// agent.activity events and the frontend relies on to render the
-// AgentIsland pill. Treat any failure here as a wire-format break.
+// Pure-function tests for the helpers the daemon relies on to push
+// agent.run.* events. Treat any failure here as a wire-format break.
 // ============================================================================
 
-// ---- InferIslandStatusFromChunk ----
+// ---- InferRunStatusFromChunk ----
 
-func TestInferIslandStatusFromChunk(t *testing.T) {
+func TestInferRunStatusFromChunk(t *testing.T) {
 	cases := []struct {
 		name  string
 		chunk OutputChunk
-		want  IslandStatus
+		want  RunStatus
+		ok    bool
 	}{
 		{
 			name:  "thinking → thinking",
 			chunk: OutputChunk{Type: string(MessageThinking)},
-			want:  IslandStatusThinking,
+			want:  RunStatusThinking,
+			ok:    true,
 		},
 		{
 			name:  "text → streaming",
 			chunk: OutputChunk{Type: string(MessageText)},
-			want:  IslandStatusStreaming,
+			want:  RunStatusStreaming,
+			ok:    true,
 		},
 		{
 			name:  "tool_use → running",
 			chunk: OutputChunk{Type: string(MessageToolUse)},
-			want:  IslandStatusRunning,
+			want:  RunStatusRunning,
+			ok:    true,
 		},
 		{
-			name:  "tool_result success → running (continue)",
+			name: "tool_result success → running (continue)",
 			chunk: OutputChunk{
 				Type: string(MessageToolResult),
 				Tool: &ToolInfo{Name: "Bash", IsError: false},
 			},
-			want: IslandStatusRunning,
+			want: RunStatusRunning,
+			ok:   true,
 		},
 		{
-			name:  "tool_result error → error",
+			name: "tool_result error → running (agent may recover)",
 			chunk: OutputChunk{
 				Type: string(MessageToolResult),
 				Tool: &ToolInfo{Name: "Bash", IsError: true},
 			},
-			want: IslandStatusError,
+			want: RunStatusRunning,
+			ok:   true,
 		},
 		{
-			name:  "error → error",
+			name:  "error → failed",
 			chunk: OutputChunk{Type: string(MessageError)},
-			want:  IslandStatusError,
+			want:  RunStatusFailed,
+			ok:    true,
 		},
 		{
-			name:  "status (no-op) → idle",
+			name:  "status (no-op) → no update",
 			chunk: OutputChunk{Type: string(MessageStatus)},
-			want:  IslandStatusIdle,
+			ok:    false,
 		},
 		{
-			name:  "unknown type → idle",
+			name:  "unknown type → no update",
 			chunk: OutputChunk{Type: "wat"},
-			want:  IslandStatusIdle,
+			ok:    false,
 		},
 		{
-			name:  "empty type → idle",
+			name:  "empty type → no update",
 			chunk: OutputChunk{Type: ""},
-			want:  IslandStatusIdle,
+			ok:    false,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := InferIslandStatusFromChunk(tc.chunk)
-			if got != tc.want {
-				t.Errorf("InferIslandStatusFromChunk(%s) = %q, want %q", tc.chunk.Type, got, tc.want)
+			got, ok := InferRunStatusFromChunk(tc.chunk)
+			if ok != tc.ok || got != tc.want {
+				t.Errorf("InferRunStatusFromChunk(%s) = %q, %v; want %q, %v", tc.chunk.Type, got, ok, tc.want, tc.ok)
 			}
 		})
 	}
@@ -287,7 +292,7 @@ func TestTruncateRunes(t *testing.T) {
 		{"byte-unsafe slice would corrupt CJK", "你好世界", 3, "你好…"},
 		// CJK char is 3 bytes in UTF-8. With byte-slicing [0:6], the
 		// result would be "你" + half a rune → invalid UTF-8. Our
-	// rune-aware version correctly returns "你好…".
+		// rune-aware version correctly returns "你好…".
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -305,8 +310,8 @@ func TestTruncateRunes(t *testing.T) {
 
 // ---- Integration: status + activity text derive the same status ----
 
-// Sanity: InferIslandStatusFromChunk and InferActivityText should
-// agree that a non-empty activity text corresponds to a non-idle
+// Sanity: InferRunStatusFromChunk and InferActivityText should
+// agree that an emitted run status corresponds to a non-empty
 // status. If one of them drifts, the frontend's pill will look
 // incoherent (e.g. "Bash running" with an idle status dot).
 func TestInferStatusAndActivityText_Consistency(t *testing.T) {
@@ -319,12 +324,11 @@ func TestInferStatusAndActivityText_Consistency(t *testing.T) {
 		{Type: string(MessageError)},
 	}
 	for _, chunk := range chunks {
-		status := InferIslandStatusFromChunk(chunk)
+		status, ok := InferRunStatusFromChunk(chunk)
 		text := InferActivityText(chunk)
-		// Every non-idle status should produce a non-empty activity text,
-		// otherwise the daemon will push an activity event with status=idle
-		// which the frontend will treat as a completed flash.
-		if status != IslandStatusIdle && text == "" {
+		// Every emitted status should produce a non-empty activity text,
+		// otherwise the daemon will push an incoherent run update.
+		if ok && text == "" {
 			t.Errorf("chunk %+v: status=%q but activity text is empty", chunk, status)
 		}
 	}
@@ -366,7 +370,7 @@ func TestBackendFamily(t *testing.T) {
 func TestNormalizeToolName(t *testing.T) {
 	cases := []struct {
 		name     string
-		provider  string
+		provider string
 		raw      string
 		want     string
 	}{

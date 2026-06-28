@@ -47,18 +47,20 @@ type sseSubscriber struct {
 
 // taskManager manages task states and SSE subscribers in the daemon.
 type taskManager struct {
-	mu            sync.RWMutex
-	tasks         map[string]*taskState
-	subscribers   map[string][]*sseSubscriber // taskID -> subscribers
-	cancelFuncs   map[string]context.CancelFunc // taskID -> cancel func
+	mu           sync.RWMutex
+	tasks        map[string]*taskState
+	subscribers  map[string][]*sseSubscriber   // taskID -> subscribers
+	eventHistory map[string][]sseEvent         // taskID -> replayable SSE control events
+	cancelFuncs  map[string]context.CancelFunc // taskID -> cancel func
 }
 
 // newTaskManager creates a new task manager.
 func newTaskManager() *taskManager {
 	return &taskManager{
-		tasks:       make(map[string]*taskState),
-		subscribers: make(map[string][]*sseSubscriber),
-		cancelFuncs: make(map[string]context.CancelFunc),
+		tasks:        make(map[string]*taskState),
+		subscribers:  make(map[string][]*sseSubscriber),
+		eventHistory: make(map[string][]sseEvent),
+		cancelFuncs:  make(map[string]context.CancelFunc),
 	}
 }
 
@@ -138,6 +140,9 @@ func (tm *taskManager) SubscribeSSE(taskID string) *sseSubscriber {
 	}
 
 	tm.mu.Lock()
+	for _, evt := range tm.eventHistory[taskID] {
+		sub.events <- evt
+	}
 	tm.subscribers[taskID] = append(tm.subscribers[taskID], sub)
 	tm.mu.Unlock()
 
@@ -162,20 +167,20 @@ func (tm *taskManager) UnsubscribeSSE(taskID string, sub *sseSubscriber) {
 // PushSSEEvent sends an SSE event to all subscribers of a task.
 // This is non-blocking: if a subscriber's buffer is full, the event is dropped.
 func (tm *taskManager) PushSSEEvent(taskID string, evt sseEvent) {
-	tm.mu.RLock()
+	tm.mu.Lock()
+	if isReplayableSSEEvent(evt.Event) {
+		tm.eventHistory[taskID] = append(tm.eventHistory[taskID], evt)
+	}
 	subs := tm.subscribers[taskID]
-	// Make a copy to avoid holding the lock while sending
-	subsCopy := make([]*sseSubscriber, len(subs))
-	copy(subsCopy, subs)
-	tm.mu.RUnlock()
 
-	for _, sub := range subsCopy {
+	for _, sub := range subs {
 		select {
 		case sub.events <- evt:
 		default:
 			slog.Debug("dropping SSE event for slow subscriber", "task_id", taskID, "event", evt.Event)
 		}
 	}
+	tm.mu.Unlock()
 }
 
 // CloseAllSubscribers closes all subscribers for a task and cleans up.
@@ -183,10 +188,18 @@ func (tm *taskManager) CloseAllSubscribers(taskID string) {
 	tm.mu.Lock()
 	subs := tm.subscribers[taskID]
 	delete(tm.subscribers, taskID)
-	tm.mu.Unlock()
-
 	for _, sub := range subs {
-		close(sub.done)
+		close(sub.events)
+	}
+	tm.mu.Unlock()
+}
+
+func isReplayableSSEEvent(event string) bool {
+	switch event {
+	case "session", "complete", "error", "done":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -369,7 +369,7 @@ export function ChannelView({
   // PR-fix: the previous 5s inactivity heuristic was the same class of
   // bug as the 3s heuristic in useAgentChunks (fixed in PR0). It would
   // prematurely mark an agent as online during long-running tool calls.
-  // Now we rely on agent.done as the authoritative terminal signal and
+  // Now we rely on agent.run.finished as the authoritative terminal signal and
   // treat thinking/typing as transient — cleared the moment we see
   // a done event (or message.new) for the same agent.
   const memberStatusTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -387,8 +387,8 @@ export function ChannelView({
 
   /**
    * Schedule a fallback revert to online after `ms` ms. This is a safety
-   * net for paths that don't emit agent.done (e.g. the legacy LLM
-   * provider fallback). Primary terminal signal remains agent.done.
+   * net for paths that don't emit agent.run.finished (e.g. the legacy LLM
+   * provider fallback). Primary terminal signal remains agent.run.finished.
    */
   const scheduleMemberStatusRevert = (agentId: string, ms: number) => {
     cancelMemberStatusRevert(agentId);
@@ -409,13 +409,13 @@ export function ChannelView({
 
         const isThinking = event.type === 'agent.thinking';
         updateMemberStatus(event.agent_id, isThinking ? 'thinking' : 'typing');
-        // Fallback only — agent.done will cancel and immediately revert.
+        // Fallback only — agent.run.finished will cancel and immediately revert.
         scheduleMemberStatusRevert(event.agent_id, 30_000);
       }
 
-      // agent.done is the authoritative terminal signal. Clear any
+      // agent.run.finished is the authoritative terminal signal. Clear any
       // fallback timer and snap status back to online immediately.
-      if (event.type === 'agent.done' && event.channel_id === channel.id && event.agent_id) {
+      if (event.type === 'agent.run.finished' && event.channel_id === channel.id && event.agent_id) {
         cancelMemberStatusRevert(event.agent_id);
         updateMemberStatus(event.agent_id, 'online');
       }

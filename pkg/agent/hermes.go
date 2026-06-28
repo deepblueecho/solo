@@ -226,6 +226,7 @@ func (b *HermesBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *
 
 		cl.sessionID = sessionID
 		b.logger.Info("hermes: session created", "session_id", sessionID)
+		trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: sessionID})
 
 		// 3. Set model if specified.
 		if opts.Model != "" {
@@ -359,10 +360,10 @@ type hermesPersistentState struct {
 // Compile-time check.
 var _ SessionStater = (*hermesPersistentState)(nil)
 
-func (s *hermesPersistentState) IsAlive() bool            { return s.runner.isAlive() }
-func (s *hermesPersistentState) SessionID() string        { return s.sessionID }
-func (s *hermesPersistentState) Done() <-chan struct{}    { return s.runner.done }
-func (s *hermesPersistentState) Notify(msg string) error  { return s.runner.write([]byte(msg)) }
+func (s *hermesPersistentState) IsAlive() bool           { return s.runner.isAlive() }
+func (s *hermesPersistentState) SessionID() string       { return s.sessionID }
+func (s *hermesPersistentState) Done() <-chan struct{}   { return s.runner.done }
+func (s *hermesPersistentState) Notify(msg string) error { return s.runner.write([]byte(msg)) }
 
 // Start creates a persistent Hermes session via ACP. The initial handshake
 // and prompt are processed synchronously before Start returns.
@@ -376,9 +377,9 @@ func (b *HermesBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Ex
 	hermesArgs = append(hermesArgs, filterCustomArgs(opts.CustomArgs, hermesBlockedArgs)...)
 
 	extraEnv := make(map[string]string, len(opts.Env)+1)
-		for k, v := range opts.Env {
-			extraEnv[k] = v
-		}
+	for k, v := range opts.Env {
+		extraEnv[k] = v
+	}
 	extraEnv["HERMES_YOLO_MODE"] = "1"
 
 	runner, err := startPersistent(ctx, execPath, hermesArgs, opts.WorkspaceDir, extraEnv, b.logger)
@@ -520,54 +521,26 @@ func (b *HermesBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Ex
 		}, promptBlocks...)
 	}
 
-	// 5. Send the initial prompt.
-	_, err = cl.request(ctx, "session/prompt", map[string]any{
-		"sessionId":  sessionID,
-		"prompt":     promptBlocks,
+	trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: sessionID})
+
+	startACPInitialPromptTurn(acpInitialPromptTurn{
+		ctx:          ctx,
+		provider:     "hermes",
+		model:        opts.Model,
+		sessionID:    sessionID,
+		promptBlocks: promptBlocks,
+		client:       cl,
+		msgCh:        msgCh,
+		resCh:        resCh,
+		turnDone:     turnDone,
+		output:       &output,
+		outputMu:     &outputMu,
+		turnFin:      &state.turnFin,
+		startTime:    startTime,
 	})
-	if err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			handleError(fmt.Sprintf("hermes timed out during initial prompt"))
-		} else if errors.Is(ctx.Err(), context.Canceled) {
-			handleError("execution cancelled")
-		} else {
-			handleError(fmt.Sprintf("hermes session/prompt failed: %v", err))
-		}
-		return &PersistentSession{Messages: msgCh, Result: resCh, state: state}, nil
-	}
-
-	// Collect prompt result (usage, stop reason).
-	var usage TokenUsage
-	select {
-	case pr := <-turnDone:
-		usage = pr.usage
-	default:
-	}
-
-	duration := time.Since(startTime)
-	outputMu.Lock()
-	finalOutput := output.String()
-	outputMu.Unlock()
-
-	if state.turnFin.CompareAndSwap(false, true) {
-		resCh <- &Result{
-			Status:     "completed",
-			Output:     finalOutput,
-			DurationMs: duration.Milliseconds(),
-			Usage:      buildACPUsageMap(usage, opts.Model),
-		}
-		close(msgCh)
-		close(resCh)
-	}
-
-	b.logger.Info("hermes: initial persistent turn completed",
-		"session_id", sessionID,
-		"duration", duration.Round(time.Millisecond).String(),
-	)
 
 	var stopOnce sync.Once
 	stop := func() error { stopOnce.Do(func() { runner.cancel() }); return nil }
-
 	return &PersistentSession{
 		Messages:  msgCh,
 		Result:    resCh,
@@ -600,19 +573,19 @@ func (b *HermesBackend) Send(ctx context.Context, ps *PersistentSession, message
 	// Redirect client callbacks to this turn's channels.
 	state.client.setCallbacks(
 		func(chunk OutputChunk) {
-		if chunk.Type == string(MessageText) && chunk.Content != "" {
-			outputMu.Lock()
-			output.WriteString(chunk.Content)
-			outputMu.Unlock()
-		}
-		trySend(msgCh, chunk)
-	},
+			if chunk.Type == string(MessageText) && chunk.Content != "" {
+				outputMu.Lock()
+				output.WriteString(chunk.Content)
+				outputMu.Unlock()
+			}
+			trySend(msgCh, chunk)
+		},
 		func(pr acpPromptResult) {
-		select {
-		case turnDone <- pr:
-		default:
-		}
-	},
+			select {
+			case turnDone <- pr:
+			default:
+			}
+		},
 	)
 
 	startTime := time.Now()

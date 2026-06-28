@@ -63,10 +63,10 @@ export type WSServerEvent =
   | { type: 'agent.error'; channel_id: string; agent_id: string; status: string; detail?: string }
   // ---- Agent chunk events (agent view) ----
   | { type: 'agent.chunk'; channel_id: string; agent_id: string; agent_name: string; chunk_type: string; content: string; tool?: { name: string; input?: string; output?: string; call_id?: string }; timestamp: string }
-  // ---- Agent done event (SOLO-island PR0) — terminal signal after a task
-  // finishes, replaces the 3s inactivity heuristic. The frontend removes the
-  // agent from the "active" list as soon as this arrives.
-  | { type: 'agent.done'; channel_id: string; agent_id: string; agent_name?: string; task_id?: string; final_state: 'completed' | 'failed' | 'aborted' | 'timeout' | 'cancelled'; timestamp: string }
+  | { type: 'agent.run.started'; run_id: string; session_id?: string; agent_id: string; agent_name?: string; task_id?: string; channel_id?: string; thread_id?: string; status: 'queued' | 'thinking' | 'running' | 'streaming' | 'waiting_input' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled' | 'timeout'; activity_text?: string; tool_name?: string; tool_input_summary?: string; transcript_path?: string; source?: string; timestamp?: string }
+  | { type: 'agent.run.updated'; run_id: string; session_id?: string; agent_id: string; agent_name?: string; task_id?: string; channel_id?: string; thread_id?: string; status: 'queued' | 'thinking' | 'running' | 'streaming' | 'waiting_input' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled' | 'timeout'; activity_text?: string; tool_name?: string; tool_input_summary?: string; transcript_path?: string; source?: string; timestamp?: string }
+  | { type: 'agent.run.finished'; run_id: string; session_id?: string; agent_id: string; agent_name?: string; task_id?: string; channel_id?: string; thread_id?: string; status: 'completed' | 'failed' | 'cancelled' | 'timeout'; activity_text?: string; tool_name?: string; tool_input_summary?: string; transcript_path?: string; source?: string; timestamp?: string }
+  | { type: 'agent.run.event'; id?: string; run_id: string; session_id?: string; agent_id: string; agent_name?: string; channel_id?: string; thread_id?: string; seq: number; event_type: string; message?: string; tool_name?: string; payload?: Record<string, unknown>; timestamp: string }
   // ---- Agent activity event (SOLO-island PR1) — single channel-scoped
   // event carrying the island-facing status and a one-line activity_text
   // summary. Powers the AgentIsland floating UI. Derived by the daemon

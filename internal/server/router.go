@@ -83,6 +83,8 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 	memberHandler := handler.NewMemberHandler(pool, agentSvc)
 	messageHandler := handler.NewMessageHandler(pool, hub, agentSvc, taskSvc)
 	agentHandler := handler.NewAgentHandler(pool, dm)
+	agentRunHandler := handler.NewAgentRunHandler(pool)
+	dashboardHandler := handler.NewDashboardHandler(pool)
 	threadHandler := handler.NewThreadHandler(pool, hub, agentSvc)
 	dmHandler := handler.NewDMHandler(pool, hub, agentSvc, taskSvc)
 	daemonHandler := handler.NewDaemonHandler(dm, agentSvc, computerSvc)
@@ -233,6 +235,9 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 
 				// Agent workspace files (v1.5)
 				r.Get("/workspace", agentHandler.Workspace)
+				r.Get("/runs", agentRunHandler.AgentRuns)
+				r.Get("/sessions", agentRunHandler.AgentSessions)
+				r.Get("/tasks", agentRunHandler.AgentTasks)
 
 				// Agent skill catalog (proxied to daemon).
 				r.Get("/skills", agentHandler.AgentSkills)
@@ -263,10 +268,21 @@ func NewRouter(pool *pgxpool.Pool, hub *ws.Hub, dm *service.DaemonManager, agent
 		// Onboarding wizard
 		r.Post("/api/v1/onboarding/create-lucy", onboardingHandler.CreateLucy)
 
+		r.Get("/api/v1/agent-runs", agentRunHandler.Recent)
+		r.Get("/api/v1/agent-runs/active", agentRunHandler.Active)
+		r.Get("/api/v1/agent-runs/{runID}", agentRunHandler.Get)
+		r.Get("/api/v1/agent-runs/{runID}/events", agentRunHandler.Events)
+		r.Get("/api/v1/agent-runs/{runID}/transcript", agentRunHandler.Transcript)
+		r.Get("/api/v1/agent-sessions/{sessionID}/timeline", agentRunHandler.SessionTimeline)
+		r.Get("/api/v1/dashboard/live", dashboardHandler.Live)
+		r.Get("/api/v1/dashboard/insight", dashboardHandler.Insight)
+
 		// Global tasks routes (all channels)
 		r.Get("/api/v1/tasks", taskHandler.ListAll)
 		r.Post("/api/v1/tasks", taskHandler.CreateGlobal)
 		r.Get("/api/v1/tasks/{taskID}", taskHandler.GetGlobal)
+		r.Get("/api/v1/tasks/{taskID}/runs", agentRunHandler.TaskRuns)
+		r.Get("/api/v1/tasks/{taskID}/agent-timeline", agentRunHandler.TaskTimeline)
 		r.Patch("/api/v1/tasks/{taskID}", taskHandler.UpdateGlobal)
 		r.Delete("/api/v1/tasks/{taskID}", taskHandler.DeleteGlobal)
 		r.Post("/api/v1/tasks/{taskID}/accept", taskHandler.AcceptGlobal)

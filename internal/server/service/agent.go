@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -122,14 +123,11 @@ func (s *AgentService) updateThreadDebounce(channelID, threadID, agentID string)
 //
 // Called after a message is persisted and broadcast.
 func (s *AgentService) TriggerAgentResponse(ctx context.Context, channelID, messageID, senderType, senderID string, mentionedAgentIDs []string, hasMentions bool, agentChain []string) {
+	if !shouldTriggerAgentForSender(senderType, mentionedAgentIDs) {
+		return
+	}
 	// If the message was sent by an agent, only proceed if it @mentions other agents.
 	// Agents don't respond to themselves or to non-mentioned agent messages.
-	if senderType == "agent" {
-		if len(mentionedAgentIDs) == 0 {
-			return // agent talking — no @mentions to other agents, skip
-		}
-		// Has @mentions to other agents — proceed to trigger only those agents
-	}
 
 	// Find active agent members of this channel
 	agents, err := s.getChannelActiveAgents(ctx, channelID)
@@ -200,11 +198,12 @@ func (s *AgentService) TriggerAgentResponse(ctx context.Context, channelID, mess
 
 		// Build the task request
 		taskReq := daemonTaskRequest{
-			TaskID:       uuid.New().String(),
-			AgentID:      ag.ID,
-			ChannelID:    channelID,
-			Messages:     contextMessages,
-			SystemPrompt: ag.SystemPrompt,
+			TaskID:           uuid.New().String(),
+			AgentID:          ag.ID,
+			ChannelID:        channelID,
+			TriggerMessageID: messageID,
+			Messages:         contextMessages,
+			SystemPrompt:     ag.SystemPrompt,
 			ModelConfig: agent.ModelConfig{
 				Provider: ag.ModelProvider,
 				Model:    ag.ModelName,
@@ -312,6 +311,8 @@ func (s *AgentService) broadcastAgentError(threadID, channelID, agentID, agentNa
 	}
 }
 
+const agentTaskStreamTimeout = 20 * time.Minute
+
 // handleStreamingAgentTask dispatches a task to a daemon via SSE streaming
 // and forwards events to WebSocket subscribers.
 func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *DaemonInfo, taskReq daemonTaskRequest, ag agentChannelInfo) {
@@ -325,13 +326,56 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 	s.dm.TrackTask(taskReq.TaskID, daemon.ID, ag.ID)
 	defer s.dm.RemoveTask(taskReq.TaskID)
 
-	// Use a timeout context so tasks don't hang indefinitely (e.g., LLM API hang)
-	// 5 minutes should be sufficient for any agent response.
-	streamCtx, streamCancel := context.WithTimeout(ctx, 5*time.Minute)
+	// Use a timeout context so tasks don't hang indefinitely (e.g., LLM API hang).
+	streamCtx, streamCancel := context.WithTimeout(ctx, agentTaskStreamTimeout)
 	defer streamCancel()
 
 	// Pre-generate a message ID for the streaming message
-	messageID := uuid.New().String()
+	streamMessageID := uuid.New().String()
+	runSvc := NewAgentRunService(s.pool)
+	triggerType := AgentRunTriggerMessage
+	if taskReq.OriginTaskID != "" {
+		triggerType = AgentRunTriggerTask
+	}
+	run, err := runSvc.StartRun(ctx, StartRunInput{
+		AgentID:          ag.ID,
+		TriggerType:      triggerType,
+		TriggerMessageID: taskReq.TriggerMessageID,
+		ChannelID:        taskReq.ChannelID,
+		ThreadID:         taskReq.ThreadID,
+		Status:           AgentRunStatusQueued,
+		ActivityText:     "等待执行",
+		Source:           taskReq.ModelConfig.Provider,
+	})
+	if err != nil {
+		slog.Warn("failed to start agent run", "task_id", taskReq.TaskID, "agent_id", ag.ID, "error", err)
+	}
+	if run != nil && taskReq.OriginTaskID != "" {
+		if err := runSvc.LinkTask(ctx, LinkRunTaskInput{RunID: run.ID, TaskID: taskReq.OriginTaskID, Role: AgentRunTaskRolePrimary, Confidence: 1}); err != nil {
+			slog.Warn("failed to link agent run task", "run_id", run.ID, "task_id", taskReq.OriginTaskID, "error", err)
+		} else {
+			s.appendAndBroadcastRunEvent(ctx, runSvc, run, ag.ID, agentName, AgentRunEventTaskLinked, "关联 task", "", map[string]any{
+				"task_id":    taskReq.OriginTaskID,
+				"role":       AgentRunTaskRolePrimary,
+				"confidence": 1,
+			})
+		}
+	}
+	if run != nil {
+		s.broadcastAgentRun(taskReq.ChannelID, "agent.run.started", runPayload(run, ag.ID, agentName, taskReq.OriginTaskID))
+		if taskReq.TriggerMessageID != "" {
+			s.appendAndBroadcastRunEvent(ctx, runSvc, run, ag.ID, agentName, AgentRunEventUserMessageReceived, "用户消息触发 run", "", map[string]any{
+				"message_id": taskReq.TriggerMessageID,
+				"channel_id": taskReq.ChannelID,
+				"thread_id":  taskReq.ThreadID,
+			})
+		}
+		s.appendAndBroadcastRunEvent(ctx, runSvc, run, ag.ID, agentName, AgentRunEventRunStarted, "创建 run", "", map[string]any{
+			"trigger_type":       triggerType,
+			"trigger_message_id": taskReq.TriggerMessageID,
+			"task_id":            taskReq.OriginTaskID,
+		})
+	}
 
 	slog.Debug("dispatching agent streaming task",
 		"task_id", taskReq.TaskID,
@@ -359,6 +403,31 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 		s.broadcastAgentChunk(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, "context", lastMsg.Content, nil)
 	}
 
+	finishRun := func(status AgentRunStatus) {
+		if run == nil {
+			return
+		}
+		finished, err := runSvc.FinishRun(ctx, FinishRunInput{
+			RunID:        run.ID,
+			Status:       status,
+			ActivityText: finalStateActivityText(status),
+		})
+		if err != nil {
+			slog.Warn("failed to finish agent run", "run_id", run.ID, "status", status, "error", err)
+			finished = run
+			finished.Status = status
+			finished.ActivityText = finalStateActivityText(status)
+		}
+		eventType := AgentRunEventDone
+		if status != AgentRunStatusCompleted {
+			eventType = AgentRunEventError
+		}
+		s.appendAndBroadcastRunEvent(ctx, runSvc, finished, ag.ID, agentName, eventType, finalStateActivityText(status), "", map[string]any{
+			"status": status,
+		})
+		s.broadcastAgentRun(taskReq.ChannelID, "agent.run.finished", runPayload(finished, ag.ID, agentName, taskReq.OriginTaskID))
+	}
+
 	// Send via SSE streaming
 	eventCh, err := s.dm.StreamTask(streamCtx, daemon, taskReq)
 	if err != nil {
@@ -369,38 +438,56 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 			"error", err,
 		)
 		s.broadcastAgentError(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, "Failed to start task: "+err.Error())
+		finishRun(AgentRunStatusFailed)
 		return
 	}
 
 	// Track usage for logging
 	var inputTokens, outputTokens int
 	taskCompleted := false
-	// Track final state for the agent.done broadcast. Updated by event handlers
+	// Track final state for the run finished broadcast. Updated by event handlers
 	// and read by the deferred broadcaster. Defaults to "aborted" if the stream
 	// ends without a more specific state.
 	finalState := "aborted"
-
-	// Always broadcast agent.done on exit so the frontend can mark the agent
-	// as idle regardless of how the task ends (completed, failed, error, or
-	// stream end). Replaces the previous 3s inactivity heuristic.
-	//
-	// Uses realtime.Envelope (not ws.Envelope) to avoid a service → ws
-	// import cycle. The on-the-wire shape is identical.
-	defer func() {
-		payload := map[string]interface{}{
-			"channel_id":  taskReq.ChannelID,
-			"agent_id":    ag.ID,
-			"agent_name":  agentName,
-			"task_id":     taskReq.TaskID,
-			"final_state": finalState,
-			"timestamp":   time.Now().UTC().Format(time.RFC3339),
+	bindRunSession := func(externalSessionID, transcriptPath string) {
+		if run == nil || (externalSessionID == "" && transcriptPath == "") {
+			return
 		}
-		s.hub.BroadcastToChannel(taskReq.ChannelID, realtime.Envelope("agent.done", payload))
-		slog.Debug("broadcast agent done",
-			"channel_id", taskReq.ChannelID,
-			"agent_id", ag.ID,
-			"final_state", finalState,
-		)
+		session, err := runSvc.UpsertSession(ctx, UpsertSessionInput{
+			AgentID:           ag.ID,
+			Provider:          taskReq.ModelConfig.Provider,
+			ExternalSessionID: externalSessionID,
+			TranscriptPath:    transcriptPath,
+		})
+		if err != nil {
+			slog.Warn("failed to upsert agent session", "run_id", run.ID, "agent_id", ag.ID, "error", err)
+			return
+		}
+		updatedRun, err := runSvc.BindRunSession(ctx, BindRunSessionInput{
+			RunID:     run.ID,
+			SessionID: session.ID,
+		})
+		if err != nil {
+			slog.Warn("failed to bind agent run session", "run_id", run.ID, "session_id", session.ID, "error", err)
+			return
+		}
+		run = updatedRun
+		if transcriptPath != "" {
+			updatedRun, err = runSvc.UpdateRunTranscript(ctx, UpdateRunTranscriptInput{
+				RunID:          run.ID,
+				TranscriptPath: transcriptPath,
+			})
+			if err != nil {
+				slog.Warn("failed to update agent run transcript", "run_id", run.ID, "error", err)
+				return
+			}
+			run = updatedRun
+		}
+		s.broadcastAgentRun(taskReq.ChannelID, "agent.run.updated", runPayload(run, ag.ID, agentName, taskReq.OriginTaskID))
+	}
+
+	defer func() {
+		finishRun(finalStateToRunStatus(finalState))
 	}()
 
 	for event := range eventCh {
@@ -411,6 +498,9 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 				Thought string `json:"thought"`
 			}
 			if err := json.Unmarshal([]byte(event.Data), &data); err == nil {
+				if run != nil {
+					s.appendAndBroadcastRunEvent(ctx, runSvc, run, ag.ID, agentName, AgentRunEventThinking, data.Thought, "", nil)
+				}
 				s.broadcastAgentThinking(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, data.Thought)
 				s.broadcastAgentChunk(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, "thinking", data.Thought, nil)
 			}
@@ -422,6 +512,9 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 				Content   string `json:"content"`
 			}
 			if err := json.Unmarshal([]byte(event.Data), &data); err == nil {
+				if run != nil {
+					s.appendAndBroadcastRunEvent(ctx, runSvc, run, ag.ID, agentName, AgentRunEventAssistantMessage, data.Content, "", nil)
+				}
 				s.broadcastAgentChunk(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, "text", data.Content, nil)
 			}
 
@@ -434,6 +527,12 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 				CallID    string `json:"call_id"`
 			}
 			if err := json.Unmarshal([]byte(event.Data), &data); err == nil {
+				if run != nil {
+					s.appendAndBroadcastRunEvent(ctx, runSvc, run, ag.ID, agentName, AgentRunEventToolStarted, data.ToolName, data.ToolName, map[string]any{
+						"input":   data.ToolInput,
+						"call_id": data.CallID,
+					})
+				}
 				s.broadcastAgentChunk(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, "tool_use", "", map[string]interface{}{
 					"name":    data.ToolName,
 					"input":   data.ToolInput,
@@ -451,6 +550,13 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 				IsError   bool   `json:"is_error"`
 			}
 			if err := json.Unmarshal([]byte(event.Data), &data); err == nil {
+				if run != nil {
+					s.appendAndBroadcastRunEvent(ctx, runSvc, run, ag.ID, agentName, AgentRunEventToolFinished, data.Output, data.ToolName, map[string]any{
+						"output":   data.Output,
+						"call_id":  data.CallID,
+						"is_error": data.IsError,
+					})
+				}
 				s.broadcastAgentChunk(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, "tool_result", data.Output, map[string]interface{}{
 					"name":    data.ToolName,
 					"output":  data.Output,
@@ -458,14 +564,26 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 				})
 			}
 
+		case "session":
+			var data struct {
+				ExternalSessionID string `json:"external_session_id"`
+				TranscriptPath    string `json:"transcript_path"`
+			}
+			if err := json.Unmarshal([]byte(event.Data), &data); err == nil {
+				bindRunSession(data.ExternalSessionID, data.TranscriptPath)
+			}
+
 		case "complete":
 			var data struct {
-				Usage struct {
+				ExternalSessionID string `json:"external_session_id"`
+				TranscriptPath    string `json:"transcript_path"`
+				Usage             struct {
 					InputTokens  int `json:"input_tokens"`
 					OutputTokens int `json:"output_tokens"`
 				} `json:"usage"`
 			}
 			if err := json.Unmarshal([]byte(event.Data), &data); err == nil {
+				bindRunSession(data.ExternalSessionID, data.TranscriptPath)
 				inputTokens = data.Usage.InputTokens
 				outputTokens = data.Usage.OutputTokens
 				taskCompleted = true
@@ -485,36 +603,50 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 				s.broadcastAgentError(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, data.Error)
 			}
 			finalState = "failed"
-			// Don't return — let the loop consume the "done" sentinel so we
-			// also broadcast agent.done with the correct final state. The
-			// deferred broadcaster will handle the exit.
+			// Don't return — let the loop consume the "done" sentinel. The
+			// deferred run finisher will handle the exit.
 			continue
 
 		case "done":
 			// Daemon's stream-end sentinel (cmd/daemon/handler.go:683). No
 			// payload — we already captured the final state from "complete"
-			// or "error" above. Just exit the loop; deferred broadcaster
-			// will fire agent.done.
+			// or "error" above. Just exit the loop; deferred run finisher
+			// will broadcast agent.run.finished.
 
-		case "agent.activity":
-			// SOLO-island PR1: pass through the daemon-built activity event
-			// to WebSocket subscribers. Daemon has already filled all the
-			// fields (status, activity_text, tool_name, etc.) so the server
-			// is a passthrough — no re-derivation here. Skips events for
-			// non-channel tasks (req.ChannelID == "").
+		case "agent.run.updated":
 			if taskReq.ChannelID == "" {
-				slog.Debug("agent.activity: skipping empty channel_id", "task_id", taskReq.TaskID)
+				slog.Debug("agent.run.updated: skipping empty channel_id", "task_id", taskReq.TaskID)
 				continue
 			}
-			var activity map[string]interface{}
+			if run == nil {
+				continue
+			}
+			var activity struct {
+				Status           string `json:"status"`
+				ActivityText     string `json:"activity_text"`
+				ToolName         string `json:"tool_name"`
+				ToolInputSummary string `json:"tool_input_summary"`
+				Source           string `json:"source"`
+			}
 			if err := json.Unmarshal([]byte(event.Data), &activity); err != nil {
-				slog.Warn("agent.activity: failed to unmarshal payload",
+				slog.Warn("agent.run.updated: failed to unmarshal payload",
 					"task_id", taskReq.TaskID, "error", err)
 				continue
 			}
-			activity["channel_id"] = taskReq.ChannelID
-			slog.Debug("agent.activity: broadcasting", "task_id", taskReq.TaskID, "channel_id", taskReq.ChannelID, "agent_id", activity["agent_id"])
-			s.hub.BroadcastToChannel(taskReq.ChannelID, realtime.Envelope("agent.activity", activity))
+			updated, err := runSvc.UpdateStatus(ctx, UpdateRunStatusInput{
+				RunID:            run.ID,
+				Status:           AgentRunStatus(activity.Status),
+				ActivityText:     activity.ActivityText,
+				ToolName:         activity.ToolName,
+				ToolInputSummary: activity.ToolInputSummary,
+				Source:           activity.Source,
+			})
+			if err != nil {
+				slog.Warn("agent.run.updated: failed to update run", "run_id", run.ID, "status", activity.Status, "error", err)
+				continue
+			}
+			run = updated
+			s.broadcastAgentRun(taskReq.ChannelID, "agent.run.updated", runPayload(updated, ag.ID, agentName, taskReq.OriginTaskID))
 		}
 
 		// Break on stream-end sentinel (empty "done" event).
@@ -522,10 +654,13 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 			break
 		}
 	}
+	if errors.Is(streamCtx.Err(), context.DeadlineExceeded) {
+		finalState = "timeout"
+	}
 
 	// If task was not completed (no "complete" event arrived), emit a soft
-	// warning. We don't return here because the deferred agent.done broadcast
-	// still needs to run. finalState is already set ("completed" | "failed" |
+	// warning. We don't return here because the deferred run finisher still
+	// needs to run. finalState is already set ("completed" | "failed" |
 	// "aborted" default) for the deferred broadcaster.
 	if !taskCompleted && finalState == "aborted" {
 		slog.Warn("agent task stream ended without complete event",
@@ -542,13 +677,101 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 	slog.Info("agent streaming task completed",
 		"agent_id", ag.ID,
 		"channel_id", taskReq.ChannelID,
-		"message_id", messageID,
+		"message_id", streamMessageID,
 		"input_tokens", inputTokens,
 		"output_tokens", outputTokens,
 	)
 }
 
 // --- Internal broadcast helpers (use realtime.Broadcaster directly) ---
+
+func stringOrEmpty(session *AgentSession) string {
+	if session == nil {
+		return ""
+	}
+	return session.ID
+}
+
+func runPayload(run *AgentRun, agentID, agentName, taskID string) map[string]any {
+	return map[string]any{
+		"run_id":             run.ID,
+		"session_id":         run.SessionID,
+		"agent_id":           agentID,
+		"agent_name":         agentName,
+		"task_id":            taskID,
+		"channel_id":         run.ChannelID,
+		"thread_id":          run.ThreadID,
+		"status":             run.Status,
+		"activity_text":      run.ActivityText,
+		"tool_name":          run.ToolName,
+		"tool_input_summary": run.ToolInputSummary,
+		"transcript_path":    run.TranscriptPath,
+		"source":             run.Source,
+		"timestamp":          time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+func (s *AgentService) broadcastAgentRun(_ string, eventType string, payload map[string]any) {
+	s.hub.Broadcast(realtime.Envelope(eventType, payload))
+}
+
+func (s *AgentService) appendAndBroadcastRunEvent(ctx context.Context, runSvc *AgentRunService, run *AgentRun, agentID, agentName, eventType, message, toolName string, payload any) {
+	if run == nil {
+		return
+	}
+	event, err := runSvc.AppendEvent(ctx, AppendRunEventInput{
+		RunID:    run.ID,
+		Type:     eventType,
+		Message:  message,
+		ToolName: toolName,
+		Payload:  payload,
+	})
+	if err != nil {
+		slog.Warn("failed to append agent run event", "run_id", run.ID, "event_type", eventType, "error", err)
+		return
+	}
+	s.hub.Broadcast(realtime.Envelope("agent.run.event", map[string]any{
+		"id":         event.ID,
+		"run_id":     run.ID,
+		"session_id": run.SessionID,
+		"agent_id":   agentID,
+		"agent_name": agentName,
+		"channel_id": run.ChannelID,
+		"thread_id":  run.ThreadID,
+		"seq":        event.Seq,
+		"event_type": event.Type,
+		"message":    event.Message,
+		"tool_name":  event.ToolName,
+		"payload":    json.RawMessage(event.Payload),
+		"timestamp":  event.CreatedAt.UTC().Format(time.RFC3339),
+	}))
+}
+
+func finalStateToRunStatus(finalState string) AgentRunStatus {
+	switch finalState {
+	case "completed":
+		return AgentRunStatusCompleted
+	case "cancelled":
+		return AgentRunStatusCancelled
+	case "timeout":
+		return AgentRunStatusTimeout
+	default:
+		return AgentRunStatusFailed
+	}
+}
+
+func finalStateActivityText(status AgentRunStatus) string {
+	switch status {
+	case AgentRunStatusCompleted:
+		return "已完成"
+	case AgentRunStatusCancelled:
+		return "已取消"
+	case AgentRunStatusTimeout:
+		return "执行超时"
+	default:
+		return "执行失败"
+	}
+}
 
 func (s *AgentService) broadcastThinking(channelID, agentID, agentName, thought string) {
 	payload := map[string]interface{}{
@@ -830,11 +1053,8 @@ func (s *AgentService) HandleTaskError(ctx context.Context, req *TaskErrorReques
 
 // TriggerAgentResponseInThread triggers agent auto-response for a thread message.
 func (s *AgentService) TriggerAgentResponseInThread(ctx context.Context, channelID, threadID, senderType, senderID string, mentionedAgentIDs []string, hasMentions bool, agentChain []string) {
-	if senderType == "agent" {
-		if len(mentionedAgentIDs) == 0 {
-			return // agent talking — no @mentions to other agents, skip
-		}
-		// Has @mentions to other agents — proceed to trigger only those agents
+	if !shouldTriggerAgentForSender(senderType, mentionedAgentIDs) {
+		return
 	}
 
 	agents, err := s.getChannelActiveAgents(ctx, channelID)
@@ -901,7 +1121,9 @@ func (s *AgentService) TriggerAgentResponseInThread(ctx context.Context, channel
 	}
 
 	contextMsgs := make([]agent.Message, len(threadMsgs))
+	triggerMessageID := ""
 	for i, tm := range threadMsgs {
+		triggerMessageID = tm.ID
 		role := agent.RoleUser
 		if tm.SenderType == "agent" {
 			role = agent.RoleAssistant
@@ -984,12 +1206,13 @@ func (s *AgentService) TriggerAgentResponseInThread(ctx context.Context, channel
 		}
 
 		taskReq := daemonTaskRequest{
-			TaskID:       uuid.New().String(),
-			AgentID:      ag.ID,
-			ChannelID:    channelID,
-			ThreadID:     threadID,
-			Messages:     contextMsgs,
-			SystemPrompt: ag.SystemPrompt,
+			TaskID:           uuid.New().String(),
+			AgentID:          ag.ID,
+			ChannelID:        channelID,
+			ThreadID:         threadID,
+			TriggerMessageID: triggerMessageID,
+			Messages:         contextMsgs,
+			SystemPrompt:     ag.SystemPrompt,
 			ModelConfig: agent.ModelConfig{
 				Provider: ag.ModelProvider,
 				Model:    ag.ModelName,
@@ -1002,6 +1225,13 @@ func (s *AgentService) TriggerAgentResponseInThread(ctx context.Context, channel
 		// Use streaming for thread as well
 		go s.handleStreamingAgentTask(context.Background(), daemon, taskReq, ag)
 	}
+}
+
+func shouldTriggerAgentForSender(senderType string, mentionedAgentIDs []string) bool {
+	if senderType == "agent" {
+		return len(mentionedAgentIDs) > 0
+	}
+	return true
 }
 
 // CheckClaimWindow checks whether the given claimerID is allowed to claim the
@@ -1208,17 +1438,18 @@ func (s *AgentService) TriggerAgentForTask(ctx context.Context, channelID, taskI
 	}
 
 	taskReq := daemonTaskRequest{
-		TaskID:       uuid.New().String(),
-		AgentID:      ag.ID,
-		ChannelID:    channelID,
-		ThreadID:     threadID,
-		Messages:     contextMsgs,
-		SystemPrompt: ag.SystemPrompt,
+		TaskID:           uuid.New().String(),
+		AgentID:          ag.ID,
+		ChannelID:        channelID,
+		ThreadID:         threadID,
+		TriggerMessageID: messageID,
+		Messages:         contextMsgs,
+		SystemPrompt:     ag.SystemPrompt,
 		ModelConfig: agent.ModelConfig{
 			Provider: ag.ModelProvider,
 			Model:    ag.ModelName,
 		},
-		// v1.3: No OriginTaskID — agents complete tasks via /done #N directives.
+		OriginTaskID: taskID,
 	}
 
 	slog.Info("triggering agent for task",
@@ -1590,18 +1821,19 @@ func (s *AgentService) getChannelOpenTasksSummary(ctx context.Context, channelID
 
 // daemonTaskRequest is the format for tasks sent from server to daemon.
 type daemonTaskRequest struct {
-	TaskID          string            `json:"task_id"`
-	AgentID         string            `json:"agent_id"`
-	ChannelID       string            `json:"channel_id"`
-	ThreadID        string            `json:"thread_id,omitempty"`
-	Messages        []agent.Message   `json:"messages"`
-	SystemPrompt    string            `json:"system_prompt"`
-	ModelConfig     agent.ModelConfig `json:"model_config"`
-	OriginTaskID    string            `json:"origin_task_id,omitempty"`   // SOLO-123-B: task ID for status update
-	TaskContext     string            `json:"task_context,omitempty"`     // SOLO-221-B: summary of pending tasks in channel
-	AgentChain      []string          `json:"agent_chain,omitempty"`      // SOLO-228-B: agent trigger chain for loop prevention
-	MentionedNames  []string          `json:"mentioned_names,omitempty"`  // v1.3: names of @mentioned agents for context awareness
-	InitialGreeting string            `json:"initial_greeting,omitempty"` // greeting message to prepend as system context
+	TaskID           string            `json:"task_id"`
+	AgentID          string            `json:"agent_id"`
+	ChannelID        string            `json:"channel_id"`
+	ThreadID         string            `json:"thread_id,omitempty"`
+	TriggerMessageID string            `json:"trigger_message_id,omitempty"`
+	Messages         []agent.Message   `json:"messages"`
+	SystemPrompt     string            `json:"system_prompt"`
+	ModelConfig      agent.ModelConfig `json:"model_config"`
+	OriginTaskID     string            `json:"origin_task_id,omitempty"`   // SOLO-123-B: task ID for status update
+	TaskContext      string            `json:"task_context,omitempty"`     // SOLO-221-B: summary of pending tasks in channel
+	AgentChain       []string          `json:"agent_chain,omitempty"`      // SOLO-228-B: agent trigger chain for loop prevention
+	MentionedNames   []string          `json:"mentioned_names,omitempty"`  // v1.3: names of @mentioned agents for context awareness
+	InitialGreeting  string            `json:"initial_greeting,omitempty"` // greeting message to prepend as system context
 }
 
 // containsStr returns true if the slice s contains value v.

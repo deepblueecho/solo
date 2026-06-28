@@ -231,8 +231,9 @@ func (b *CopilotBackend) handleEvent(evt copilotEvent, st *copilotEventState) []
 			if ss.SelectedModel != "" {
 				st.activeModel = ss.SelectedModel
 			}
-			if ss.SessionID != "" {
+			if ss.SessionID != "" && ss.SessionID != st.sessionID {
 				st.sessionID = ss.SessionID
+				chunks = append(chunks, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: st.sessionID})
 			}
 		}
 
@@ -329,8 +330,9 @@ func (b *CopilotBackend) handleEvent(evt copilotEvent, st *copilotEventState) []
 		}
 
 	case "result":
-		if evt.SessionID != "" {
+		if evt.SessionID != "" && evt.SessionID != st.sessionID {
 			st.sessionID = evt.SessionID
+			chunks = append(chunks, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: st.sessionID})
 		}
 		if evt.ExitCode != 0 {
 			st.finalStatus = "failed"

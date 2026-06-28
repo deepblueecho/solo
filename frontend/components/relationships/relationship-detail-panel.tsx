@@ -266,6 +266,7 @@ export function RelationshipDetailPanel({
               agentId={agent.id}
               redirectAfterDelete={false}
               showProfileHeader={false}
+              showObservability={false}
               onAgentDeleted={(deletedId) => {
                 onAgentDeleted?.(deletedId);
                 onClose();

@@ -12,7 +12,7 @@ import (
 // exits immediately (indicating a CLI misconfiguration, not a transient failure).
 const failedStartRetryInterval = 30 * time.Second
 
-// AgentSessionManager manages a pool of agent sessions 
+// AgentSessionManager manages a pool of agent sessions
 // processes stay alive indefinitely (no idle timeout), crash recovery is
 // automatic via --resume, and concurrent starts are rate-limited.
 type AgentSessionManager struct {
@@ -62,10 +62,10 @@ func NewAgentSessionManager(backend PersistentBackend, workspaceMgr *WorkspaceMa
 	}
 	slots := make(chan struct{}, 5) // max 5 concurrent starts
 	return &AgentSessionManager{
-		backend:      backend,
-		workspaceMgr: workspaceMgr,
-		memoryMgr:    memoryMgr,
-		logger:       logger,
+		backend:         backend,
+		workspaceMgr:    workspaceMgr,
+		memoryMgr:       memoryMgr,
+		logger:          logger,
 		sessions:        make(map[string]*agentSessionEntry),
 		activeTurns:     make(map[string]chan struct{}),
 		pendingMessages: make(map[string][]Message),
@@ -244,7 +244,6 @@ func (m *AgentSessionManager) CloseAll() {
 	}
 }
 
-
 // ── Internal ─────────────────────────────────────────────────────────────────
 
 func (m *AgentSessionManager) isSessionAlive(entry *agentSessionEntry) bool {
@@ -279,13 +278,18 @@ func (m *AgentSessionManager) deliverToSession(ctx context.Context, agentID stri
 			entry.sessionID = sid
 		}
 	}
+	entry.Session = ps
 	return ps, nil
 }
 
-
 func (m *AgentSessionManager) createSession(ctx context.Context, agentID string, agentCfg AgentConfig, channelCtx ChannelContext, messages []Message, prevSessionID string, mentionedNames []string) (*PersistentSession, error) {
 	release := m.acquireTurn(agentID)
-	defer release()
+	releaseOnReturn := true
+	defer func() {
+		if releaseOnReturn {
+			release()
+		}
+	}()
 
 	m.mu.RLock()
 	entry, exists := m.sessions[agentID]
@@ -329,8 +333,8 @@ func (m *AgentSessionManager) createSession(ctx context.Context, agentID string,
 	// max 5 concurrent, FIFO queue with 500ms dequeue interval).
 	queueLen := len(m.startSlots)
 	m.logger.Info("session: start queued", "agent_id", agentID, "queue", queueLen, "max", cap(m.startSlots))
-	m.startSlots <- struct{}{} // acquire slot (blocks if 5 already starting)
-	time.Sleep(500 * time.Millisecond)            // dequeue interval
+	m.startSlots <- struct{}{}         // acquire slot (blocks if 5 already starting)
+	time.Sleep(500 * time.Millisecond) // dequeue interval
 	m.logger.Info("session: dequeued start", "agent_id", agentID, "queue", len(m.startSlots))
 
 	ps, err := m.backend.Start(ctx, executeReq, executeOpts)
@@ -346,7 +350,7 @@ func (m *AgentSessionManager) createSession(ctx context.Context, agentID string,
 		ChannelCtx:  channelCtx,
 		CreatedAt:   time.Now(),
 		LastActive:  time.Now(),
-		sessionID:   prevSessionID,
+		sessionID:   firstNonEmpty(ps.SessionID, prevSessionID),
 	}
 
 	m.mu.Lock()
@@ -357,6 +361,8 @@ func (m *AgentSessionManager) createSession(ctx context.Context, agentID string,
 	m.mu.Unlock()
 
 	go m.watchCrash(agentID, agentCfg, channelCtx, entry)
+	holdTurnUntilResult(ps, release)
+	releaseOnReturn = false
 
 	// If the process died immediately (CLI broken/missing), record failure
 	// to prevent retry storms on the next trigger.
@@ -369,6 +375,31 @@ func (m *AgentSessionManager) createSession(ctx context.Context, agentID string,
 
 	m.logger.Info("session: created", "agent_id", agentID)
 	return ps, nil
+}
+
+func holdTurnUntilResult(ps *PersistentSession, release func()) {
+	src := ps.Result
+	dst := make(chan *Result, 1)
+	ps.Result = dst
+	go func() {
+		defer release()
+		defer close(dst)
+		if src == nil {
+			return
+		}
+		if result, ok := <-src; ok {
+			dst <- result
+		}
+	}()
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // inFailedCooldown returns true if this agent had a failed start recently
@@ -428,8 +459,6 @@ func (m *AgentSessionManager) watchCrash(agentID string, agentCfg AgentConfig, c
 		m.logger.Error("session: crash recovery failed", "agent_id", agentID, "error", err)
 	}
 }
-
-
 
 // notifyInbox writes a lightweight notification to the agent's stdin,
 // "1 pending inbox message(s)" pattern. The agent sees

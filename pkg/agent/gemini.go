@@ -102,6 +102,7 @@ func (b *GeminiBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *
 		var output strings.Builder
 		finalStatus := "completed"
 		var finalError string
+		sessionID := ""
 		usage := make(map[string]TokenUsage)
 
 		scanner := bufio.NewScanner(stdout)
@@ -116,6 +117,11 @@ func (b *GeminiBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *
 			var evt geminiStreamEvent
 			if err := json.Unmarshal([]byte(line), &evt); err != nil {
 				continue
+			}
+
+			if evt.SessionID != "" && evt.SessionID != sessionID {
+				sessionID = evt.SessionID
+				trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: sessionID})
 			}
 
 			switch evt.Type {
@@ -199,10 +205,10 @@ func (b *GeminiBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *
 // ── Gemini stream-json event types ──
 
 type geminiStreamEvent struct {
-	Type      string          `json:"type"`
-	Timestamp string          `json:"timestamp,omitempty"`
-	SessionID string          `json:"session_id,omitempty"`
-	Model     string          `json:"model,omitempty"`
+	Type      string `json:"type"`
+	Timestamp string `json:"timestamp,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Model     string `json:"model,omitempty"`
 
 	Role    string `json:"role,omitempty"`
 	Content string `json:"content,omitempty"`
@@ -215,8 +221,8 @@ type geminiStreamEvent struct {
 	Status string `json:"status,omitempty"`
 	Output string `json:"output,omitempty"`
 
-	Severity string            `json:"severity,omitempty"`
-	Message  string            `json:"message,omitempty"`
+	Severity string `json:"severity,omitempty"`
+	Message  string `json:"message,omitempty"`
 
 	Error *geminiStreamError `json:"error,omitempty"`
 	Stats *geminiStreamStats `json:"stats,omitempty"`

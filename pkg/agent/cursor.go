@@ -105,6 +105,7 @@ func (b *CursorBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *
 		var output strings.Builder
 		finalStatus := "completed"
 		var finalError string
+		sessionID := ""
 		stepUsage := make(map[string]TokenUsage)
 		resultUsage := make(map[string]TokenUsage)
 		hasResultUsage := false
@@ -124,6 +125,10 @@ func (b *CursorBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *
 				continue
 			}
 
+			if evt.SessionID != "" && evt.SessionID != sessionID {
+				sessionID = evt.SessionID
+				trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: sessionID})
+			}
 
 			switch evt.Type {
 			case "system":

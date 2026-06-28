@@ -3,7 +3,6 @@ package agent
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -58,9 +57,10 @@ func (b *OpenCodeBackend) Execute(ctx context.Context, req *ExecuteRequest, opts
 	}()
 	var stopOnce sync.Once
 	return &Session{
-		Messages: msgCh,
-		Result:   resCh,
-		Stop:     func() error { stopOnce.Do(func() { b.Close(ps) }); return nil },
+		Messages:  msgCh,
+		Result:    resCh,
+		Stop:      func() error { stopOnce.Do(func() { b.Close(ps) }); return nil },
+		SessionID: ps.SessionID,
 	}, nil
 }
 
@@ -227,51 +227,26 @@ func (b *OpenCodeBackend) Start(ctx context.Context, req *ExecuteRequest, opts *
 		}, promptBlocks...)
 	}
 
-	if _, err := cl.request(ctx, "session/prompt", map[string]any{
-		"sessionId": sessionID,
-		"prompt":    promptBlocks,
-	}); err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			handleError("opencode timed out during initial prompt")
-		} else if errors.Is(ctx.Err(), context.Canceled) {
-			handleError("execution cancelled")
-		} else {
-			handleError(fmt.Sprintf("opencode session/prompt failed: %v", err))
-		}
-		return &PersistentSession{Messages: msgCh, Result: resCh, state: state}, nil
-	}
+	trySend(msgCh, OutputChunk{Type: string(MessageStatus), Content: "running", SessionID: sessionID})
 
-	var usage TokenUsage
-	select {
-	case pr := <-turnDone:
-		usage = pr.usage
-	default:
-	}
-
-	duration := time.Since(startTime)
-	outputMu.Lock()
-	finalOutput := output.String()
-	outputMu.Unlock()
-
-	if state.turnFin.CompareAndSwap(false, true) {
-		resCh <- &Result{
-			Status:     "completed",
-			Output:     finalOutput,
-			DurationMs: duration.Milliseconds(),
-			Usage:      buildACPUsageMap(usage, opts.Model),
-		}
-		close(msgCh)
-		close(resCh)
-	}
-
-	b.logger.Info("opencode: initial persistent turn completed",
-		"session_id", sessionID,
-		"duration", duration.Round(time.Millisecond).String(),
-	)
+	startACPInitialPromptTurn(acpInitialPromptTurn{
+		ctx:          ctx,
+		provider:     "opencode",
+		model:        opts.Model,
+		sessionID:    sessionID,
+		promptBlocks: promptBlocks,
+		client:       cl,
+		msgCh:        msgCh,
+		resCh:        resCh,
+		turnDone:     turnDone,
+		output:       &output,
+		outputMu:     &outputMu,
+		turnFin:      &state.turnFin,
+		startTime:    startTime,
+	})
 
 	var stopOnce sync.Once
 	stop := func() error { stopOnce.Do(func() { runner.cancel() }); return nil }
-
 	return &PersistentSession{
 		Messages:  msgCh,
 		Result:    resCh,

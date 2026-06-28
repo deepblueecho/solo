@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"strings"
+	"io"
 	"log/slog"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 )
@@ -103,10 +105,10 @@ func TestFilterCustomArgs(t *testing.T) {
 	t.Run("blocked standalone flag filtered", func(t *testing.T) {
 		// Add a test-specific standalone blocked flag to verify the filtering logic.
 		testBlocked := map[string]blockedArgMode{
-			"--test-blocked":     blockedStandalone,
-			"--output-format":    blockedWithValue,
-			"--input-format":     blockedWithValue,
-			"--permission-mode":  blockedWithValue,
+			"--test-blocked":    blockedStandalone,
+			"--output-format":   blockedWithValue,
+			"--input-format":    blockedWithValue,
+			"--permission-mode": blockedWithValue,
 		}
 		args := []string{"--test-blocked", "some-prompt"}
 		result := filterCustomArgs(args, testBlocked)
@@ -311,6 +313,77 @@ func TestExecLookPathNotFound(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "claude executable not found at") {
 		t.Errorf("expected 'claude executable not found at' in error, got: %v", err)
+	}
+}
+
+func TestClaudeAssistantThinkingField(t *testing.T) {
+	b := NewClaudeBackend("/bin/true", slog.Default())
+	msgCh := make(chan OutputChunk, 1)
+	turn := &turnState{msgCh: msgCh}
+	state := &claudePersistentState{totalUsage: make(map[string]TokenUsage)}
+	msg := claudeSDKMessage{
+		Message: json.RawMessage(`{"role":"assistant","content":[{"type":"thinking","thinking":"checking files"}]}`),
+	}
+
+	b.handleAssistantPersistent(msg, turn, state)
+
+	select {
+	case chunk := <-msgCh:
+		if chunk.Type != string(MessageThinking) || chunk.Content != "checking files" {
+			t.Fatalf("thinking chunk = %+v", chunk)
+		}
+	default:
+		t.Fatal("expected thinking chunk from Claude thinking field")
+	}
+}
+
+func TestUpdateClaudeSessionIDReplacesOldValue(t *testing.T) {
+	state := &claudePersistentState{sessionID: "old-session"}
+	updateClaudeSessionID(state, "new-session")
+	if state.sessionID != "new-session" {
+		t.Fatalf("sessionID = %q, want new-session", state.sessionID)
+	}
+	updateClaudeSessionID(state, "")
+	if state.sessionID != "new-session" {
+		t.Fatalf("empty session update changed sessionID to %q", state.sessionID)
+	}
+}
+
+func TestClaudePersistentSystemChunkCarriesSessionID(t *testing.T) {
+	b := NewClaudeBackend("/bin/true", slog.Default())
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Fatalf("find true: %v", err)
+	}
+	cmd := exec.Command(truePath)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start fake cmd: %v", err)
+	}
+	msgCh := make(chan OutputChunk, 1)
+	turn := &turnState{msgCh: msgCh, resCh: make(chan *Result, 1)}
+	state := &claudePersistentState{
+		cmd:        cmd,
+		stdout:     io.NopCloser(strings.NewReader(`{"type":"system","subtype":"init","session_id":"provider-session-1"}` + "\n")),
+		cancel:     func() {},
+		done:       make(chan struct{}),
+		totalUsage: make(map[string]TokenUsage),
+	}
+	state.turn.Store(turn)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	b.persistentStreamLoop(ctx, state, 0)
+	cancel()
+
+	select {
+	case chunk := <-msgCh:
+		if chunk.Type != string(MessageStatus) || chunk.SessionID != "provider-session-1" {
+			t.Fatalf("chunk = %+v, want status with provider session id", chunk)
+		}
+	default:
+		t.Fatal("expected status chunk")
+	}
+	if state.SessionID() != "provider-session-1" {
+		t.Fatalf("state session id = %q", state.SessionID())
 	}
 }
 
