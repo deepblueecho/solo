@@ -82,8 +82,22 @@ function fromRunResponse(run: AgentRunResponse): IslandAgent {
 
 export function useAgentIsland() {
   const [agents, setAgents] = useState<Map<string, IslandAgent>>(new Map());
-  const { onEvent } = useWebSocket();
+  const { onEvent, isConnected } = useWebSocket();
+  const mountedRef = useRef(false);
+  const hasConnectedRef = useRef(false);
   const completedTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const loadActiveRuns = useCallback(() => {
+    return apiClient.get<AgentRunResponse[]>('/api/v1/agent-runs/active')
+      .then((runs) => {
+        if (!mountedRef.current) return;
+        setAgents(new Map(runs.map((run) => [run.id, fromRunResponse(run)])));
+      })
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setAgents(new Map());
+      });
+  }, []);
 
   const scheduleRemoval = useCallback((runId: string) => {
     const existing = completedTimers.current.get(runId);
@@ -152,19 +166,26 @@ export function useAgentIsland() {
   }, [scheduleRemoval]);
 
   useEffect(() => {
-    let cancelled = false;
-    apiClient.get<AgentRunResponse[]>('/api/v1/agent-runs/active')
-      .then((runs) => {
-        if (cancelled) return;
-        setAgents(new Map(runs.map((run) => [run.id, fromRunResponse(run)])));
-      })
-      .catch(() => {
-        if (!cancelled) setAgents(new Map());
-      });
-    return () => {
-      cancelled = true;
+    mountedRef.current = true;
+    void loadActiveRuns();
+    const handleFocus = () => {
+      void loadActiveRuns();
     };
-  }, []);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      mountedRef.current = false;
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadActiveRuns]);
+
+  useEffect(() => {
+    if (!isConnected) return;
+    if (hasConnectedRef.current) {
+      void loadActiveRuns();
+      return;
+    }
+    hasConnectedRef.current = true;
+  }, [isConnected, loadActiveRuns]);
 
   useEffect(() => {
     const unsub = onEvent((event) => {

@@ -26,6 +26,8 @@ import (
 	"github.com/solo-ai/solo/pkg/skillloader"
 )
 
+const backendFinalResultWaitAfter = 5 * time.Second
+
 // agentTokenState holds a cached JWT for an agent plus its expiry.
 type agentTokenState struct {
 	accessToken string
@@ -624,6 +626,7 @@ func (h *daemonHandler) processTaskWithProvider(ctx context.Context, req runTask
 	// Collect full content from stream
 	var fullContent string
 	var usage llm.Usage
+	var sawDone bool
 
 	for chunk := range streamCh {
 		if chunk.Error != nil {
@@ -646,6 +649,7 @@ func (h *daemonHandler) processTaskWithProvider(ctx context.Context, req runTask
 		if chunk.Done {
 			// Final chunk with usage info
 			usage = chunk.Usage
+			sawDone = true
 			break
 		}
 
@@ -663,6 +667,22 @@ func (h *daemonHandler) processTaskWithProvider(ctx context.Context, req runTask
 	if ctx.Err() != nil {
 		slog.Info("task cancelled via context", "task_id", req.TaskID, "agent_id", req.AgentID)
 		h.taskManager.UpdateStatus(req.TaskID, taskStatusCancelled)
+		h.taskManager.CloseAllSubscribers(req.TaskID)
+		return
+	}
+	if !sawDone {
+		errMsg := "provider stream closed without completion"
+		slog.Error("task: streaming LLM call ended without done",
+			"task_id", req.TaskID,
+			"agent_id", req.AgentID,
+		)
+		h.taskManager.UpdateStatus(req.TaskID, taskStatusFailed)
+		h.notifyServerError(req, errMsg)
+		h.pushEventJSON(req.TaskID, "error", map[string]interface{}{
+			"agent_id":  req.AgentID,
+			"error":     errMsg,
+			"retryable": true,
+		})
 		h.taskManager.CloseAllSubscribers(req.TaskID)
 		return
 	}
@@ -1035,7 +1055,11 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 	}
 
 	// Get final result
-	result := <-session.Result
+	result, ok := readBackendFinalResult(ctx, session.Result, backendFinalResultWaitAfter)
+	if !ok || result == nil {
+		result = &agent.Result{Status: "failed", Error: "backend finished without a final result"}
+	}
+	finalStatus := backendFinalStatus(result)
 
 	// v1.3: — NEVER persist text output as channel messages.
 	// Only solo message send API (via proxy) creates visible messages.
@@ -1062,7 +1086,21 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 		}
 	}
 
-	h.taskManager.UpdateStatus(req.TaskID, taskStatusCompleted)
+	if finalStatus != "completed" {
+		errMsg := backendErrorMessage(result)
+		h.taskManager.UpdateStatus(req.TaskID, backendTaskStatus(finalStatus))
+		h.notifyServerError(req, errMsg)
+		h.pushEventJSON(req.TaskID, "error", map[string]interface{}{
+			"agent_id":  req.AgentID,
+			"error":     errMsg,
+			"status":    finalStatus,
+			"retryable": finalStatus != "cancelled",
+		})
+		h.taskManager.CloseAllSubscribers(req.TaskID)
+		return
+	}
+
+	h.taskManager.UpdateStatus(req.TaskID, backendTaskStatus(finalStatus))
 	transcriptPath = refreshTranscriptPathForProvider(req.ModelConfig.Provider, ws.WorkDir, providerSessionID, transcriptPath)
 
 	// Push complete event — notification only (no content, no persist).
@@ -1081,6 +1119,62 @@ func (h *daemonHandler) processTaskWithBackend(ctx context.Context, req runTaskR
 	// subscribers in order, eliminating the need for a delay.
 	h.pushEventJSON(req.TaskID, "done", map[string]interface{}{})
 	h.taskManager.CloseAllSubscribers(req.TaskID)
+}
+
+func backendFinalStatus(result *agent.Result) string {
+	if result == nil {
+		return "failed"
+	}
+	switch result.Status {
+	case "completed", "timeout", "cancelled":
+		return result.Status
+	case "aborted":
+		return "cancelled"
+	default:
+		return "failed"
+	}
+}
+
+func readBackendFinalResult(ctx context.Context, resultCh <-chan *agent.Result, wait time.Duration) (*agent.Result, bool) {
+	if resultCh == nil {
+		return nil, false
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+
+	select {
+	case result, ok := <-resultCh:
+		return result, ok
+	case <-ctx.Done():
+		return &agent.Result{Status: "cancelled", Error: ctx.Err().Error()}, true
+	case <-timer.C:
+		return nil, false
+	}
+}
+
+func backendTaskStatus(finalStatus string) string {
+	switch finalStatus {
+	case "completed":
+		return taskStatusCompleted
+	case "cancelled":
+		return taskStatusCancelled
+	default:
+		return taskStatusFailed
+	}
+}
+
+func backendErrorMessage(result *agent.Result) string {
+	if result != nil && strings.TrimSpace(result.Error) != "" {
+		return result.Error
+	}
+	switch backendFinalStatus(result) {
+	case "timeout":
+		return "agent execution timed out"
+	case "cancelled":
+		return "agent execution cancelled"
+	default:
+		return "agent execution failed"
+	}
 }
 
 func transcriptPathForProvider(provider, workspaceDir, sessionID string) string {

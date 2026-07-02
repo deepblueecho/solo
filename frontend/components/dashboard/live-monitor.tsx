@@ -323,12 +323,14 @@ function LiveGroup({ group, selectedAgentId, onSelect }: { group: DashboardLiveG
 }
 
 function AgentLiveCard({ agent, selected, onClick }: { agent: DashboardLiveAgent; selected: boolean; onClick: () => void }) {
+  const activity = displayAgentActivity(agent.status, agent.activity_text, agent.tool_input_summary);
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={`${agent.agent_name} ${agentRunStatusText(agent.status)} ${activity}`}
       className={cn(
-        'block w-full border-2 border-black p-3 text-left shadow-brutal-sm transition-all hover:-translate-y-px hover:shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
+        'group block w-full border-2 border-black p-3 text-left shadow-brutal-sm transition-all hover:-translate-y-px hover:shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none',
         selected
           ? 'bg-brutal-primary hover:bg-brutal-primary'
           : 'bg-brutal-cream hover:bg-brutal-accent-light',
@@ -344,8 +346,11 @@ function AgentLiveCard({ agent, selected, onClick }: { agent: DashboardLiveAgent
             </div>
             <StatusBadge status={agent.status} />
           </div>
-          <p className="mt-3 line-clamp-2 font-mono text-sm">
-            {displayAgentActivity(agent.status, agent.activity_text, agent.tool_input_summary)}
+          <p
+            title={activity}
+            className="mt-3 line-clamp-2 font-mono text-sm group-hover:line-clamp-none group-focus:line-clamp-none"
+          >
+            {activity}
           </p>
           <div className="mt-3 flex flex-wrap gap-2 font-mono text-[11px] text-muted-foreground">
             {agent.task_id && <span className="text-brutal-info">{t('agentTaskRef', { id: shortID(agent.task_id) })}</span>}
@@ -793,7 +798,7 @@ function timelineQuestionOutline(timeline: AgentTimeline) {
   return timeline.runs.map((run, index) => ({
     seq: run.entry_start_seq || 1,
     timestamp: run.started_at,
-    title: cleanPromptTitle(run.activity_text || t('observabilityRoundTitle', { n: index + 1 })),
+    title: cleanPromptTitle(displayAgentActivity(run.status, run.activity_text, undefined, t('observabilityRoundTitle', { n: index + 1 }))),
   }));
 }
 

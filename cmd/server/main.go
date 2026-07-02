@@ -56,6 +56,9 @@ func main() {
 	// Start session cleanup goroutine (every 5 minutes)
 	go sessionCleanupLoop(pool)
 
+	// Start agent run watchdogs for ACK/progress visibility.
+	go agentSvc.StartAgentRunWatchdogLoop(context.Background())
+
 	// Start computer offline checker (every 30 seconds)
 	go startOfflineChecker(pool)
 

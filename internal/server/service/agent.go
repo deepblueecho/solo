@@ -23,6 +23,25 @@ const (
 	defaultDebounceDuration    = 2 * time.Second
 )
 
+const (
+	agentNoVisibleReplyAfter = 30 * time.Second
+	agentNoProgressAfter     = 5 * time.Minute
+	agentRunWatchdogInterval = 30 * time.Second
+
+	agentRunEventNoVisibleReplyWatchdog = "watchdog_no_visible_reply"
+	agentRunEventNoProgressWatchdog     = "watchdog_no_progress"
+
+	agentActivityAccepted       = "agent.activity.accepted"
+	agentActivityNoVisibleReply = "agent.activity.no_visible_reply"
+	agentActivityNoProgress     = "agent.activity.no_progress"
+	agentActivityCompleted      = "agent.activity.completed"
+	agentActivityCancelled      = "agent.activity.cancelled"
+	agentActivityTimeout        = "agent.activity.timeout"
+	agentActivityFailed         = "agent.activity.failed"
+
+	agentErrorNoAvailableDaemon = "agent.error.no_available_daemon"
+)
+
 // maxAgentChainDepth limits the depth of agent-to-agent trigger chains
 // to prevent infinite loops. A chain of [A, B, C] means A triggered B,
 // B triggered C; C cannot trigger another agent because depth == 3.
@@ -185,6 +204,7 @@ func (s *AgentService) TriggerAgentResponse(ctx context.Context, channelID, mess
 		daemon := s.dm.SelectDaemon("llm")
 		if daemon == nil {
 			slog.Warn("no available daemon for agent task", "agent_id", ag.ID)
+			s.broadcastAgentError("", channelID, ag.ID, ag.Name, agentErrorNoAvailableDaemon)
 			continue
 		}
 
@@ -375,6 +395,20 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 			"trigger_message_id": taskReq.TriggerMessageID,
 			"task_id":            taskReq.OriginTaskID,
 		})
+		if updated, err := runSvc.UpdateStatus(ctx, UpdateRunStatusInput{
+			RunID:        run.ID,
+			Status:       AgentRunStatusThinking,
+			ActivityText: agentActivityAccepted,
+			Source:       taskReq.ModelConfig.Provider,
+		}); err != nil {
+			slog.Warn("failed to acknowledge agent run", "run_id", run.ID, "error", err)
+		} else {
+			run = updated
+			s.appendAndBroadcastRunEvent(ctx, runSvc, run, ag.ID, agentName, AgentRunEventActivity, agentActivityAccepted, "", map[string]any{
+				"status": AgentRunStatusThinking,
+			})
+			s.broadcastAgentRun(taskReq.ChannelID, "agent.run.updated", runPayload(run, ag.ID, agentName, taskReq.OriginTaskID))
+		}
 	}
 
 	slog.Debug("dispatching agent streaming task",
@@ -437,7 +471,7 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 			"daemon_id", daemon.ID,
 			"error", err,
 		)
-		s.broadcastAgentError(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, "Failed to start task: "+err.Error())
+		s.broadcastAgentError(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, err.Error())
 		finishRun(AgentRunStatusFailed)
 		return
 	}
@@ -594,15 +628,19 @@ func (s *AgentService) handleStreamingAgentTask(ctx context.Context, daemon *Dae
 			var data struct {
 				AgentID string `json:"agent_id"`
 				Error   string `json:"error"`
+				Status  string `json:"status"`
 			}
 			if err := json.Unmarshal([]byte(event.Data), &data); err == nil {
 				slog.Error("agent task stream error",
 					"agent_id", ag.ID,
 					"error", data.Error,
+					"status", data.Status,
 				)
 				s.broadcastAgentError(taskReq.ThreadID, taskReq.ChannelID, ag.ID, agentName, data.Error)
+				finalState = finalStateFromErrorEventStatus(data.Status)
+			} else {
+				finalState = "failed"
 			}
-			finalState = "failed"
 			// Don't return — let the loop consume the "done" sentinel. The
 			// deferred run finisher will handle the exit.
 			continue
@@ -747,6 +785,111 @@ func (s *AgentService) appendAndBroadcastRunEvent(ctx context.Context, runSvc *A
 	}))
 }
 
+func (s *AgentService) StartAgentRunWatchdogLoop(ctx context.Context) {
+	ticker := time.NewTicker(agentRunWatchdogInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := s.CheckAgentRunWatchdogs(ctx, time.Now()); err != nil {
+				slog.Warn("agent run watchdog failed", "error", err)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *AgentService) CheckAgentRunWatchdogs(ctx context.Context, now time.Time) error {
+	runSvc := NewAgentRunService(s.pool)
+	noVisibleRuns, err := s.listRunsWithoutVisibleReply(ctx, now.Add(-agentNoVisibleReplyAfter))
+	if err != nil {
+		return err
+	}
+	for i := range noVisibleRuns {
+		if err := s.warnAgentRun(ctx, runSvc, &noVisibleRuns[i], agentRunEventNoVisibleReplyWatchdog, agentActivityNoVisibleReply); err != nil {
+			return err
+		}
+	}
+
+	noProgressRuns, err := s.listRunsWithoutProgress(ctx, now.Add(-agentNoProgressAfter))
+	if err != nil {
+		return err
+	}
+	for i := range noProgressRuns {
+		if err := s.warnAgentRun(ctx, runSvc, &noProgressRuns[i], agentRunEventNoProgressWatchdog, agentActivityNoProgress); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *AgentService) listRunsWithoutVisibleReply(ctx context.Context, before time.Time) ([]AgentRun, error) {
+	return scanAgentRuns(s.pool.Query(ctx, baseAgentRunSelect()+`
+		 WHERE r.status = ANY($1)
+		   AND r.started_at <= $2
+		   AND NOT EXISTS (
+		         SELECT 1 FROM agent_run_events e
+		          WHERE e.run_id = r.id AND e.type = $3
+		       )
+		   AND NOT EXISTS (
+		         SELECT 1 FROM agent_run_events e
+		          WHERE e.run_id = r.id AND e.type = $4
+		       )
+		 ORDER BY r.started_at ASC
+		 LIMIT 100`,
+		activeAgentRunStatuses(),
+		before,
+		AgentRunEventAssistantMessage,
+		agentRunEventNoVisibleReplyWatchdog,
+	))
+}
+
+func (s *AgentService) listRunsWithoutProgress(ctx context.Context, before time.Time) ([]AgentRun, error) {
+	return scanAgentRuns(s.pool.Query(ctx, baseAgentRunSelect()+`
+		 WHERE r.status = ANY($1)
+		   AND r.updated_at <= $2
+		   AND NOT EXISTS (
+		         SELECT 1 FROM agent_run_events e
+		          WHERE e.run_id = r.id AND e.type = $3
+		       )
+		 ORDER BY r.updated_at ASC
+		 LIMIT 100`,
+		activeAgentRunStatuses(),
+		before,
+		agentRunEventNoProgressWatchdog,
+	))
+}
+
+func activeAgentRunStatuses() []string {
+	return []string{
+		string(AgentRunStatusQueued),
+		string(AgentRunStatusThinking),
+		string(AgentRunStatusRunning),
+		string(AgentRunStatusStreaming),
+		string(AgentRunStatusWaitingInput),
+		string(AgentRunStatusWaitingApproval),
+	}
+}
+
+func (s *AgentService) warnAgentRun(ctx context.Context, runSvc *AgentRunService, run *AgentRun, eventType, message string) error {
+	updated, err := runSvc.UpdateStatus(ctx, UpdateRunStatusInput{
+		RunID:        run.ID,
+		Status:       run.Status,
+		ActivityText: message,
+		Source:       run.Source,
+	})
+	if err != nil {
+		return err
+	}
+	s.appendAndBroadcastRunEvent(ctx, runSvc, updated, updated.AgentID, updated.AgentName, eventType, message, "", map[string]any{
+		"status": updated.Status,
+	})
+	s.broadcastAgentRun(updated.ChannelID, "agent.run.updated", runPayload(updated, updated.AgentID, updated.AgentName, ""))
+	return nil
+}
+
 func finalStateToRunStatus(finalState string) AgentRunStatus {
 	switch finalState {
 	case "completed":
@@ -760,16 +903,27 @@ func finalStateToRunStatus(finalState string) AgentRunStatus {
 	}
 }
 
+func finalStateFromErrorEventStatus(status string) string {
+	switch status {
+	case "timeout", "cancelled":
+		return status
+	case "aborted":
+		return "cancelled"
+	default:
+		return "failed"
+	}
+}
+
 func finalStateActivityText(status AgentRunStatus) string {
 	switch status {
 	case AgentRunStatusCompleted:
-		return "已完成"
+		return agentActivityCompleted
 	case AgentRunStatusCancelled:
-		return "已取消"
+		return agentActivityCancelled
 	case AgentRunStatusTimeout:
-		return "执行超时"
+		return agentActivityTimeout
 	default:
-		return "执行失败"
+		return agentActivityFailed
 	}
 }
 
@@ -874,6 +1028,7 @@ func (s *AgentService) broadcastThreadThinking(threadID, channelID, agentID, age
 func (s *AgentService) broadcastThreadError(threadID, channelID, agentID, agentName, errMsg string) {
 	payload := map[string]interface{}{
 		"channel_id": channelID,
+		"thread_id":  threadID,
 		"agent_id":   agentID,
 		"agent_name": agentName,
 		"error":      errMsg,
@@ -1202,6 +1357,7 @@ func (s *AgentService) TriggerAgentResponseInThread(ctx context.Context, channel
 		daemon := s.dm.SelectDaemon("llm")
 		if daemon == nil {
 			slog.Warn("no available daemon for thread agent task", "agent_id", ag.ID)
+			s.broadcastAgentError(threadID, channelID, ag.ID, ag.Name, agentErrorNoAvailableDaemon)
 			continue
 		}
 
@@ -1371,6 +1527,7 @@ func (s *AgentService) TriggerAgentForTask(ctx context.Context, channelID, taskI
 	daemon := s.dm.SelectDaemon("llm")
 	if daemon == nil {
 		slog.Warn("no available daemon for task agent trigger", "agent_id", ag.ID, "task_id", taskID)
+		s.broadcastAgentError(threadID, channelID, ag.ID, ag.Name, agentErrorNoAvailableDaemon)
 		return
 
 	}

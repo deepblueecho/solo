@@ -1,15 +1,35 @@
-import { t } from '@/lib/i18n';
+import { t, type TranslationKey } from '@/lib/i18n';
 import type { AgentRunStatus } from '@/lib/hooks/use-agent-island';
 
-const STATUS_ACTIVITY_TEXT = new Set([
+const ACTIVITY_TEXT_KEYS: Record<string, TranslationKey> = {
+  'agent.activity.accepted': 'agentActivityAccepted',
+  'agent.activity.no_visible_reply': 'agentActivityNoVisibleReply',
+  'agent.activity.no_progress': 'agentActivityNoProgress',
+  'agent.activity.completed': 'agentActivityCompleted',
+  'agent.activity.cancelled': 'agentActivityCancelled',
+  'agent.activity.timeout': 'agentActivityTimeout',
+  'agent.activity.failed': 'agentActivityFailed',
+  '已接收，正在处理': 'agentActivityAccepted',
+  '仍在运行，暂无可见回复': 'agentActivityNoVisibleReply',
+  '仍在运行，暂无新的进度': 'agentActivityNoProgress',
+  '已完成': 'agentActivityCompleted',
+  '已取消': 'agentActivityCancelled',
+  '执行超时': 'agentActivityTimeout',
+  '执行失败': 'agentActivityFailed',
+};
+
+const AGENT_ERROR_KEYS: Record<string, TranslationKey> = {
+  'agent.error.no_available_daemon': 'agentErrorNoAvailableDaemon',
+  'No available daemon to run this agent.': 'agentErrorNoAvailableDaemon',
+};
+
+const GENERIC_ACTIVITY_TEXT = new Set([
   '等待执行',
   '执行中',
   '运行中',
   '思考中',
   '思考中…',
   '生成中',
-  '已完成',
-  '执行失败',
   '失败',
   'thinking...',
   'generating...',
@@ -51,9 +71,19 @@ export function displayAgentActivity(status: AgentRunStatus | undefined, activit
   const text = activityText?.trim();
   if (!text) return fallback ?? agentRunStatusText(status);
 
-  if (STATUS_ACTIVITY_TEXT.has(text.toLowerCase()) || STATUS_ACTIVITY_TEXT.has(text)) {
+  const key = ACTIVITY_TEXT_KEYS[text];
+  if (key) return t(key);
+
+  if (GENERIC_ACTIVITY_TEXT.has(text.toLowerCase()) || GENERIC_ACTIVITY_TEXT.has(text)) {
     return fallback ?? agentRunStatusText(status);
   }
 
   return text;
+}
+
+export function displayAgentErrorReason(error?: string | null, detail?: string | null): string {
+  const text = error?.trim() || detail?.trim();
+  if (!text) return t('unexpectedError');
+  const key = AGENT_ERROR_KEYS[text];
+  return key ? t(key) : text;
 }
