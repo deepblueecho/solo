@@ -15,6 +15,7 @@ import { useTasks } from '@/lib/hooks/use-tasks';
 import { TaskArtifactStillPendingError, useTaskArtifact } from '@/lib/hooks/use-task-artifact';
 import { getTaskArtifactAction } from '@/lib/utils/task-artifact';
 import { apiClient } from '@/lib/api-client';
+import { displayAgentErrorReason } from '@/lib/agent-activity';
 import { MessageList } from './message-list';
 import { MessageInput } from './message-input';
 import { MemberList } from './member-list';
@@ -413,6 +414,13 @@ export function ChannelView({
         scheduleMemberStatusRevert(event.agent_id, 30_000);
       }
 
+      if (event.type === 'agent.error' && event.channel_id === channel.id && !event.thread_id) {
+        showToast(t('agentRunFailedToast', {
+          name: event.agent_name ?? t('agent'),
+          reason: displayAgentErrorReason(event.error, event.detail),
+        }), 'error');
+      }
+
       // agent.run.finished is the authoritative terminal signal. Clear any
       // fallback timer and snap status back to online immediately.
       if (event.type === 'agent.run.finished' && event.channel_id === channel.id && event.agent_id) {
@@ -439,7 +447,7 @@ export function ChannelView({
       }
       memberStatusTimersRef.current.clear();
     };
-  }, [channel.id, onEvent, updateMemberStatus]);
+  }, [channel.id, onEvent, showToast, updateMemberStatus]);
 
   // ---- Handle initialThreadMessageId: watch messages list for the target ----
   useEffect(() => {

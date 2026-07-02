@@ -26,12 +26,14 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { cn } from '@/lib/utils';
 import { highlightSpecials, buildValidNames } from '@/lib/utils/highlight';
+import { displayAgentErrorReason } from '@/lib/agent-activity';
 import { Avatar } from '@/components/ui/avatar';
 import { PixelAvatar } from '@/components/ui/pixel-avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useThread } from '@/lib/hooks/use-thread';
 import { useMentions } from '@/lib/hooks/use-mentions';
 import { useWebSocket } from '@/lib/ws-context';
+import { useToast } from '@/components/ui/toast';
 import { MentionDropdown, type DropdownAnchor } from './mention-dropdown';
 import { t } from '@/lib/i18n';
 import type { AgentDetailTarget, Message, ChannelMember, Task, TaskStatus } from '@/lib/types';
@@ -727,6 +729,7 @@ export function ThreadPanel({
   onAgentClick,
 }: ThreadPanelProps) {
   const router = useRouter();
+  const { showToast } = useToast();
   const {
     messages,
     isLoading,
@@ -789,9 +792,16 @@ export function ThreadPanel({
         setReplyCount(event.reply_count);
       }
 
+      if (event.type === 'agent.error' && event.thread_id === threadId) {
+        showToast(t('agentRunFailedToast', {
+          name: event.agent_name ?? t('agent'),
+          reason: displayAgentErrorReason(event.error, event.detail),
+        }), 'error');
+      }
+
     });
     return unsub;
-  }, [threadId, onEvent]);
+  }, [threadId, onEvent, showToast]);
 
   useEffect(() => {
     if (messages.length > prevMessageCount.current) {

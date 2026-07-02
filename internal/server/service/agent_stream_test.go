@@ -168,6 +168,86 @@ func TestStreamingAgentTaskMarksRunFailedWhenStreamStartFails(t *testing.T) {
 	}
 }
 
+func TestStreamingAgentTaskUsesTerminalStatusFromErrorEvent(t *testing.T) {
+	tests := []struct {
+		name        string
+		eventStatus string
+		want        AgentRunStatus
+	}{
+		{"timeout", "timeout", AgentRunStatusTimeout},
+		{"cancelled", "cancelled", AgentRunStatusCancelled},
+		{"aborted", "aborted", AgentRunStatusCancelled},
+		{"empty", "", AgentRunStatusFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pool := agentRunTestPool(t)
+			ctx := context.Background()
+			ownerID := agentRunUser(t, pool)
+			agentID := agentRunAgent(t, pool, ownerID)
+			channelID := agentRunChannel(t, pool, ownerID)
+			messageID := agentRunMessage(t, pool, channelID, ownerID)
+			t.Cleanup(func() {
+				_, _ = pool.Exec(context.Background(), `DELETE FROM agent_runs WHERE agent_id = $1`, agentID)
+				_, _ = pool.Exec(context.Background(), `DELETE FROM messages WHERE channel_id = $1`, channelID)
+				_, _ = pool.Exec(context.Background(), `DELETE FROM channels WHERE id = $1`, channelID)
+				_, _ = pool.Exec(context.Background(), `DELETE FROM agents WHERE id = $1`, agentID)
+				_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, ownerID)
+			})
+
+			taskID := uuid.NewString()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/internal/daemon/run":
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusAccepted)
+					_, _ = fmt.Fprintf(w, `{"task_id":%q,"status":"accepted"}`, taskID)
+				case "/internal/daemon/tasks/" + taskID + "/events":
+					w.Header().Set("Content-Type", "text/event-stream")
+					if tt.eventStatus == "" {
+						_, _ = fmt.Fprint(w, `event: error`+"\n"+`data: {"agent_id":"agent-1","error":"backend failed"}`+"\n\n")
+					} else {
+						_, _ = fmt.Fprintf(w, "event: error\ndata: {\"agent_id\":\"agent-1\",\"error\":\"backend failed\",\"status\":%q}\n\n", tt.eventStatus)
+					}
+					_, _ = fmt.Fprint(w, "event: done\ndata: {}\n\n")
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			daemon := daemonInfoForTest(t, server.URL, uuid.NewString())
+			dm := NewDaemonManager(pool, noopBroadcaster{})
+			dm.Register(daemon)
+			svc := NewAgentService(pool, dm, noopBroadcaster{}, nil)
+			svc.handleStreamingAgentTask(ctx, daemon, daemonTaskRequest{
+				TaskID:           taskID,
+				AgentID:          agentID,
+				ChannelID:        channelID,
+				TriggerMessageID: messageID,
+				Messages:         []agent.Message{{Role: agent.RoleUser, Content: "hello"}},
+				ModelConfig:      agent.ModelConfig{Provider: "claude", Model: "test"},
+			}, agentChannelInfo{ID: agentID, Name: "Test Agent"})
+
+			var status string
+			err := pool.QueryRow(ctx,
+				`SELECT status
+				   FROM agent_runs
+				  WHERE agent_id = $1
+				  ORDER BY started_at DESC
+				  LIMIT 1`, agentID,
+			).Scan(&status)
+			if err != nil {
+				t.Fatalf("query run: %v", err)
+			}
+			if status != string(tt.want) {
+				t.Fatalf("run status = %q, want %q", status, tt.want)
+			}
+		})
+	}
+}
+
 func daemonInfoForTest(t *testing.T, rawURL, id string) *DaemonInfo {
 	t.Helper()
 	u, err := url.Parse(rawURL)

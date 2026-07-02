@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { apiClient } from '@/lib/api-client';
+import { displayAgentActivity } from '@/lib/agent-activity';
 import type { AgentRunStatus } from '@/lib/hooks/use-agent-island';
 import { useWebSocket } from '@/lib/ws-context';
 import { cn } from '@/lib/utils';
@@ -305,7 +306,7 @@ function ScopeList(props: {
       {props.runs.map((run) => (
         <Row key={run.id} active={props.selectedRunId === run.id} onClick={() => props.onSelectRun(run.id)}>
           <strong>{run.status}</strong>
-          <span>{run.activity_text || run.tool_input_summary || run.id.slice(0, 8)}</span>
+          <span>{displayAgentActivity(run.status, run.activity_text, run.tool_input_summary, run.id.slice(0, 8))}</span>
           <small>{formatTime(run.updated_at)}</small>
         </Row>
       ))}
@@ -319,7 +320,7 @@ function RunList({ runs, selectedRunId, onSelectRun }: { runs: AgentRun[]; selec
       {runs.map((run) => (
         <Row key={run.id} active={selectedRunId === run.id} onClick={() => onSelectRun(run.id)}>
           <strong>{run.status}</strong>
-          <span>{run.tool_input_summary || run.activity_text || run.id.slice(0, 8)}</span>
+          <span>{displayAgentActivity(run.status, run.activity_text, run.tool_input_summary, run.id.slice(0, 8))}</span>
           <small>{formatTime(run.updated_at)}</small>
         </Row>
       ))}

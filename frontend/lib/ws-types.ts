@@ -60,7 +60,7 @@ export type WSServerEvent =
   | { type: 'agent.thinking'; channel_id: string; agent_id: string; status: string; detail?: string; agent_name?: string; thought?: string }
   | { type: 'agent.typing'; channel_id: string; agent_id: string; status: string; detail?: string; agent_name?: string; thought?: string }
   | { type: 'agent.status'; channel_id: string; agent_id: string; status: string; detail?: string }
-  | { type: 'agent.error'; channel_id: string; agent_id: string; status: string; detail?: string }
+  | { type: 'agent.error'; channel_id: string; thread_id?: string; agent_id: string; agent_name?: string; error?: string; detail?: string }
   // ---- Agent chunk events (agent view) ----
   | { type: 'agent.chunk'; channel_id: string; agent_id: string; agent_name: string; chunk_type: string; content: string; tool?: { name: string; input?: string; output?: string; call_id?: string }; timestamp: string }
   | { type: 'agent.run.started'; run_id: string; session_id?: string; agent_id: string; agent_name?: string; task_id?: string; channel_id?: string; thread_id?: string; status: 'queued' | 'thinking' | 'running' | 'streaming' | 'waiting_input' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled' | 'timeout'; activity_text?: string; tool_name?: string; tool_input_summary?: string; transcript_path?: string; source?: string; timestamp?: string }

@@ -188,6 +188,13 @@ func TestCodexClientCompletesOnSnakeCaseFinalAnswer(t *testing.T) {
 	}
 }
 
+func TestCodexTurnResultTreatsAbortedAsCancelled(t *testing.T) {
+	result := codexTurnResult(true)
+	if result == nil || result.Status != "cancelled" {
+		t.Fatalf("codexTurnResult(true) = %+v, want cancelled", result)
+	}
+}
+
 // resolveCodexSemanticInactivityTimeout mirrors the logic in Execute().
 func resolveCodexSemanticInactivityTimeout(opts *ExecuteOptions) time.Duration {
 	timeout := defaultCodexSemanticInactivityTimeout

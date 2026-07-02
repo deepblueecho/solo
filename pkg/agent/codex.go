@@ -60,7 +60,7 @@ func (b *CodexBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Exe
 		pending: make(map[int]*pendingRPC),
 		onChunk: func(chunk OutputChunk) { trySend(msgCh, chunk) },
 		onTurnDone: func(aborted bool) {
-			resCh <- &Result{Status: "completed"}
+			resCh <- codexTurnResult(aborted)
 			close(msgCh)
 			close(resCh)
 		},
@@ -145,7 +145,7 @@ func (b *CodexBackend) Send(ctx context.Context, ps *PersistentSession, messages
 	// Redirect client callbacks to this turn's channels.
 	state.client.onChunk = func(chunk OutputChunk) { trySend(msgCh, chunk) }
 	state.client.onTurnDone = func(aborted bool) {
-		resCh <- &Result{Status: "completed"}
+		resCh <- codexTurnResult(aborted)
 		close(msgCh)
 		close(resCh)
 	}
@@ -221,6 +221,13 @@ func NewCodexBackend(executablePath string, logger *slog.Logger) *CodexBackend {
 
 // Name returns "codex".
 func (b *CodexBackend) Name() string { return "codex" }
+
+func codexTurnResult(aborted bool) *Result {
+	if aborted {
+		return &Result{Status: "cancelled", Error: "turn was aborted"}
+	}
+	return &Result{Status: "completed"}
+}
 
 // Execute launches the codex CLI subprocess, sends the prompt via JSON-RPC 2.0,
 // streams output events through Session.Messages, and delivers the final result
@@ -416,7 +423,7 @@ func (b *CodexBackend) Execute(ctx context.Context, req *ExecuteRequest, opts *E
 			case aborted := <-turnDone:
 				waitingForTurn = false
 				if aborted {
-					finalStatus = "aborted"
+					finalStatus = "cancelled"
 					finalError = "turn was aborted"
 				} else {
 					c.turnErrorMu.Lock()
