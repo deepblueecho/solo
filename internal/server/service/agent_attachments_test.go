@@ -25,6 +25,7 @@ func TestRenderAgentAttachmentContextInlinesTextAttachment(t *testing.T) {
 	assertContains(t, got, "please inspect this")
 	assertContains(t, got, "README.md (text/markdown, 42 B)")
 	assertContains(t, got, "url=/api/v1/attachments/att-1")
+	assertContains(t, got, "local_path=")
 	assertContains(t, got, "Text content preview")
 	assertContains(t, got, "   # Title")
 	assertContains(t, got, "   hello")
@@ -159,7 +160,14 @@ func TestGetRecentMessagesIncludesAttachmentContext(t *testing.T) {
 	}
 	assertContains(t, msgs[0].Content, "please read attached file")
 	assertContains(t, msgs[0].Content, "note.txt (text/plain")
+	assertContains(t, msgs[0].Content, ".solo/attachments/")
 	assertContains(t, msgs[0].Content, "agent-visible attachment content")
+	if len(msgs[0].Attachments) != 1 {
+		t.Fatalf("len(attachments) = %d, want 1", len(msgs[0].Attachments))
+	}
+	if msgs[0].Attachments[0].LocalPath == "" {
+		t.Fatal("attachment local path is empty")
+	}
 }
 
 func assertContains(t *testing.T, got, want string) {

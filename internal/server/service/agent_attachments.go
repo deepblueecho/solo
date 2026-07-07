@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/solo-ai/solo/pkg/agent"
 )
 
 const maxAgentAttachmentTextBytes = 16 * 1024
@@ -19,25 +21,31 @@ type agentAttachmentContext struct {
 	Size          int64
 	StoragePath   string
 	URL           string
+	LocalPath     string
 	Text          string
 	TextTruncated bool
 	ReadError     string
 }
 
 func (s *AgentService) enrichMessageContentWithAttachments(ctx context.Context, content string, attachmentIDs []string) string {
+	content, _ = s.enrichMessageContentAndAttachments(ctx, content, attachmentIDs)
+	return content
+}
+
+func (s *AgentService) enrichMessageContentAndAttachments(ctx context.Context, content string, attachmentIDs []string) (string, []agent.Attachment) {
 	if len(attachmentIDs) == 0 {
-		return content
+		return content, nil
 	}
 
 	attachments, err := s.loadAgentAttachmentContexts(ctx, attachmentIDs)
 	if err != nil {
 		slog.Warn("failed to load attachment context for agent prompt", "error", err)
-		return content
+		return content, nil
 	}
 	if len(attachments) == 0 {
-		return content
+		return content, nil
 	}
-	return renderAgentAttachmentContext(content, attachments)
+	return renderAgentAttachmentContext(content, attachments), toAgentMessageAttachments(attachments)
 }
 
 func (s *AgentService) loadAgentAttachmentContexts(ctx context.Context, ids []string) ([]agentAttachmentContext, error) {
@@ -59,6 +67,7 @@ func (s *AgentService) loadAgentAttachmentContexts(ctx context.Context, ids []st
 			return nil, err
 		}
 		a.URL = "/api/v1/attachments/" + a.ID
+		a.LocalPath = agent.AttachmentLocalPath(a.ID, a.Filename)
 		if isAgentTextAttachment(a.MIMEType) {
 			a.Text, a.TextTruncated, a.ReadError = readAgentAttachmentText(a.StoragePath, maxAgentAttachmentTextBytes)
 		}
@@ -88,7 +97,7 @@ func renderAgentAttachmentContext(content string, attachments []agentAttachmentC
 
 	b.WriteString("\n\nAttachments visible to this message:\n")
 	for i, a := range attachments {
-		fmt.Fprintf(&b, "%d. %s (%s, %s) url=%s\n", i+1, a.Filename, emptyFallback(a.MIMEType, "unknown"), formatAgentAttachmentSize(a.Size), a.URL)
+		fmt.Fprintf(&b, "%d. %s (%s, %s) url=%s local_path=%s\n", i+1, a.Filename, emptyFallback(a.MIMEType, "unknown"), formatAgentAttachmentSize(a.Size), a.URL, a.LocalPath)
 		if a.Text != "" {
 			b.WriteString("   Text content preview")
 			if a.TextTruncated {
@@ -108,6 +117,25 @@ func renderAgentAttachmentContext(content string, attachments []agentAttachmentC
 		b.WriteString("   Content is not inlined. Use the URL above or Solo tools if you need to inspect this attachment.\n")
 	}
 	return b.String()
+}
+
+func toAgentMessageAttachments(attachments []agentAttachmentContext) []agent.Attachment {
+	if len(attachments) == 0 {
+		return nil
+	}
+	out := make([]agent.Attachment, 0, len(attachments))
+	for _, a := range attachments {
+		out = append(out, agent.Attachment{
+			ID:          a.ID,
+			Filename:    a.Filename,
+			MIMEType:    a.MIMEType,
+			Size:        a.Size,
+			URL:         a.URL,
+			StoragePath: a.StoragePath,
+			LocalPath:   a.LocalPath,
+		})
+	}
+	return out
 }
 
 func readAgentAttachmentText(storagePath string, limit int64) (string, bool, string) {

@@ -1299,11 +1299,12 @@ func (s *AgentService) TriggerAgentResponseInThread(ctx context.Context, channel
 		header := fmt.Sprintf("[target=%s:%s msg=%s time=%s type=%s] @%s:",
 			target, shortID, shortID,
 			tm.CreatedAt.UTC().Format(time.RFC3339), tm.SenderType, senderName)
-		messageContent := s.enrichMessageContentWithAttachments(ctx, tm.Content, tm.AttachmentIDs)
+		messageContent, attachments := s.enrichMessageContentAndAttachments(ctx, tm.Content, tm.AttachmentIDs)
 		contextMsgs[i] = agent.Message{
-			Role:     role,
-			Content:  header + " " + messageContent,
-			SenderID: tm.SenderID,
+			Role:        role,
+			Content:     header + " " + messageContent,
+			SenderID:    tm.SenderID,
+			Attachments: attachments,
 		}
 	}
 	// Prepend a system header when the agent is @mentioned into a new thread.
@@ -1845,7 +1846,7 @@ func (s *AgentService) getRecentMessages(ctx context.Context, channelID string, 
 		}
 
 		// [target=#channel msg=shortid time=isotime type=human|agent] @sender: content
-		messageContent := s.enrichMessageContentWithAttachments(ctx, row.content, row.attachmentIDs)
+		messageContent, attachments := s.enrichMessageContentAndAttachments(ctx, row.content, row.attachmentIDs)
 		content := fmt.Sprintf("New message received:\n\n[target=%s msg=%s time=%s type=%s] @%s: %s",
 			msgTarget, shortID, row.createdAt, row.senderType, senderName, messageContent)
 
@@ -1855,9 +1856,10 @@ func (s *AgentService) getRecentMessages(ctx context.Context, channelID string, 
 		}
 
 		msgs = append(msgs, agent.Message{
-			Role:     role,
-			Content:  content,
-			SenderID: row.senderID,
+			Role:        role,
+			Content:     content,
+			SenderID:    row.senderID,
+			Attachments: attachments,
 		})
 	}
 
