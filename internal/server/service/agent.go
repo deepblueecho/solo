@@ -1299,9 +1299,10 @@ func (s *AgentService) TriggerAgentResponseInThread(ctx context.Context, channel
 		header := fmt.Sprintf("[target=%s:%s msg=%s time=%s type=%s] @%s:",
 			target, shortID, shortID,
 			tm.CreatedAt.UTC().Format(time.RFC3339), tm.SenderType, senderName)
+		messageContent := s.enrichMessageContentWithAttachments(ctx, tm.Content, tm.AttachmentIDs)
 		contextMsgs[i] = agent.Message{
 			Role:     role,
-			Content:  header + " " + tm.Content,
+			Content:  header + " " + messageContent,
 			SenderID: tm.SenderID,
 		}
 	}
@@ -1791,7 +1792,7 @@ func (s *AgentService) getRecentMessages(ctx context.Context, channelID string, 
 	}
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.id, m.sender_type, m.sender_id, m.content, m.created_at
+		`SELECT m.id, m.sender_type, m.sender_id, m.content, m.created_at, COALESCE(m.attachment_ids, '{}') as attachment_ids
 		 FROM messages m
 		 WHERE m.channel_id = $1 AND m.thread_id IS NULL
 		 ORDER BY m.created_at DESC, m.id DESC
@@ -1804,17 +1805,18 @@ func (s *AgentService) getRecentMessages(ctx context.Context, channelID string, 
 	defer rows.Close()
 
 	type msgRow struct {
-		id         string
-		senderType string
-		senderID   string
-		content    string
-		createdAt  string
+		id            string
+		senderType    string
+		senderID      string
+		content       string
+		createdAt     string
+		attachmentIDs []string
 	}
 	var rows_ []msgRow
 	for rows.Next() {
 		var r msgRow
 		var t time.Time
-		if err := rows.Scan(&r.id, &r.senderType, &r.senderID, &r.content, &t); err != nil {
+		if err := rows.Scan(&r.id, &r.senderType, &r.senderID, &r.content, &t, &r.attachmentIDs); err != nil {
 			return nil, err
 		}
 		r.createdAt = t.Format(time.RFC3339)
@@ -1843,8 +1845,9 @@ func (s *AgentService) getRecentMessages(ctx context.Context, channelID string, 
 		}
 
 		// [target=#channel msg=shortid time=isotime type=human|agent] @sender: content
+		messageContent := s.enrichMessageContentWithAttachments(ctx, row.content, row.attachmentIDs)
 		content := fmt.Sprintf("New message received:\n\n[target=%s msg=%s time=%s type=%s] @%s: %s",
-			msgTarget, shortID, row.createdAt, row.senderType, senderName, row.content)
+			msgTarget, shortID, row.createdAt, row.senderType, senderName, messageContent)
 
 		// On the LAST (most recent) message, append routing instruction.
 		if i == len(rows_)-1 {
