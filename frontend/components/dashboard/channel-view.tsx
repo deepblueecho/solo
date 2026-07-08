@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Users, Loader2, SquareCheckBig, MessageSquare, Plus, X } from 'lucide-react';
+import { Users, Loader2, SquareCheckBig, Plus, Network, Maximize2, Minimize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMessages } from '@/lib/hooks/use-messages';
 import { useChannelMembers } from '@/lib/hooks/use-channel-members';
@@ -21,10 +21,11 @@ import { MessageInput } from './message-input';
 import { MemberList } from './member-list';
 import { AddAgentModal } from './add-agent-modal';
 import { TaskBoard } from '@/components/tasks/task-board';
+import { RelationshipWorkspace } from '@/components/relationships/relationship-workspace';
 import { RelationshipDetailPanel } from '@/components/relationships/relationship-detail-panel';
-import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/select';
+import { Button, PanelToggleIcon, panelToggleButtonClass } from '@/components/ui/button';
 import { tabButtonClass } from '@/components/ui/tab-bar';
+import { buildDashboardHref, parseDashboardParams, type DashboardPanel, type DashboardView } from '@/lib/dashboard-url';
 import { filterTaskTree } from '@/lib/task-filters';
 import {
   Dialog,
@@ -35,9 +36,10 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { WizardCard } from '@/components/onboarding/wizard-card';
 import { t } from '@/lib/i18n';
-import type { AgentDetailTarget, Channel, Message, Task, TaskArtifact } from '@/lib/types';
+import type { AgentDetailTarget, AgentRelationship, Channel, Message, Task, TaskArtifact } from '@/lib/types';
 
 type ArtifactPreview = TaskArtifact & { previewUrl: string };
+type WorkspaceDetail = { relationship: AgentRelationship | null; agent: AgentDetailTarget | null };
 
 // SOLO-63-F: Lazy-load ThreadPanel (only rendered when a thread is open)
 const ThreadPanel = lazy(() =>
@@ -55,6 +57,7 @@ interface ChannelViewProps {
   initialScrollToMessageId?: string;
   /** v1.5: Called when thread opens/closes so the parent can sync to URL */
   onThreadChange?: (threadId: string | null) => void;
+  onChannelCreated?: () => void;
   /** SOLO-island PR3: whether the right-side AgentViewPanel is visible. */
   agentViewVisible?: boolean;
   /** SOLO-island PR3: toggle the AgentViewPanel. Called with `true` to
@@ -107,29 +110,40 @@ export function ChannelView({
     addAgentToChannel,
     removeMember,
     updateMemberStatus,
+    refetch: refetchMembers,
   } = useChannelMembers(channel.id);
 
   // Keep a ref to the latest agents list for use in WS event handler closures
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
 
+  const dashboardState = useMemo(() => parseDashboardParams(searchParams), [searchParams]);
+  const hasViewParam = searchParams.has('view');
+  const workspaceView = dashboardState.view;
+  const mainPanel = dashboardState.panel;
+  const pushDashboardState = useCallback(
+    (patch: Partial<{
+      view: DashboardView;
+      panel: DashboardPanel;
+      taskId: string | null;
+      threadId: string | null;
+      messageId: string | null;
+      agentId: string | null;
+      relationshipId: string | null;
+    }>) => {
+      router.push(buildDashboardHref(channel.id, { ...dashboardState, ...patch }));
+    },
+    [channel.id, dashboardState, router],
+  );
+
   const [threadMessage, setThreadMessage] = useState<Message | null>(null);
   const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
-  const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentDetailTarget | null>(null);
+  const [workspaceDetail, setWorkspaceDetail] = useState<WorkspaceDetail | null>(null);
   const [threadTask, setThreadTask] = useState<Task | null>(null);
   const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
   const [artifactHistory, setArtifactHistory] = useState<TaskArtifact[]>([]);
   const [artifactReviewBusy, setArtifactReviewBusy] = useState(false);
-  const [activeRightPanel, setActiveRightPanel] = useState<'thread' | 'agent' | null>(null);
-  const rightPanelOpen = activeRightPanel !== null;
-
-  // ---- Thread panel width ----
-  const [threadPanelWidth, setThreadPanelWidth] = useState(400);
-
-  // ---- Tasks tab state (SOLO-128-F) ----
-  const [channelViewTab, setChannelViewTab] = useState<'messages' | 'tasks'>(
-    searchParams.get('tab') === 'tasks' ? 'tasks' : 'messages',
-  );
+  const [relationships, setRelationships] = useState<AgentRelationship[]>([]);
 
   // ---- Channel search state (SOLO-237-F) ----
   const [scrollToMessageId, setScrollToMessageId] = useState<string | undefined>(undefined);
@@ -137,6 +151,8 @@ export function ChannelView({
 
   // ---- Member popover state ----
   const [isMemberPopoverOpen, setIsMemberPopoverOpen] = useState(false);
+  const [isWorkspaceCollapsed, setIsWorkspaceCollapsed] = useState(false);
+  const [isWorkspaceFullscreen, setIsWorkspaceFullscreen] = useState(false);
 
   const { showToast } = useToast();
   const { generateArtifact, regenerateArtifact, fetchArtifactHTML, listArtifacts, isGeneratingTask } = useTaskArtifact();
@@ -263,10 +279,33 @@ export function ChannelView({
     };
   }, [artifactPreview, closeArtifactPreview]);
 
+  const openWorkspaceDetail = useCallback(
+    (detail: WorkspaceDetail) => {
+      setWorkspaceDetail(detail);
+      if (detail.agent) {
+        pushDashboardState({
+          panel: 'agent',
+          agentId: detail.agent.id,
+          relationshipId: null,
+          threadId: null,
+          messageId: null,
+        });
+      } else if (detail.relationship) {
+        pushDashboardState({
+          panel: 'relationship',
+          relationshipId: detail.relationship.id,
+          agentId: null,
+          threadId: null,
+          messageId: null,
+        });
+      }
+    },
+    [pushDashboardState],
+  );
+
   const openAgentDetail = useCallback((agent: AgentDetailTarget) => {
-    setSelectedAgentDetail(agent);
-    setActiveRightPanel('agent');
-  }, []);
+    openWorkspaceDetail({ relationship: null, agent });
+  }, [openWorkspaceDetail]);
 
   const {
     tasks: channelTasks,
@@ -276,89 +315,83 @@ export function ChannelView({
     refetch: refetchTasks,
   } = useTasks({ channel_id: channel.id });
 
-  const [taskFilterAssignee, setTaskFilterAssignee] = useState('');
-  const [taskFilterCreator, setTaskFilterCreator] = useState('');
-  const [taskFilterNumber, setTaskFilterNumber] = useState('');
+  const channelTeam = useMemo(() => ({
+    agents: agents.map((agent) => ({
+      id: agent.member_id,
+      name: agent.display_name || agent.member_id,
+      status: agent.status,
+    })),
+  }), [agents]);
+
+  const channelAgentMap = useMemo(() => {
+    return new Map(channelTeam.agents.map((agent) => [agent.id, agent]));
+  }, [channelTeam]);
+
+  const taskBoardTasks = useMemo(
+    () => filterTaskTree(channelTasks, {
+      taskId: workspaceView === 'task' && mainPanel === 'thread'
+        ? dashboardState.taskId ?? threadTask?.id ?? null
+        : null,
+    }),
+    [channelTasks, dashboardState.taskId, mainPanel, threadTask?.id, workspaceView],
+  );
+
+  const loadRelationships = useCallback(async () => {
+    try {
+      const rels = await apiClient.get<AgentRelationship[]>('/api/v1/agent-relationships');
+      setRelationships(rels);
+    } catch {
+      setRelationships([]);
+    }
+  }, []);
 
   useEffect(() => {
-    if (searchParams.get('channel') !== channel.id) return;
-    setChannelViewTab(searchParams.get('tab') === 'tasks' ? 'tasks' : 'messages');
-    setTaskFilterAssignee(searchParams.get('assignee') || '');
-    setTaskFilterCreator(searchParams.get('creator') || '');
-    setTaskFilterNumber(searchParams.get('task') || '');
-  }, [channel.id, searchParams]);
-
-  const pushDashboardTaskUrl = useCallback(
-    (next: { tab?: 'messages' | 'tasks'; assignee?: string; creator?: string; task?: string }) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('channel', channel.id);
-      const tab = next.tab ?? channelViewTab;
-      if (tab === 'tasks') params.set('tab', 'tasks');
-      else params.delete('tab');
-      const assignee = next.assignee ?? taskFilterAssignee;
-      const creator = next.creator ?? taskFilterCreator;
-      const task = next.task ?? taskFilterNumber;
-      if (assignee) params.set('assignee', assignee);
-      else params.delete('assignee');
-      if (creator) params.set('creator', creator);
-      else params.delete('creator');
-      if (task) params.set('task', task);
-      else params.delete('task');
-      router.push(`/dashboard?${params.toString()}`);
-    },
-    [channel.id, channelViewTab, router, searchParams, taskFilterAssignee, taskFilterCreator, taskFilterNumber],
-  );
-
-  const filteredChannelTasks = useMemo(
-    () => filterTaskTree(channelTasks, {
-      assignee: taskFilterAssignee,
-      creator: taskFilterCreator,
-      taskNumber: taskFilterNumber,
-    }),
-    [channelTasks, taskFilterAssignee, taskFilterCreator, taskFilterNumber],
-  );
-
-  const taskAssigneeOptions = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string }>();
-    for (const task of channelTasks) {
-      const id = task.claimer_id || task.assignee_id;
-      const name = task.claimer_name || task.assignee_name || (id ? id.slice(0, 8) : '');
-      if (id && !seen.has(id)) seen.set(id, { id, name });
+    if (workspaceView === 'team' || mainPanel === 'relationship') {
+      void loadRelationships();
     }
-    return Array.from(seen.values());
-  }, [channelTasks]);
+  }, [loadRelationships, mainPanel, workspaceView]);
 
-  const taskCreatorOptions = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string }>();
-    for (const task of channelTasks) {
-      const name = task.creator_name || task.creator_id.slice(0, 8);
-      if (!seen.has(task.creator_id)) seen.set(task.creator_id, { id: task.creator_id, name });
+  useEffect(() => {
+    if (mainPanel === 'agent' && dashboardState.agentId) {
+      const agent = channelAgentMap.get(dashboardState.agentId);
+      setWorkspaceDetail({
+        relationship: null,
+        agent: {
+          id: dashboardState.agentId,
+          name: agent?.name ?? dashboardState.agentId.slice(0, 8),
+          is_active: agent?.status === 'online' || agent?.status === 'thinking' || agent?.status === 'typing',
+        },
+      });
+      return;
     }
-    return Array.from(seen.values());
-  }, [channelTasks]);
 
-  const taskNumberOptions = useMemo(() => {
-    return channelTasks
-      .filter((task) => task.task_number != null)
-      .sort((a, b) => (a.task_number ?? 0) - (b.task_number ?? 0))
-      .map((task) => ({
-        value: String(task.task_number),
-        label: `#${task.task_number} ${task.title}`,
-      }));
-  }, [channelTasks]);
+    if (mainPanel === 'relationship' && dashboardState.relationshipId) {
+      const rel = relationships.find((item) => item.id === dashboardState.relationshipId);
+      if (!rel) return;
+      const from = channelAgentMap.get(rel.from_agent_id);
+      const to = channelAgentMap.get(rel.to_agent_id);
+      setWorkspaceDetail({
+        relationship: {
+          ...rel,
+          from_agent_name: from?.name ?? rel.from_agent_name,
+          from_agent_active: from ? from.status !== 'offline' : rel.from_agent_active,
+          to_agent_name: to?.name ?? rel.to_agent_name,
+          to_agent_active: to ? to.status !== 'offline' : rel.to_agent_active,
+        },
+        agent: null,
+      });
+      return;
+    }
 
-  const hasChannelTaskFilters = !!(taskFilterAssignee || taskFilterCreator || taskFilterNumber);
-  const clearChannelTaskFilters = useCallback(() => {
-    setTaskFilterAssignee('');
-    setTaskFilterCreator('');
-    setTaskFilterNumber('');
-    pushDashboardTaskUrl({ tab: 'tasks', assignee: '', creator: '', task: '' });
-  }, [pushDashboardTaskUrl]);
+    if (mainPanel !== 'agent' && mainPanel !== 'relationship') {
+      setWorkspaceDetail(null);
+    }
+  }, [channelAgentMap, dashboardState.agentId, dashboardState.relationshipId, mainPanel, relationships]);
 
   // Refetch tasks when switching to tasks tab
   useEffect(() => {
-    if (channelViewTab === 'tasks') refetchTasks();
-  }, [channelViewTab]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (workspaceView === 'task') refetchTasks();
+  }, [workspaceView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Agent member status tracking (SOLO-47-F) ----
   // SOLO-island PR2: removed thinkingAgentNames/typingAgentNames state and
@@ -449,21 +482,33 @@ export function ChannelView({
     };
   }, [channel.id, onEvent, showToast, updateMemberStatus]);
 
-  // ---- Handle initialThreadMessageId: watch messages list for the target ----
+  // ---- Handle thread deep links: watch messages list for the target ----
   useEffect(() => {
-    if (!initialThreadMessageId || !channel) return;
+    const targetThreadId = dashboardState.threadId || initialThreadMessageId;
+    if (!targetThreadId || mainPanel !== 'thread') return;
 
     // Check if the message is already in the loaded list
-    const found = messages.find((m) => m.id === initialThreadMessageId);
+    const found = messages.find((m) => m.id === targetThreadId);
     if (found) {
       setThreadMessage(found);
-      setActiveRightPanel('thread');
       // Try to find the associated task for the metadata bar
-      const task = channelTasks.find((t) => t.message_id === initialThreadMessageId);
-      if (task) setThreadTask(task);
+      const task = channelTasks.find((t) => t.message_id === targetThreadId);
+      setThreadTask(task ?? null);
+      return;
     }
+    setThreadTask(null);
+    setThreadMessage({
+      id: targetThreadId,
+      channel_id: channel.id,
+      user_id: '',
+      display_name: channel.name,
+      content: '',
+      created_at: new Date().toISOString(),
+      status: 'sent',
+      sender_type: 'user',
+    });
     // If not found yet, it will be caught when messages load (via the next effect)
-  }, [initialThreadMessageId, channel, messages, channelTasks]);
+  }, [channel.id, channel.name, dashboardState.threadId, initialThreadMessageId, mainPanel, messages, channelTasks]);
 
   // Handle initialScrollToMessageId: scroll to a specific message on mount or URL change.
   // Waits for isLoading to become false so the message DOM exists.
@@ -480,16 +525,30 @@ export function ChannelView({
   useEffect(() => {
     if (!threadMessage) return;
     const task = channelTasks.find((t) => t.message_id === threadMessage.id);
-    if (task) {
-      setThreadTask((prev) => {
-        // Only update if actually changed to avoid re-render loops
-        if (!prev || prev.status !== task.status || prev.claimer_id !== task.claimer_id) {
-          return task;
-        }
-        return prev;
-      });
+    if (!task) {
+      setThreadTask(null);
+      return;
     }
+    setThreadTask((prev) => {
+      // Only update if actually changed to avoid re-render loops
+      if (!prev || prev.status !== task.status || prev.claimer_id !== task.claimer_id) {
+        return task;
+      }
+      return prev;
+    });
   }, [channelTasks, threadMessage]);
+
+  useEffect(() => {
+    if (hasViewParam || mainPanel !== 'thread' || workspaceView !== 'team' || !threadMessage) return;
+    const task = channelTasks.find((t) => t.message_id === threadMessage.id);
+    if (!task) return;
+    router.replace(buildDashboardHref(channel.id, {
+      view: 'task',
+      panel: 'thread',
+      taskId: task.id,
+      threadId: threadMessage.id,
+    }));
+  }, [channel.id, channelTasks, hasViewParam, mainPanel, router, threadMessage, workspaceView]);
 
   // ---- Task click in tasks tab: open ThreadPanel with the parent message ----
   const handleTaskClickInTab = useCallback(
@@ -504,7 +563,15 @@ export function ChannelView({
           display_name: task.creator_name || existingMsg.display_name,
         });
         setThreadTask(task);
-        setActiveRightPanel('thread');
+        pushDashboardState({
+          view: 'task',
+          panel: 'thread',
+          taskId: task.id,
+          threadId: task.message_id,
+          agentId: null,
+          relationshipId: null,
+          messageId: null,
+        });
         onThreadChange?.(task.message_id);
         return;
       }
@@ -525,23 +592,43 @@ export function ChannelView({
         task_status: task.status,
         task_claimer_name: task.claimer_name || task.assignee_name,
       });
-      setActiveRightPanel('thread');
+      pushDashboardState({
+        view: 'task',
+        panel: 'thread',
+        taskId: task.id,
+        threadId: task.message_id,
+        agentId: null,
+        relationshipId: null,
+        messageId: null,
+      });
       onThreadChange?.(task.message_id);
     },
-    [channel.id, messages, onThreadChange],
+    [channel.id, messages, onThreadChange, pushDashboardState],
   );
 
   const handleThreadClose = useCallback(() => {
     setThreadMessage(null);
     setThreadTask(null);
     onThreadChange?.(null);
-    setActiveRightPanel(selectedAgentDetail ? 'agent' : null);
-  }, [onThreadChange, selectedAgentDetail]);
+    pushDashboardState({
+      panel: 'conversation',
+      threadId: null,
+      agentId: null,
+      relationshipId: null,
+      messageId: null,
+    });
+  }, [onThreadChange, pushDashboardState]);
 
   const handleAgentDetailClose = useCallback(() => {
-    setSelectedAgentDetail(null);
-    setActiveRightPanel(threadMessage ? 'thread' : null);
-  }, [threadMessage]);
+    setWorkspaceDetail(null);
+    pushDashboardState({
+      panel: 'conversation',
+      agentId: null,
+      relationshipId: null,
+      threadId: null,
+      messageId: null,
+    });
+  }, [pushDashboardState]);
 
   // v1.5: Wrap onReply to also sync thread state to URL + pull latest task data
   const handleReply = useCallback(
@@ -549,10 +636,17 @@ export function ChannelView({
       refetchTasks();
       setThreadTask(null);
       setThreadMessage(message);
-      setActiveRightPanel('thread');
+      pushDashboardState({
+        panel: 'thread',
+        taskId: null,
+        threadId: message.id,
+        agentId: null,
+        relationshipId: null,
+        messageId: null,
+      });
       onThreadChange?.(message.id);
     },
-    [refetchTasks, onThreadChange],
+    [refetchTasks, pushDashboardState, onThreadChange],
   );
 
   // P25-08-F: Called by ThreadPanel after successfully marking thread as read
@@ -564,19 +658,16 @@ export function ChannelView({
 
   const handleViewThreadInChannel = useCallback(() => {
     if (!threadMessage) return;
-    setChannelViewTab('messages');
     setScrollToMessageId(threadMessage.id);
     setScrollMsgKey((k) => k + 1);
-    router.push(`/dashboard?channel=${channel.id}&message=${threadMessage.id}`);
-  }, [channel.id, router, threadMessage]);
-
-  const handleViewThreadTask = useCallback(() => {
-    const taskNumber = threadTask?.task_number ?? threadMessage?.task_number;
-    if (!threadMessage || taskNumber == null) return;
-    setChannelViewTab('tasks');
-    setTaskFilterNumber(String(taskNumber));
-    router.push(`/dashboard?channel=${channel.id}&tab=tasks&task=${taskNumber}&thread=${threadMessage.id}`);
-  }, [channel.id, router, threadMessage, threadTask]);
+    pushDashboardState({
+      panel: 'conversation',
+      threadId: null,
+      agentId: null,
+      relationshipId: null,
+      messageId: threadMessage.id,
+    });
+  }, [pushDashboardState, threadMessage]);
 
   const existingAgentIds = agents.map((a) => a.member_id);
   const canAddAgents = !channel.name.startsWith('all-');
@@ -696,72 +787,61 @@ export function ChannelView({
   // subscribes to agent.activity events directly.
 
   return (
-    <div className="flex flex-1 overflow-hidden">
-      {/* Left: message area */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Channel header */}
-        <div className="flex h-14 flex-shrink-0 items-center border-b-2 border-black px-4">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="font-mono text-base font-bold text-black flex-shrink-0">#</span>
-            <h2 className="font-bold text-foreground truncate">{channel.name}</h2>
-            <div className="mx-2 h-4 w-px bg-border flex-shrink-0" />
-            {/* Channel tab bar (SOLO-128-F) */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setChannelViewTab('messages');
-                  pushDashboardTaskUrl({ tab: 'messages', assignee: '', creator: '', task: '' });
-                }}
-                className={tabButtonClass(channelViewTab === 'messages')}
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-                {t('messages')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setChannelViewTab('tasks');
-                  pushDashboardTaskUrl({ tab: 'tasks' });
-                }}
-                className={tabButtonClass(channelViewTab === 'tasks')}
-              >
-                <SquareCheckBig className="h-3.5 w-3.5" />
-                {t('tasks')}
-              </button>
+    <div className={cn(
+      'relative flex flex-1 overflow-hidden',
+      isWorkspaceCollapsed && '[&_.sidebar-collapse-offset]:pr-14',
+    )}>
+      {/* Left: conversation/thread/detail */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-r-2 border-black">
+        {mainPanel === 'thread' && threadMessage ? (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            }
+          >
+            <ThreadPanel
+              parentMessage={threadMessage}
+              onClose={handleThreadClose}
+              members={members}
+              replyCount={threadMessage.reply_count ?? 0}
+              task={threadTask ?? undefined}
+              onMarkRead={handleThreadMarkRead}
+              onViewInChannel={handleViewThreadInChannel}
+              onOpenArtifactReference={handleOpenArtifactReference}
+              onAgentClick={openAgentDetail}
+            />
+          </Suspense>
+        ) : (mainPanel === 'agent' || mainPanel === 'relationship') && workspaceDetail ? (
+          <RelationshipDetailPanel
+            key={workspaceDetail.agent ? `agent-${workspaceDetail.agent.id}` : `relationship-${workspaceDetail.relationship?.id}`}
+            relationship={workspaceDetail.relationship}
+            agent={workspaceDetail.agent}
+            onClose={handleAgentDetailClose}
+            onUpdate={() => { void loadRelationships(); }}
+            onDelete={() => {
+              handleAgentDetailClose();
+              void loadRelationships();
+            }}
+            onAgentDeleted={() => {
+              handleAgentDetailClose();
+              void refetchMembers();
+              void loadRelationships();
+            }}
+            embedded
+          />
+        ) : (
+          <>
+            <div className="sidebar-collapse-offset flex h-14 flex-shrink-0 items-center border-b-2 border-black px-4">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="font-heading text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {t('taskChannel')}
+                </span>
+                <h2 className="truncate font-heading text-lg font-bold text-foreground">{channel.name}</h2>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
-            {canAddAgents && (
-              <Button
-                type="button"
-                onClick={() => setIsAddAgentModalOpen(true)}
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0"
-                aria-label={t('addAgentToChannel')}
-                title={t('addAgentToChannel')}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            )}
-            <Button
-              type="button"
-              onClick={() => setIsMemberPopoverOpen(true)}
-              variant="outline"
-              size="sm"
-              className="h-8 w-8 p-0"
-              aria-label={t('channelMembers')}
-              title={t('channelMembers')}
-            >
-              <Users className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Messages tab (SOLO-128-F) */}
-        {channelViewTab === 'messages' && (
-          <div className="flex flex-1 flex-col overflow-hidden bg-brutal-cream">
+            <div className="flex flex-1 flex-col overflow-hidden bg-brutal-cream">
             {showOnboardingWizard && (
               <div className="px-4 pt-4">
                 <WizardCard channelId={channel.id} />
@@ -791,7 +871,15 @@ export function ChannelView({
                   const result = await sendMessage(content, _mentionedAgentIds, true, attachmentIds);
                   if (result && result.task_number !== undefined) {
                     showToast(t('taskCreatedToast', { n: result.task_number }), 'success');
-                    router.push(`/dashboard?channel=${channel.id}&tab=tasks&task=${result.task_number}&thread=${result.id}`);
+                    pushDashboardState({
+                      view: 'task',
+                      panel: 'thread',
+                      threadId: result.id,
+                      taskId: null,
+                      agentId: null,
+                      relationshipId: null,
+                      messageId: null,
+                    });
                   }
                 } else {
                   const result = await sendMessage(content, _mentionedAgentIds, undefined, attachmentIds);
@@ -804,71 +892,120 @@ export function ChannelView({
               showAsTaskToggle
             />
           </div>
+          </>
         )}
+      </div>
 
-        {/* Tasks tab (SOLO-128-F) */}
-        {channelViewTab === 'tasks' && (
-          <div className="flex flex-1 flex-col overflow-hidden bg-brutal-cream">
-            <div className="border-b-2 border-black bg-brutal-cream px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Select
-                  value={taskFilterAssignee}
-                  onChange={(value) => {
-                    setTaskFilterAssignee(value);
-                    pushDashboardTaskUrl({ tab: 'tasks', assignee: value });
-                  }}
-                  options={[
-                    { value: '', label: t('allAssignees') },
-                    ...taskAssigneeOptions.map((a) => ({ value: a.id, label: a.name })),
-                  ]}
-                  size="sm"
-                  className="w-36"
-                  aria-label={t('filterByClaimer')}
-                />
-                <Select
-                  value={taskFilterCreator}
-                  onChange={(value) => {
-                    setTaskFilterCreator(value);
-                    pushDashboardTaskUrl({ tab: 'tasks', creator: value });
-                  }}
-                  options={[
-                    { value: '', label: t('allCreators') },
-                    ...taskCreatorOptions.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
-                  size="sm"
-                  className="w-36"
-                  aria-label={t('filterByCreator')}
-                />
-                <Select
-                  value={taskFilterNumber}
-                  onChange={(value) => {
-                    setTaskFilterNumber(value);
-                    pushDashboardTaskUrl({ tab: 'tasks', task: value });
-                  }}
-                  options={[
-                    { value: '', label: t('taskFilterAll') },
-                    ...taskNumberOptions,
-                  ]}
-                  size="sm"
-                  className="w-40"
-                  aria-label={t('taskFilterByNumber')}
-                />
-                {hasChannelTaskFilters && (
+      {isWorkspaceCollapsed && (
+        <button
+          type="button"
+          onClick={() => setIsWorkspaceCollapsed(false)}
+          className={panelToggleButtonClass(false, 'absolute right-3 top-3.5 z-30')}
+          aria-label={t('workspaceExpandPanel')}
+          title={t('workspaceExpandPanel')}
+        >
+          <PanelToggleIcon side="right" />
+        </button>
+      )}
+
+      {/* Right: channel workspace */}
+      {!isWorkspaceCollapsed && (
+      <div className={cn(
+        'flex min-w-0 flex-1 flex-col overflow-hidden bg-brutal-cream',
+        isWorkspaceFullscreen && 'fixed inset-0 z-[80] h-screen border-4 border-black',
+      )}>
+        <div className="flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b-2 border-black px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => pushDashboardState({ view: 'team' })}
+              className={tabButtonClass(workspaceView === 'team')}
+            >
+              <Network className="h-3.5 w-3.5" />
+              {t('navTeams')}
+            </button>
+            <button
+              type="button"
+              onClick={() => pushDashboardState({ view: 'task' })}
+              className={tabButtonClass(workspaceView === 'task')}
+            >
+              <SquareCheckBig className="h-3.5 w-3.5" />
+              {t('navTasks')}
+            </button>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsWorkspaceFullscreen((fullscreen) => !fullscreen)}
+              className={panelToggleButtonClass(isWorkspaceFullscreen)}
+              aria-label={isWorkspaceFullscreen ? t('workspaceExitFullscreenPanel') : t('workspaceFullscreenPanel')}
+              title={isWorkspaceFullscreen ? t('workspaceExitFullscreenPanel') : t('workspaceFullscreenPanel')}
+            >
+              {isWorkspaceFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsWorkspaceFullscreen(false);
+                setIsWorkspaceCollapsed(true);
+              }}
+              className={panelToggleButtonClass(true)}
+              aria-label={t('workspaceCollapsePanel')}
+              title={t('workspaceCollapsePanel')}
+            >
+              <PanelToggleIcon side="right" />
+            </button>
+          </div>
+        </div>
+
+        {workspaceView === 'team' && (
+          <RelationshipWorkspace
+            embedded
+            title={t('navTeams')}
+            channelFilterId={channel.id}
+            channelTeam={channelTeam}
+            onChannelTeamRefresh={() => {
+              void refetchMembers();
+              void loadRelationships();
+            }}
+            onDetailOpen={openWorkspaceDetail}
+            onDetailClose={handleAgentDetailClose}
+            embeddedActions={
+              <>
+                {canAddAgents && (
                   <Button
+                    type="button"
+                    onClick={() => setIsAddAgentModalOpen(true)}
                     variant="outline"
                     size="sm"
-                    onClick={clearChannelTaskFilters}
-                    className="flex items-center gap-1"
+                    className="h-8 w-8 p-0"
+                    aria-label={t('addAgentToChannel')}
+                    title={t('addAgentToChannel')}
                   >
-                    <X className="h-3 w-3" />
-                    {t('clearFilter')}
+                    <Plus className="h-4 w-4" />
                   </Button>
                 )}
-              </div>
-            </div>
+                <Button
+                  type="button"
+                  onClick={() => setIsMemberPopoverOpen(true)}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  aria-label={t('channelMembers')}
+                  title={t('channelMembers')}
+                >
+                  <Users className="h-4 w-4" />
+                </Button>
+              </>
+            }
+          />
+        )}
+
+        {workspaceView === 'task' && (
+          <div className="flex flex-1 flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto px-4 py-4">
               <TaskBoard
-                tasks={filteredChannelTasks}
+                tasks={taskBoardTasks}
                 isLoading={tasksLoading}
                 error={tasksError}
                 onTaskClick={handleTaskClickInTab}
@@ -876,72 +1013,13 @@ export function ChannelView({
                 onActionComplete={handleTaskActionComplete}
                 onGenerateArtifact={handleGenerateArtifact}
                 isArtifactGenerating={(task) => isGeneratingTask(task.id)}
+                selectedTaskId={dashboardState.taskId ?? threadTask?.id ?? null}
               />
             </div>
           </div>
         )}
       </div>
-
-      {/* Thread panel (lazy-loaded, SOLO-63-F) — always mounted for smooth width transition */}
-      <div
-        className="flex-shrink-0 bg-brutal-cream overflow-hidden relative transition-[width] duration-100 ease-linear border-l-2 border-transparent"
-        style={{ width: rightPanelOpen ? threadPanelWidth : 0, borderLeftColor: rightPanelOpen ? 'var(--color-border, #000)' : 'transparent' }}
-      >
-        {/* Resize handle — only interactive when panel is open */}
-        {rightPanelOpen && (
-          <div
-            className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-brutal-primary/50 transition-colors z-10"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              const startX = e.clientX;
-              const startWidth = threadPanelWidth;
-              const onMove = (ev: MouseEvent) => {
-                const newWidth = Math.max(280, Math.min(800, startWidth + startX - ev.clientX));
-                setThreadPanelWidth(newWidth);
-              };
-              const onUp = () => {
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
-              };
-              document.addEventListener('mousemove', onMove);
-              document.addEventListener('mouseup', onUp);
-            }}
-          />
-        )}
-        {activeRightPanel === 'thread' && threadMessage && (
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            }
-          >
-            <ThreadPanel
-              parentMessage={threadMessage}
-              onClose={handleThreadClose}
-              members={members}
-              replyCount={threadMessage.reply_count ?? 0}
-              task={threadTask ?? undefined}
-              onMarkRead={handleThreadMarkRead}
-              onViewInChannel={handleViewThreadInChannel}
-              onViewTask={handleViewThreadTask}
-              onOpenArtifactReference={handleOpenArtifactReference}
-              onAgentClick={openAgentDetail}
-            />
-          </Suspense>
-        )}
-        {activeRightPanel === 'agent' && selectedAgentDetail && (
-          <RelationshipDetailPanel
-            relationship={null}
-            agent={selectedAgentDetail}
-            onClose={handleAgentDetailClose}
-            onUpdate={() => {}}
-            onDelete={() => {}}
-            onAgentDeleted={handleAgentDetailClose}
-            embedded
-          />
-        )}
-      </div>
+      )}
 
       {artifactPreview && (
         <div
@@ -992,6 +1070,10 @@ export function ChannelView({
         onOpenChange={setIsAddAgentModalOpen}
         existingAgentIds={existingAgentIds}
         onAdd={addAgentToChannel}
+        onChanged={() => {
+          void refetchMembers();
+          void loadRelationships();
+        }}
       />
 
 

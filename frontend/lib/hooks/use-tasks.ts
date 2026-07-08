@@ -83,9 +83,16 @@ export function useTasks(filters?: TaskFilters) {
 
   // Resolve filters to stable reference for useCallback deps
   const filtersKey = `${filters?.status ?? ''}|${filters?.claimer_id ?? ''}|${filters?.channel_id ?? ''}`;
+  const hasLoadedRef = useRef(false);
+  const filtersKeyRef = useRef(filtersKey);
 
   const loadTasks = useCallback(async () => {
-    setIsLoading(true);
+    const filtersChanged = filtersKeyRef.current !== filtersKey;
+    if (filtersChanged) {
+      filtersKeyRef.current = filtersKey;
+      hasLoadedRef.current = false;
+    }
+    if (!hasLoadedRef.current) setIsLoading(true);
     setError(null);
     try {
       const params: Record<string, string> = {};
@@ -98,6 +105,7 @@ export function useTasks(filters?: TaskFilters) {
       const res = await apiClient.get<TaskResponse[]>(path);
       if (mountedRef.current) {
         setTasks(Array.isArray(res) ? res.map(mapTask) : []);
+        hasLoadedRef.current = true;
       }
     } catch (err) {
       const message = err instanceof ApiError ? err.message : `${t('taskLoadError')}`;

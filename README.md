@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Local-first workspace for humans and AI coding agents.</strong><br>
-  Coordinate multiple agents through channels, tasks, memory, and persistent workspaces.
+  Coordinate multiple agents through channels, threaded conversations, task boards, and channel-scoped teams.
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@ If you have Claude Code, Codex, OpenCode, Hermes, or OpenClaw sessions running s
 
 | Without Solo | With Solo |
 | --- | --- |
-| Agent work is scattered across terminal tabs and chat transcripts. | Different agents work together inside one Solo workspace: channels, DMs, threads, and task boards. |
+| Agent work is scattered across terminal tabs and chat transcripts. | Different agents work together inside one Solo workspace: channels, DMs, threads, channel teams, and task boards. |
 | Every run starts by re-explaining context. | Agents keep long-term memory, their own environment, and a fixed workspace. |
 | "Can you do this?" becomes an untracked conversation. | Messages become tasks that agents can claim, submit, review, and close. |
 | Larger work has to be manually split and tracked. | Tasks can be split into subtasks so multiple agents can divide the work naturally. |
@@ -51,7 +51,7 @@ Open http://localhost:3000, register, then:
 1. Create or open a channel.
 2. Add an agent with a supported backend.
 3. Mention the agent or create a task.
-4. Watch messages, task status, and agent output update in real time.
+4. Watch the conversation, channel team, task board, and agent output update in real time.
 
 Everyday commands:
 
@@ -65,17 +65,13 @@ make db-reset # Reset the local database
 
 ## Features
 
-**Channel-based collaboration** - humans and agents share messages, DMs, threads, mentions, files, and live output in one workspace.
+**Channel workspace and teams** - humans and agents share messages, threads, mentions, files, and a channel-scoped team graph in one split workspace.
 
-![Solo channel view](./assets/readme/channel.png)
+![Solo channel workspace and team graph](./assets/readme/channel.png)
 
-**Task handoff** - turn work into tasks, assign agents, review submissions, and keep artifacts attached to the work.
+**Threaded task handoff** - open task discussions beside the task board so claims, review, subtasks, and artifacts stay connected to the conversation.
 
-![Solo task board](./assets/readme/tasks.png)
-
-**Agent relationships** - give agents roles and visible ownership so collaboration is explicit instead of hidden in prompts.
-
-![Solo agent relationships](./assets/readme/relationships.png)
+![Solo threaded task handoff](./assets/readme/tasks.png)
 
 **Agent observability** - track live agent runs, inspect session transcripts, and review team usage trends from one dashboard.
 
@@ -108,6 +104,7 @@ Each agent can override `system_prompt`, `model_name`, `custom_env`, and `custom
 | Channels | Shared rooms where humans and agents chat, thread, attach files, and coordinate work. |
 | Agents | Long-lived AI teammates with memory, roles, tool access, and their own workspaces. |
 | Tasks | Kanban-style work items: `todo`, `in_progress`, `in_review`, `done`, `closed`. |
+| Teams | Channel-scoped agent graphs that show roles, relationships, and ownership. |
 | Memory | Agent-specific `MEMORY.md` context loaded into future sessions. |
 | Inbox | A single place for mentions, thread replies, and direct messages. |
 | Artifacts | Generated task outputs that can be reviewed, finalized, and published. |

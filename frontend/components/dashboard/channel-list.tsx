@@ -4,7 +4,7 @@
 
 'use client';
 
-import { Plus, X, ChevronDown } from 'lucide-react';
+import { Plus, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import { selectableRowClass, selectableRowIconClass } from '@/components/ui/selectable-row';
@@ -19,8 +19,10 @@ interface ChannelListProps {
   onSelectChannel: (channelId: string) => void;
   onCreateChannel: () => void;
   onDeleteChannel: (channelId: string) => void;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
+  showHeader?: boolean;
+  railSurface?: boolean;
 }
 
 // ---- Loading skeleton ----
@@ -63,12 +65,14 @@ function ChannelItem({
   onSelect,
   onDelete,
   canDelete,
+  railSurface,
 }: {
   channel: Channel;
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
   canDelete: boolean;
+  railSurface?: boolean;
 }) {
   return (
     <div
@@ -81,7 +85,13 @@ function ChannelItem({
           onSelect();
         }
       }}
-      className={selectableRowClass(isSelected, 'justify-between')}
+      className={selectableRowClass(
+        isSelected,
+        cn(
+          'justify-between',
+          railSurface && (isSelected ? 'bg-white' : 'hover:bg-white/50'),
+        ),
+      )}
       aria-current={isSelected ? 'true' : undefined}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -90,21 +100,20 @@ function ChannelItem({
         </div>
         <span className="truncate font-body">{channel.name}</span>
       </div>
-
-      <div className="flex items-center gap-1">
-        {canDelete && (
+      {canDelete && (
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
-          className={iconActionClass('invisible h-5 w-5 p-0 shadow-brutal-sm hover:bg-brutal-danger group-hover:visible')}
+          className={iconActionClass('invisible h-7 w-7 shrink-0 p-0 hover:bg-brutal-danger-light group-hover:visible')}
           aria-label={t('closeChannel', { name: channel.name })}
+          title={t('closeChannel', { name: channel.name })}
         >
           <X className="h-3.5 w-3.5" />
         </button>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -118,62 +127,67 @@ export function ChannelList({
   onSelectChannel,
   onCreateChannel,
   onDeleteChannel,
-  isExpanded,
+  isExpanded = true,
   onToggleExpand,
+  showHeader = true,
+  railSurface = false,
 }: ChannelListProps) {
+  const content = isLoading ? (
+    <ChannelListSkeleton />
+  ) : channels.length === 0 ? (
+    <ChannelListEmpty onCreateChannel={onCreateChannel} />
+  ) : (
+    <div className="space-y-0.5">
+      {channels.map((channel) => (
+        <ChannelItem
+          key={channel.id}
+          channel={channel}
+          isSelected={channel.id === selectedChannelId}
+          onSelect={() => onSelectChannel(channel.id)}
+          onDelete={() => onDeleteChannel(channel.id)}
+          canDelete={!channel.name.startsWith('all-')}
+          railSurface={railSurface}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <div>
       {/* Section header — group hover covers both chevron and + button so the
           entire row highlights as one unit (chevron + count + + are visually
           grouped) */}
-      <div className="group flex items-center justify-between border-2 border-transparent hover:border-black transition-all">
-        <button
-          type="button"
-          onClick={onToggleExpand}
-          className="flex flex-1 items-center gap-1.5 px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-sidebar-muted-foreground font-heading"
-          aria-label={t('navCollapseChannels')}
-          aria-expanded={isExpanded}
-        >
-          <ChevronDown
-            aria-hidden="true"
-            className={cn(
-              'h-3 w-3 transition-transform',
-              isExpanded ? 'rotate-0' : '-rotate-90',
-            )}
-          />
-          <span>{t('navChannels')}</span>
-          <span className="ml-auto text-xs tabular-nums opacity-50">{channels.length}</span>
-        </button>
-        <button
-          onClick={onCreateChannel}
-          className="mr-2 flex h-5 w-5 items-center justify-center border-2 border-transparent text-sidebar-muted-foreground group-hover:border-black group-hover:text-black hover:bg-brutal-primary/40 active:bg-brutal-primary active:text-black active:ring-2 active:ring-black transition-all cursor-pointer"
-          aria-label={t('createChannel')}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      {showHeader && (
+        <div className="group flex items-center justify-between border-2 border-transparent transition-all hover:border-black">
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            className="flex flex-1 items-center gap-1.5 px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-sidebar-muted-foreground font-heading"
+            aria-label={t('navCollapseChannels')}
+            aria-expanded={isExpanded}
+          >
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                'h-3 w-3 transition-transform',
+                isExpanded ? 'rotate-0' : '-rotate-90',
+              )}
+            />
+            <span>{t('navChannels')}</span>
+            <span className="ml-auto text-xs tabular-nums opacity-50">{channels.length}</span>
+          </button>
+          <button
+            onClick={onCreateChannel}
+            className="mr-2 flex h-5 w-5 cursor-pointer items-center justify-center border-2 border-transparent text-sidebar-muted-foreground transition-all group-hover:border-black group-hover:text-black hover:bg-brutal-primary/40 active:bg-brutal-primary active:text-black active:ring-2 active:ring-black"
+            aria-label={t('createChannel')}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Content */}
-      {isExpanded && (
-        isLoading ? (
-          <ChannelListSkeleton />
-        ) : channels.length === 0 ? (
-          <ChannelListEmpty onCreateChannel={onCreateChannel} />
-        ) : (
-          <div className="space-y-0.5">
-            {channels.map((channel) => (
-              <ChannelItem
-                key={channel.id}
-                channel={channel}
-                isSelected={channel.id === selectedChannelId}
-                onSelect={() => onSelectChannel(channel.id)}
-                onDelete={() => onDeleteChannel(channel.id)}
-                canDelete={!channel.name.startsWith('all-')}
-              />
-            ))}
-          </div>
-        )
-      )}
+      {(!showHeader || isExpanded) && content}
     </div>
   );
 }

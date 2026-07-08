@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { TaskColumn } from './task-column';
 import type { Task, TaskStatus } from '@/lib/types';
@@ -36,6 +36,7 @@ interface TaskBoardProps {
   onActionComplete?: (task: Task) => void;
   onGenerateArtifact?: (task: Task) => void;
   isArtifactGenerating?: (task: Task) => boolean;
+  selectedTaskId?: string | null;
 }
 
 // ---- Component ----
@@ -49,7 +50,9 @@ export function TaskBoard({
   onActionComplete,
   onGenerateArtifact,
   isArtifactGenerating,
+  selectedTaskId,
 }: TaskBoardProps) {
+  const boardRef = useRef<HTMLDivElement>(null);
   // Group tasks by status
   const { tasksByStatus, childrenByParent } = useMemo(() => {
     const taskById = new Map(tasks.map((task) => [task.id, task]));
@@ -105,6 +108,12 @@ export function TaskBoard({
     [onTaskClick, taskByIdMap],
   );
 
+  useEffect(() => {
+    if (!selectedTaskId || isLoading) return;
+    const el = boardRef.current?.querySelector<HTMLElement>(`[data-task-id="${selectedTaskId}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }, [isLoading, selectedTaskId, tasks.length]);
+
   // ---- Error state ----
   if (error) {
     return (
@@ -124,7 +133,7 @@ export function TaskBoard({
   }
 
   return (
-    <>
+    <div ref={boardRef} className="min-w-0">
       {/* Desktop: horizontal scroll container */}
       <div className="hidden md:flex gap-4 overflow-x-auto pb-4 -mx-1 px-1">
         {ALL_STATUSES.map((status) => (
@@ -140,6 +149,7 @@ export function TaskBoard({
             onActionComplete={onActionComplete}
             onGenerateArtifact={onGenerateArtifact}
             isArtifactGenerating={isArtifactGenerating}
+            selectedTaskId={selectedTaskId}
           />
         ))}
       </div>
@@ -159,9 +169,10 @@ export function TaskBoard({
             onActionComplete={onActionComplete}
             onGenerateArtifact={onGenerateArtifact}
             isArtifactGenerating={isArtifactGenerating}
+            selectedTaskId={selectedTaskId}
           />
         ))}
       </div>
-    </>
+    </div>
   );
 }

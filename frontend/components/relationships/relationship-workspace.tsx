@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import {
   ReactFlow,
   Background,
@@ -20,12 +20,12 @@ import {
   type Edge,
   type Node,
   type NodeMouseHandler,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
 import { ArrowLeft, Loader2, Plus, LayoutGrid, Undo2, Redo2, Layers } from 'lucide-react';
-import { NavBar } from '@/components/ui/navbar';
-import { Select } from '@/components/ui/select';
+import { AppFrame } from '@/components/layout/app-frame';
 import { Button } from '@/components/ui/button';
 import { RelationshipNode } from '@/components/relationships/relationship-node';
 import { RelationshipEdge } from '@/components/relationships/relationship-edge';
@@ -38,11 +38,12 @@ import {
   DialogTitle,
   DialogCloseButton,
 } from '@/components/ui/dialog';
+import { Select } from '@/components/ui/select';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useWebSocket } from '@/lib/ws-context';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/lib/i18n';
-import type { Agent, AgentBackendDetectItem, AgentRelationship, RelationshipType } from '@/lib/types';
+import type { Agent, AgentBackendDetectItem, AgentDetailTarget, AgentRelationship, RelationshipType } from '@/lib/types';
 import { useAgents } from '@/lib/hooks/use-agents';
 import { listTemplates, applyTemplate, type Template } from '@/lib/templates-api';
 import { useCliDetection } from '@/lib/hooks/use-cli-detection';
@@ -68,14 +69,33 @@ interface UndoEntry {
   edges: Edge[];
 }
 
+type GraphAgent = AgentDetailTarget & { is_active?: boolean };
+type ChannelTeam = {
+  agents: Array<{ id: string; name: string; status?: string }>;
+};
+
 // ---- Component ----
 
 interface RelationshipWorkspaceProps {
   title?: string;
+  embedded?: boolean;
+  channelFilterId?: string;
+  channelTeam?: ChannelTeam | null;
+  onChannelTeamRefresh?: () => void;
+  onDetailOpen?: (detail: { relationship: AgentRelationship | null; agent: GraphAgent | null }) => void;
+  onDetailClose?: () => void;
+  embeddedActions?: ReactNode;
 }
 
 export function RelationshipWorkspace({
   title = t('relationshipEditor'),
+  embedded = false,
+  channelFilterId,
+  channelTeam,
+  onChannelTeamRefresh,
+  onDetailOpen,
+  onDetailClose,
+  embeddedActions,
 }: RelationshipWorkspaceProps = {}) {
   const { agents, isLoading: agentsLoading, refetch: refetchAgents, createAgent } = useAgents();
   const { showToast } = useToast();
@@ -97,12 +117,20 @@ export function RelationshipWorkspace({
   const [preselectedTo, setPreselectedTo] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [detailRel, setDetailRel] = useState<AgentRelationship | null>(null);
-  const [detailAgent, setDetailAgent] = useState<Agent | null>(null);
+  const [detailAgent, setDetailAgent] = useState<GraphAgent | null>(null);
   const [detailPanelWidth, setDetailPanelWidth] = useState(400);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [redoStack, setRedoStack] = useState<UndoEntry[]>([]);
   const edgeToRelationshipMap = useRef<Map<string, AgentRelationship>>(new Map());
+  const flowRef = useRef<ReactFlowInstance | null>(null);
   const detailPanelOpen = !!detailRel || !!detailAgent;
+  const activeChannelFilterId = channelFilterId ?? '';
+
+  const fitGraph = useCallback(() => {
+    requestAnimationFrame(() => {
+      flowRef.current?.fitView({ padding: 0.25, maxZoom: 0.85, duration: 250 });
+    });
+  }, []);
 
   // ---- Fetch data ----
 
@@ -124,25 +152,51 @@ export function RelationshipWorkspace({
   // ---- Position persistence ----
 
   const POS_STORAGE_KEY = 'solo-relationship-positions';
+  const posStorageKey = activeChannelFilterId ? `${POS_STORAGE_KEY}:${activeChannelFilterId}` : POS_STORAGE_KEY;
+  const previousPosStorageKeyRef = useRef(posStorageKey);
 
   const loadPositions = useCallback((): Record<string, { x: number; y: number }> => {
     try {
-      const raw = localStorage.getItem(POS_STORAGE_KEY);
+      const raw = localStorage.getItem(posStorageKey);
       return raw ? JSON.parse(raw) : {};
     } catch { return {}; }
-  }, []);
+  }, [posStorageKey]);
 
   const savePositions = useCallback((nodes: Node[]) => {
     const pos: Record<string, { x: number; y: number }> = {};
     for (const n of nodes) {
       pos[n.id] = n.position;
     }
-    try { localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos)); } catch { /* noop */ }
-  }, []);
+    try { localStorage.setItem(posStorageKey, JSON.stringify(pos)); } catch { /* noop */ }
+  }, [posStorageKey]);
 
   // ---- Build initial nodes/edges ----
 
-  // ---- Build initial nodes/edges ----
+  const activeChannelTeam = channelTeam ?? null;
+
+  const visibleAgents = useMemo<GraphAgent[]>(() => {
+    if (!activeChannelFilterId) return agents;
+    if (!activeChannelTeam) return [];
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+    return activeChannelTeam.agents.map((teamAgent) => {
+      const agent = agentsById.get(teamAgent.id);
+      return {
+        id: teamAgent.id,
+        name: agent?.name ?? teamAgent.name,
+        avatar_url: agent?.avatar_url ?? null,
+        is_active: agent?.is_active ?? (teamAgent.status === 'active' || teamAgent.status === 'online'),
+      };
+    });
+  }, [activeChannelFilterId, activeChannelTeam, agents]);
+
+  const visibleRelationships = useMemo(() => {
+    if (!activeChannelFilterId) return relationships;
+    if (!activeChannelTeam) return [];
+    const visibleIds = new Set(activeChannelTeam.agents.map((agent) => agent.id));
+    return relationships.filter((relationship) => (
+      visibleIds.has(relationship.from_agent_id) && visibleIds.has(relationship.to_agent_id)
+    ));
+  }, [activeChannelFilterId, activeChannelTeam, relationships]);
 
   const initialNodes: Node[] = useMemo(() => {
     const saved = loadPositions();
@@ -170,7 +224,7 @@ export function RelationshipWorkspace({
       return { x: (i % COLS) * CELL_W + 100, y: Math.floor(i / COLS) * CELL_H + 80 };
     };
 
-    return agents.map((a, i) => ({
+    return visibleAgents.map((a, i) => ({
       id: a.id,
       type: 'agentNode',
       position: saved[a.id] || findFreePos(i),
@@ -180,11 +234,11 @@ export function RelationshipWorkspace({
         isActive: a.is_active,
       },
     }));
-  }, [agents, loadPositions]);
+  }, [visibleAgents, loadPositions]);
 
   const initialEdges: Edge[] = useMemo(() => {
     const map = new Map<string, AgentRelationship>();
-    const edges = relationships.map((r) => {
+    const edges = visibleRelationships.map((r) => {
       map.set(r.id, r);
       const isCollab = r.rel_type === 'collaborates_with';
       return {
@@ -203,22 +257,25 @@ export function RelationshipWorkspace({
     });
     edgeToRelationshipMap.current = map;
     return edges;
-  }, [relationships]);
+  }, [visibleRelationships]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Sync when data reloads — keep existing node positions, only add new / remove deleted.
   useEffect(() => {
+    const keepExistingPositions = previousPosStorageKeyRef.current === posStorageKey;
+    previousPosStorageKeyRef.current = posStorageKey;
     setNodes((prev) => {
-      const existingPos = new Map(prev.map((n) => [n.id, n.position]));
+      const existingPos = keepExistingPositions ? new Map(prev.map((n) => [n.id, n.position])) : new Map();
       return initialNodes.map((n) => ({
         ...n,
         position: existingPos.get(n.id) || n.position,
       }));
     });
     setEdges(initialEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+    fitGraph();
+  }, [initialNodes, initialEdges, posStorageKey, setNodes, setEdges, fitGraph]);
 
   // Save positions when nodes change (drag via ReactFlow onNodesChange)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -231,12 +288,21 @@ export function RelationshipWorkspace({
   // ---- WebSocket sync ----
 
   const { onEvent } = useWebSocket();
+  const visibleAgentIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    visibleAgentIdsRef.current = new Set(visibleAgents.map((agent) => agent.id));
+  }, [visibleAgents]);
 
   useEffect(() => {
     const unsub = onEvent((event) => {
       if (event.type === 'relationship_created') {
         setEdges((prev) => {
           if (prev.find((e) => e.id === event.id)) return prev;
+          if (activeChannelFilterId) {
+            const ids = visibleAgentIdsRef.current;
+            if (!ids.has(event.from_agent_id) || !ids.has(event.to_agent_id)) return prev;
+          }
           const newRel: AgentRelationship = {
             id: event.id,
             from_agent_id: event.from_agent_id,
@@ -326,7 +392,7 @@ export function RelationshipWorkspace({
       }
     });
     return unsub;
-  }, [onEvent, setEdges]);
+  }, [activeChannelFilterId, onEvent, refetchAgents, setEdges, setNodes]);
 
   // ---- Undo/Redo ----
 
@@ -371,9 +437,15 @@ export function RelationshipWorkspace({
     }
   }, []);
 
+  const refreshChannelFilter = useCallback(() => {
+    if (!activeChannelFilterId) return;
+    onChannelTeamRefresh?.();
+  }, [activeChannelFilterId, onChannelTeamRefresh]);
+
   const handleRelationshipCreated = useCallback(() => {
     loadData();
-  }, [loadData]);
+    refreshChannelFilter();
+  }, [loadData, refreshChannelFilter]);
 
   const handleCreateAgent = useCallback(async (values: AgentFormValues) => {
     if (isCreatingAgent) return;
@@ -423,6 +495,7 @@ export function RelationshipWorkspace({
       await applyTemplate(templateID, selectedModelProvider);
       await refetchAgents();
       await loadData();
+      refreshChannelFilter();
       setShowTemplateModal(false);
       showToast(t('relationshipTemplateApplied'), 'success');
     } catch (err) {
@@ -430,15 +503,15 @@ export function RelationshipWorkspace({
     } finally {
       setApplyingTemplate(null);
     }
-  }, [loadData, refetchAgents, selectedModelProvider, showToast]);
+  }, [loadData, refetchAgents, refreshChannelFilter, selectedModelProvider, showToast]);
 
   // ---- Edge click → show detail panel ----
 
   const agentNameMap = useMemo(() => {
     const m = new Map<string, { name: string; isActive: boolean }>();
-    for (const a of agents) m.set(a.id, { name: a.name, isActive: a.is_active });
+    for (const a of visibleAgents) m.set(a.id, { name: a.name, isActive: a.is_active ?? false });
     return m;
-  }, [agents]);
+  }, [visibleAgents]);
 
   const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
     setSelectedEdge(edge);
@@ -447,47 +520,63 @@ export function RelationshipWorkspace({
     if (rel) {
       const fromInfo = agentNameMap.get(rel.from_agent_id);
       const toInfo = agentNameMap.get(rel.to_agent_id);
-      setDetailRel({
+      const detail = {
         ...rel,
         from_agent_name: fromInfo?.name,
         from_agent_active: fromInfo?.isActive,
         to_agent_name: toInfo?.name,
         to_agent_active: toInfo?.isActive,
-      });
+      };
+      if (onDetailOpen) {
+        onDetailOpen({ relationship: detail, agent: null });
+        setDetailRel(null);
+      } else {
+        setDetailRel(detail);
+      }
       setDetailAgent(null);
     }
-  }, [agentNameMap, setEdges]);
+  }, [agentNameMap, onDetailOpen, setEdges]);
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedEdge(null);
     setEdges((prev) => prev.map((e) => ({ ...e, selected: false })));
-    const agent = agents.find((a) => a.id === node.id);
+    const agent = visibleAgents.find((a) => a.id === node.id);
     if (agent) {
-      setDetailAgent(agent);
+      if (onDetailOpen) {
+        onDetailOpen({ relationship: null, agent });
+        setDetailAgent(null);
+      } else {
+        setDetailAgent(agent);
+      }
       setDetailRel(null);
     }
-  }, [agents, setEdges]);
+  }, [onDetailOpen, setEdges, visibleAgents]);
 
   const closeDetailPanel = useCallback(() => {
     setDetailRel(null);
     setDetailAgent(null);
     setSelectedEdge(null);
     setEdges((prev) => prev.map((e) => ({ ...e, selected: false })));
-  }, [setEdges]);
+    onDetailClose?.();
+  }, [onDetailClose, setEdges]);
 
   const handleDetailUpdate = useCallback(() => {
     loadData();
-  }, [loadData]);
+    refreshChannelFilter();
+  }, [loadData, refreshChannelFilter]);
 
   const handleDetailDelete = useCallback((id: string) => {
     setEdges((prev) => prev.filter((e) => e.id !== id));
     edgeToRelationshipMap.current.delete(id);
     setSelectedEdge(null);
-  }, [setEdges]);
+    refreshChannelFilter();
+  }, [refreshChannelFilter, setEdges]);
 
   const handleAgentDeleted = useCallback(() => {
     void refetchAgents();
-  }, [refetchAgents]);
+    loadData();
+    refreshChannelFilter();
+  }, [loadData, refetchAgents, refreshChannelFilter]);
 
   const deleteSelectedEdge = useCallback(async () => {
     if (!selectedEdge) return;
@@ -537,9 +626,9 @@ export function RelationshipWorkspace({
   //   with rank: 'same', which forces dagre to keep them on one row.
   // - assigns_to wins when both relationships exist on the same pair.
 
-  const autoLayout = useCallback(() => {
-    pushUndo();
-    try { localStorage.removeItem(POS_STORAGE_KEY); } catch { /* noop */ }
+  const autoLayout = useCallback((recordUndo = true) => {
+    if (recordUndo) pushUndo();
+    try { localStorage.removeItem(posStorageKey); } catch { /* noop */ }
     setNodes((prev) => {
       const NODE_W = 180;
       const NODE_H = 100;
@@ -558,6 +647,12 @@ export function RelationshipWorkspace({
         if (e.data?.relType === 'assigns_to') {
           assignsPairs.add(pairKey(e.source, e.target));
         }
+      }
+      const connectedIds = new Set<string>();
+      for (const e of edges) {
+        if (!g.hasNode(e.source) || !g.hasNode(e.target)) continue;
+        connectedIds.add(e.source);
+        connectedIds.add(e.target);
       }
 
       // Union-find over collaborates_with pairs so a chain (A↔B, B↔C)
@@ -605,7 +700,7 @@ export function RelationshipWorkspace({
 
       dagre.layout(g);
 
-      const next = prev.map((n) => {
+      const laidOut = prev.map((n) => {
         const pos = g.node(n.id);
         if (!pos) return n;
         return {
@@ -613,104 +708,155 @@ export function RelationshipWorkspace({
           position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
         };
       });
+      const connectedBottom = Math.max(
+        0,
+        ...laidOut
+          .filter((n) => connectedIds.has(n.id))
+          .map((n) => n.position.y + NODE_H),
+      );
+      let isolatedIndex = 0;
+      const next = laidOut.map((n) => {
+        if (connectedIds.has(n.id)) return n;
+        const i = isolatedIndex++;
+        return {
+          ...n,
+          position: {
+            x: (i % 4) * 240,
+            y: connectedIds.size ? connectedBottom + 140 + Math.floor(i / 4) * 140 : Math.floor(i / 4) * 140,
+          },
+        };
+      });
       savePositions(next);
       return next;
     });
-  }, [pushUndo, setNodes, savePositions, edges]);
+    fitGraph();
+  }, [pushUndo, posStorageKey, setNodes, savePositions, fitGraph, edges]);
+
+  const autoLayoutKey = `${posStorageKey}:${nodes.map((n) => n.id).sort().join(',')}:${edges.map((e) => e.id).sort().join(',')}`;
+  const autoLayoutKeyRef = useRef('');
+  useEffect(() => {
+    if (nodes.length === 0 || autoLayoutKeyRef.current === autoLayoutKey) return;
+    if (Object.keys(loadPositions()).length > 0) return;
+    autoLayoutKeyRef.current = autoLayoutKey;
+    autoLayout(false);
+  }, [autoLayout, autoLayoutKey, loadPositions, nodes.length]);
 
   // ---- Loading ----
 
-  if (isLoading || agentsLoading) {
-    return (
-      <div className="flex h-screen">
-        <NavBar />
-        <div className="flex-1 flex items-center justify-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <span className="font-heading text-sm uppercase tracking-wider text-muted-foreground">
-            {t('relationshipEditorLoading')}
-          </span>
-        </div>
+  const loading = isLoading || agentsLoading;
+  const workspaceError = error;
+
+  if (loading) {
+    const content = (
+      <div className="flex flex-1 items-center justify-center gap-2">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="font-heading text-sm uppercase tracking-wider text-muted-foreground">
+          {t('relationshipEditorLoading')}
+        </span>
       </div>
     );
+    return embedded ? content : <AppFrame>{content}</AppFrame>;
   }
 
-  if (error) {
-    return (
-      <div className="flex h-screen">
-        <NavBar />
-        <div className="flex-1 flex flex-col items-center justify-center gap-4">
-          <p className="font-mono text-sm text-brutal-danger">{error}</p>
-          <button type="button" onClick={loadData} className="btn-brutal px-4 py-2">{t('retry')}</button>
-        </div>
+  if (workspaceError) {
+    const content = (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4">
+        <p className="font-mono text-sm text-brutal-danger">{workspaceError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            void loadData();
+          }}
+          className="btn-brutal px-4 py-2"
+        >
+          {t('retry')}
+        </button>
       </div>
     );
+    return embedded ? content : <AppFrame>{content}</AppFrame>;
   }
 
   // ---- Render ----
 
-  return (
-    <div className="flex h-screen">
-      <NavBar />
-
-      <div className="flex min-w-0 flex-1 overflow-hidden">
+  const content = (
+    <div className={`${embedded ? 'h-full ' : ''}flex min-w-0 flex-1 overflow-hidden`}>
       {/* Main editor area */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center gap-2 h-14 px-4 border-b-2 border-black bg-brutal-cream">
-          <h1 className="font-heading text-lg font-bold uppercase tracking-wider mr-auto">
-            {title}
-          </h1>
+        {!embedded && (
+          <div className="sidebar-collapse-offset flex items-center gap-2 h-14 px-4 border-b-2 border-black bg-brutal-cream">
+            <h1 className="font-heading text-lg font-bold uppercase tracking-wider mr-auto">
+              {title}
+            </h1>
 
-          {/* Undo/Redo */}
-          <Button
-            type="button"
-            onClick={undo}
-            disabled={undoStack.length === 0}
-            variant="outline"
-            size="sm"
-            className="gap-1 px-2"
-            title={t('relationshipEditorUndo')}
-            aria-label={t('relationshipEditorUndo')}
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            onClick={redo}
-            disabled={redoStack.length === 0}
-            variant="outline"
-            size="sm"
-            className="gap-1 px-2"
-            title={t('relationshipEditorRedo')}
-            aria-label={t('relationshipEditorRedo')}
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </Button>
+            {/* Undo/Redo */}
+            <Button
+              type="button"
+              onClick={undo}
+              disabled={undoStack.length === 0}
+              variant="outline"
+              size="sm"
+              className="gap-1 px-2"
+              title={t('relationshipEditorUndo')}
+              aria-label={t('relationshipEditorUndo')}
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              onClick={redo}
+              disabled={redoStack.length === 0}
+              variant="outline"
+              size="sm"
+              className="gap-1 px-2"
+              title={t('relationshipEditorRedo')}
+              aria-label={t('relationshipEditorRedo')}
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </Button>
 
-          <div className="w-px h-6 bg-black/20" />
+            <div className="w-px h-6 bg-black/20" />
 
-          {/* Auto layout */}
-          <Button
-            type="button"
-            onClick={autoLayout}
-            variant="outline"
-            size="sm"
-            className="gap-1.5 uppercase tracking-wider"
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-            {t('relationshipEditorAutoLayout')}
-          </Button>
-          <Button
-            type="button"
-            onClick={() => setShowChoiceDialog(true)}
-            variant="success"
-            size="sm"
-            className="gap-1.5 uppercase tracking-wider"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t('relationshipAddAgent')}
-          </Button>
-        </div>
+            {/* Auto layout */}
+            <Button
+              type="button"
+              onClick={() => autoLayout()}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 uppercase tracking-wider"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              {t('relationshipEditorAutoLayout')}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setShowChoiceDialog(true)}
+              variant="success"
+              size="sm"
+              className="gap-1.5 uppercase tracking-wider"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t('relationshipAddAgent')}
+            </Button>
+          </div>
+        )}
+        {embedded && (
+          <div className="flex h-12 flex-shrink-0 items-center justify-end gap-2 bg-brutal-cream px-3">
+            {embeddedActions}
+            <Button
+              type="button"
+              onClick={() => autoLayout()}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 uppercase tracking-wider"
+              title={t('relationshipEditorAutoLayout')}
+              aria-label={t('relationshipEditorAutoLayout')}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              {t('relationshipEditorAutoLayout')}
+            </Button>
+          </div>
+        )}
 
         {/* Graph */}
         <div className="flex-1 relative">
@@ -734,6 +880,10 @@ export function RelationshipWorkspace({
             edgeTypes={EDGE_TYPES}
             fitView
             fitViewOptions={{ padding: 0.25, maxZoom: 0.85 }}
+            onInit={(instance) => {
+              flowRef.current = instance;
+              fitGraph();
+            }}
             defaultEdgeOptions={{
               type: 'relationship',
             }}
@@ -761,7 +911,7 @@ export function RelationshipWorkspace({
             onCreated={handleRelationshipCreated}
             preselectedFrom={preselectedFrom ?? undefined}
             preselectedTo={preselectedTo ?? undefined}
-            agents={agents}
+            agents={visibleAgents}
           />
 
           <Dialog open={showChoiceDialog} onOpenChange={setShowChoiceDialog} width="sm">
@@ -918,7 +1068,7 @@ export function RelationshipWorkspace({
           </Dialog>
 
           {/* Empty state overlay */}
-          {agents.length === 0 && (
+          {visibleAgents.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
               <div className="flex flex-col items-center gap-3 p-8 border-4 border-black bg-white shadow-brutal-xl">
                 <Plus className="h-10 w-10 text-muted-foreground" />
@@ -984,6 +1134,7 @@ export function RelationshipWorkspace({
         )}
       </div>
       </div>
-    </div>
   );
+
+  return embedded ? content : <AppFrame>{content}</AppFrame>;
 }

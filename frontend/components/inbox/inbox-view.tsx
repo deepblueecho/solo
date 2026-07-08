@@ -9,6 +9,7 @@ import { InboxItem } from './inbox-item';
 import { Button } from '@/components/ui/button';
 import { TabBar } from '@/components/ui/tab-bar';
 import { apiClient } from '@/lib/api-client';
+import { buildDashboardHref } from '@/lib/dashboard-url';
 import { useToast } from '@/components/ui/toast';
 import type { TabBarTab } from '@/components/ui/tab-bar';
 import type { InboxItem as InboxItemType, Message, TaskArtifact } from '@/lib/types';
@@ -37,14 +38,6 @@ const KEY_TO_TYPE_FILTER: Record<string, string[]> = {
 function typeFilterToKey(tf: string[]) {
   if (tf.length === 0) return 'all';
   return tf[0];
-}
-
-async function resolveThreadTaskNumber(source: { type: 'channel' | 'dm'; id: string }, messageId: string) {
-  const path = source.type === 'dm'
-    ? `/api/v1/dm/${source.id}/tasks`
-    : `/api/v1/tasks?channel_id=${source.id}`;
-  const tasks = await apiClient.get<Array<{ message_id?: string; task_number?: number }>>(path);
-  return tasks.find((task) => task.message_id === messageId)?.task_number;
 }
 
 export function InboxView() {
@@ -139,16 +132,12 @@ export function InboxView() {
 
   const handleViewThreadInSource = useCallback(() => {
     if (!threadMessage || !threadSource) return;
+    if (threadSource.type === 'channel') {
+      router.push(buildDashboardHref(threadSource.id, { panel: 'thread', threadId: threadMessage.id }));
+      return;
+    }
     const key = threadSource.type === 'dm' ? 'dm' : 'channel';
     router.push(`/dashboard?${key}=${threadSource.id}&message=${threadMessage.id}&thread=${threadMessage.id}`);
-  }, [router, threadMessage, threadSource]);
-
-  const handleViewTaskInSource = useCallback(async () => {
-    if (!threadMessage || !threadSource) return;
-    const key = threadSource.type === 'dm' ? 'dm' : 'channel';
-    const taskNumber = threadMessage.task_number ?? await resolveThreadTaskNumber(threadSource, threadMessage.id);
-    const task = taskNumber ? `&task=${taskNumber}` : '';
-    router.push(`/dashboard?${key}=${threadSource.id}&tab=tasks${task}&thread=${threadMessage.id}`);
   }, [router, threadMessage, threadSource]);
 
   const handleOpenArtifactReference = useCallback(async (ref: string) => {
@@ -216,7 +205,7 @@ export function InboxView() {
   return (
     <div className="flex flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex h-14 flex-shrink-0 items-center border-b-2 border-black px-4">
+        <div className="sidebar-collapse-offset flex h-14 flex-shrink-0 items-center border-b-2 border-black px-4">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Mail className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
             <h2 className="font-bold text-foreground truncate">Inbox</h2>
@@ -351,8 +340,6 @@ export function InboxView() {
               targetMessageId={threadTargetMessageId}
               replyCount={0}
               onViewInChannel={handleViewThreadInSource}
-              onViewTask={handleViewTaskInSource}
-              showViewTask
               onOpenArtifactReference={handleOpenArtifactReference}
             />
           </Suspense>
