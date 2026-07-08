@@ -1013,6 +1013,7 @@ export function ChannelView({
                 onActionComplete={handleTaskActionComplete}
                 onGenerateArtifact={handleGenerateArtifact}
                 isArtifactGenerating={(task) => isGeneratingTask(task.id)}
+                selectedTaskId={dashboardState.taskId ?? threadTask?.id ?? null}
               />
             </div>
           </div>

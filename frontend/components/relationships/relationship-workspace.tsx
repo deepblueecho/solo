@@ -20,6 +20,7 @@ import {
   type Edge,
   type Node,
   type NodeMouseHandler,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
@@ -121,8 +122,15 @@ export function RelationshipWorkspace({
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [redoStack, setRedoStack] = useState<UndoEntry[]>([]);
   const edgeToRelationshipMap = useRef<Map<string, AgentRelationship>>(new Map());
+  const flowRef = useRef<ReactFlowInstance | null>(null);
   const detailPanelOpen = !!detailRel || !!detailAgent;
   const activeChannelFilterId = channelFilterId ?? '';
+
+  const fitGraph = useCallback(() => {
+    requestAnimationFrame(() => {
+      flowRef.current?.fitView({ padding: 0.25, maxZoom: 0.85, duration: 250 });
+    });
+  }, []);
 
   // ---- Fetch data ----
 
@@ -144,21 +152,23 @@ export function RelationshipWorkspace({
   // ---- Position persistence ----
 
   const POS_STORAGE_KEY = 'solo-relationship-positions';
+  const posStorageKey = activeChannelFilterId ? `${POS_STORAGE_KEY}:${activeChannelFilterId}` : POS_STORAGE_KEY;
+  const previousPosStorageKeyRef = useRef(posStorageKey);
 
   const loadPositions = useCallback((): Record<string, { x: number; y: number }> => {
     try {
-      const raw = localStorage.getItem(POS_STORAGE_KEY);
+      const raw = localStorage.getItem(posStorageKey);
       return raw ? JSON.parse(raw) : {};
     } catch { return {}; }
-  }, []);
+  }, [posStorageKey]);
 
   const savePositions = useCallback((nodes: Node[]) => {
     const pos: Record<string, { x: number; y: number }> = {};
     for (const n of nodes) {
       pos[n.id] = n.position;
     }
-    try { localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos)); } catch { /* noop */ }
-  }, []);
+    try { localStorage.setItem(posStorageKey, JSON.stringify(pos)); } catch { /* noop */ }
+  }, [posStorageKey]);
 
   // ---- Build initial nodes/edges ----
 
@@ -254,15 +264,18 @@ export function RelationshipWorkspace({
 
   // Sync when data reloads — keep existing node positions, only add new / remove deleted.
   useEffect(() => {
+    const keepExistingPositions = previousPosStorageKeyRef.current === posStorageKey;
+    previousPosStorageKeyRef.current = posStorageKey;
     setNodes((prev) => {
-      const existingPos = new Map(prev.map((n) => [n.id, n.position]));
+      const existingPos = keepExistingPositions ? new Map(prev.map((n) => [n.id, n.position])) : new Map();
       return initialNodes.map((n) => ({
         ...n,
         position: existingPos.get(n.id) || n.position,
       }));
     });
     setEdges(initialEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+    fitGraph();
+  }, [initialNodes, initialEdges, posStorageKey, setNodes, setEdges, fitGraph]);
 
   // Save positions when nodes change (drag via ReactFlow onNodesChange)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -613,9 +626,9 @@ export function RelationshipWorkspace({
   //   with rank: 'same', which forces dagre to keep them on one row.
   // - assigns_to wins when both relationships exist on the same pair.
 
-  const autoLayout = useCallback(() => {
-    pushUndo();
-    try { localStorage.removeItem(POS_STORAGE_KEY); } catch { /* noop */ }
+  const autoLayout = useCallback((recordUndo = true) => {
+    if (recordUndo) pushUndo();
+    try { localStorage.removeItem(posStorageKey); } catch { /* noop */ }
     setNodes((prev) => {
       const NODE_W = 180;
       const NODE_H = 100;
@@ -634,6 +647,12 @@ export function RelationshipWorkspace({
         if (e.data?.relType === 'assigns_to') {
           assignsPairs.add(pairKey(e.source, e.target));
         }
+      }
+      const connectedIds = new Set<string>();
+      for (const e of edges) {
+        if (!g.hasNode(e.source) || !g.hasNode(e.target)) continue;
+        connectedIds.add(e.source);
+        connectedIds.add(e.target);
       }
 
       // Union-find over collaborates_with pairs so a chain (A↔B, B↔C)
@@ -681,7 +700,7 @@ export function RelationshipWorkspace({
 
       dagre.layout(g);
 
-      const next = prev.map((n) => {
+      const laidOut = prev.map((n) => {
         const pos = g.node(n.id);
         if (!pos) return n;
         return {
@@ -689,10 +708,38 @@ export function RelationshipWorkspace({
           position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
         };
       });
+      const connectedBottom = Math.max(
+        0,
+        ...laidOut
+          .filter((n) => connectedIds.has(n.id))
+          .map((n) => n.position.y + NODE_H),
+      );
+      let isolatedIndex = 0;
+      const next = laidOut.map((n) => {
+        if (connectedIds.has(n.id)) return n;
+        const i = isolatedIndex++;
+        return {
+          ...n,
+          position: {
+            x: (i % 4) * 240,
+            y: connectedIds.size ? connectedBottom + 140 + Math.floor(i / 4) * 140 : Math.floor(i / 4) * 140,
+          },
+        };
+      });
       savePositions(next);
       return next;
     });
-  }, [pushUndo, setNodes, savePositions, edges]);
+    fitGraph();
+  }, [pushUndo, posStorageKey, setNodes, savePositions, fitGraph, edges]);
+
+  const autoLayoutKey = `${posStorageKey}:${nodes.map((n) => n.id).sort().join(',')}:${edges.map((e) => e.id).sort().join(',')}`;
+  const autoLayoutKeyRef = useRef('');
+  useEffect(() => {
+    if (nodes.length === 0 || autoLayoutKeyRef.current === autoLayoutKey) return;
+    if (Object.keys(loadPositions()).length > 0) return;
+    autoLayoutKeyRef.current = autoLayoutKey;
+    autoLayout(false);
+  }, [autoLayout, autoLayoutKey, loadPositions, nodes.length]);
 
   // ---- Loading ----
 
@@ -773,7 +820,7 @@ export function RelationshipWorkspace({
             {/* Auto layout */}
             <Button
               type="button"
-              onClick={autoLayout}
+              onClick={() => autoLayout()}
               variant="outline"
               size="sm"
               className="gap-1.5 uppercase tracking-wider"
@@ -798,7 +845,7 @@ export function RelationshipWorkspace({
             {embeddedActions}
             <Button
               type="button"
-              onClick={autoLayout}
+              onClick={() => autoLayout()}
               variant="outline"
               size="sm"
               className="gap-1.5 uppercase tracking-wider"
@@ -833,6 +880,10 @@ export function RelationshipWorkspace({
             edgeTypes={EDGE_TYPES}
             fitView
             fitViewOptions={{ padding: 0.25, maxZoom: 0.85 }}
+            onInit={(instance) => {
+              flowRef.current = instance;
+              fitGraph();
+            }}
             defaultEdgeOptions={{
               type: 'relationship',
             }}

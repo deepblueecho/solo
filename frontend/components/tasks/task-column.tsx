@@ -99,6 +99,7 @@ interface TaskCardProps {
   onActionComplete?: (task: Task) => void;
   onGenerateArtifact?: (task: Task) => void;
   isArtifactGenerating?: boolean;
+  selectedTaskId?: string | null;
 }
 
 function TaskCard({
@@ -110,12 +111,14 @@ function TaskCard({
   onActionComplete,
   onGenerateArtifact,
   isArtifactGenerating,
+  selectedTaskId,
 }: TaskCardProps) {
   const [subtasksOpen, setSubtasksOpen] = useState(true);
   const taskNum = task.task_number ? `#${task.task_number}` : null;
   const isClaimed = !!task.claimer_id;
   const hasSubtasks = childTasks.length > 0 || (task.subtask_count ?? 0) > 0;
   const isChild = !!task.parent_task_id;
+  const isSelected = selectedTaskId === task.id;
 
   const claimerDisplay =
     task.claimer_name ||
@@ -128,6 +131,7 @@ function TaskCard({
 
   return (
     <div
+      data-task-id={task.id}
       role="button"
       tabIndex={0}
       onClick={() => onClick(task)}
@@ -139,6 +143,7 @@ function TaskCard({
       }}
       className={cn(
         'group card-brutal w-full cursor-pointer text-left',
+        isSelected && 'bg-brutal-primary-light',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brutal-primary focus-visible:ring-offset-2',
       )}
       style={{
@@ -247,12 +252,16 @@ function TaskCard({
                 {childTasks.map((child) => (
                   <button
                     key={child.id}
+                    data-task-id={child.id}
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onClick(child);
                     }}
-                    className="w-full border-2 border-black bg-white px-2 py-1.5 text-left shadow-brutal-sm transition-transform hover:-translate-y-0.5"
+                    className={cn(
+                      'w-full border-2 border-black bg-white px-2 py-1.5 text-left shadow-brutal-sm transition-transform hover:-translate-y-0.5',
+                      selectedTaskId === child.id && 'bg-brutal-primary-light',
+                    )}
                   >
                     <div className="flex items-center gap-1.5">
                       <span className={cn('h-2 w-2 flex-shrink-0 border border-black', STATUS_COLUMN_CONFIG[child.status].bgClass)} />
@@ -338,6 +347,7 @@ interface TaskColumnProps {
   onActionComplete?: (task: Task) => void;
   onGenerateArtifact?: (task: Task) => void;
   isArtifactGenerating?: (task: Task) => boolean;
+  selectedTaskId?: string | null;
 }
 
 // ---- Component ----
@@ -353,6 +363,7 @@ export function TaskColumn({
   onActionComplete,
   onGenerateArtifact,
   isArtifactGenerating,
+  selectedTaskId,
 }: TaskColumnProps) {
   const label = taskColumnHeader(status);
   const count = tasks.length;
@@ -392,6 +403,7 @@ export function TaskColumn({
             onActionComplete={onActionComplete}
             onGenerateArtifact={onGenerateArtifact}
             isArtifactGenerating={isArtifactGenerating?.(task)}
+            selectedTaskId={selectedTaskId}
           />
         ))}
 

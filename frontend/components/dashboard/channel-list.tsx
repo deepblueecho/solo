@@ -4,10 +4,11 @@
 
 'use client';
 
-import { Plus, ChevronDown } from 'lucide-react';
+import { Plus, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import { selectableRowClass, selectableRowIconClass } from '@/components/ui/selectable-row';
+import { iconActionClass } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Channel } from '@/lib/types';
 
@@ -62,11 +63,15 @@ function ChannelItem({
   channel,
   isSelected,
   onSelect,
+  onDelete,
+  canDelete,
   railSurface,
 }: {
   channel: Channel;
   isSelected: boolean;
   onSelect: () => void;
+  onDelete: () => void;
+  canDelete: boolean;
   railSurface?: boolean;
 }) {
   return (
@@ -95,6 +100,20 @@ function ChannelItem({
         </div>
         <span className="truncate font-body">{channel.name}</span>
       </div>
+      {canDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className={iconActionClass('invisible h-7 w-7 shrink-0 p-0 hover:bg-brutal-danger-light group-hover:visible')}
+          aria-label={t('closeChannel', { name: channel.name })}
+          title={t('closeChannel', { name: channel.name })}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -107,6 +126,7 @@ export function ChannelList({
   selectedChannelId,
   onSelectChannel,
   onCreateChannel,
+  onDeleteChannel,
   isExpanded = true,
   onToggleExpand,
   showHeader = true,
@@ -124,6 +144,8 @@ export function ChannelList({
           channel={channel}
           isSelected={channel.id === selectedChannelId}
           onSelect={() => onSelectChannel(channel.id)}
+          onDelete={() => onDeleteChannel(channel.id)}
+          canDelete={!channel.name.startsWith('all-')}
           railSurface={railSurface}
         />
       ))}
