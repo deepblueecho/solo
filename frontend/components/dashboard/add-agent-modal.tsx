@@ -27,13 +27,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { t } from '@/lib/i18n';
 import type { Agent } from '@/lib/types';
 
-// ponytail: fallback for old server responses; remove when applyTemplate always returns agent_ids.
-const OFFICIAL_TEMPLATE_AGENT_NAMES: Record<string, string[]> = {
-  'dev-team': ['Lead', 'FE', 'BE', 'QA'],
-  'content-team': ['Editor', 'Researcher', 'Writer'],
-  'research-team': ['ResearchLead', 'Analyst', 'Writer'],
-};
-
 interface AddAgentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -149,12 +142,9 @@ export function AddAgentModal({
       setTemplateError(null);
       try {
         const result = await applyTemplate(templateId, selectedModelProvider);
-        const agentIds = [
-          ...(result.agent_ids?.length ? result.agent_ids : result.created_agent_ids),
-          ...(OFFICIAL_TEMPLATE_AGENT_NAMES[templateId] ?? [])
-            .map((name) => agents.find((agent) => agent.name === name)?.id)
-            .filter((id): id is string => Boolean(id)),
-        ].filter((id, index, ids) => !existingAgentIds.includes(id) && ids.indexOf(id) === index);
+        const agentIds = result.agent_ids.filter(
+          (id, index, ids) => !existingAgentIds.includes(id) && ids.indexOf(id) === index,
+        );
         if (agentIds.length === 0) {
           setTemplateError(t('relationshipTemplateApplyError'));
           return;
@@ -169,7 +159,7 @@ export function AddAgentModal({
         setApplyingTemplate(null);
       }
     },
-    [agents, existingAgentIds, onAdd, onChanged, onOpenChange, refetch, selectedModelProvider],
+    [existingAgentIds, onAdd, onChanged, onOpenChange, refetch, selectedModelProvider],
   );
 
   const createModeButtons = (
