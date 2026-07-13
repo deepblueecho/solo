@@ -68,7 +68,7 @@ func (b *CodexBackend) Start(ctx context.Context, req *ExecuteRequest, opts *Exe
 
 	// Start reader goroutine for process lifetime.
 	go func() {
-		defer close(runner.done)
+		defer runner.finish()
 		scanner := bufio.NewScanner(runner.stdout)
 		scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
 		for scanner.Scan() {
