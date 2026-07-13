@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [main]
+    branches: [master, main]
 
 env:
   GO_VERSION: "1.22"
@@ -73,10 +73,16 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: go.sum
 
+      - name: Run database migrations
+        run: go run ./cmd/migrate up
+        env:
+          DATABASE_URL: postgres://solo:solo-test@localhost:5432/solo_test?sslmode=disable
+
       - name: Run Go tests
         run: go test ./... -v -count=1
         env:
           DATABASE_URL: postgres://solo:solo-test@localhost:5432/solo_test?sslmode=disable
+          TEAM_FORMATION_TEST_DATABASE_URL: postgres://solo:solo-test@localhost:5432/solo_test?sslmode=disable
           JWT_SECRET: ci-test-secret
           APP_ENV: test
 
