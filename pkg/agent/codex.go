@@ -142,13 +142,14 @@ func (b *CodexBackend) Send(ctx context.Context, ps *PersistentSession, messages
 	msgCh := make(chan OutputChunk, 256)
 	resCh := make(chan *Result, 1)
 
-	// Redirect client callbacks to this turn's channels.
+	// Redirect client callbacks to this turn's channels and reset terminal
+	// deduplication before starting the next turn.
 	state.client.onChunk = func(chunk OutputChunk) { trySend(msgCh, chunk) }
-	state.client.onTurnDone = func(aborted bool) {
+	state.client.prepareTurn(func(aborted bool) {
 		resCh <- codexTurnResult(aborted)
 		close(msgCh)
 		close(resCh)
-	}
+	})
 
 	if _, err := state.client.request(ctx, "turn/start", map[string]any{
 		"threadId": state.threadID,
@@ -578,6 +579,8 @@ type codexClient struct {
 	notificationProtocol string
 	turnStarted          bool
 	completedTurnIDs     map[string]bool
+	turnDoneMu           sync.Mutex
+	turnDone             bool
 
 	usageMu sync.Mutex
 	usage   TokenUsage
@@ -751,7 +754,11 @@ func (c *codexClient) handleNotification(raw map[string]json.RawMessage) {
 	}
 
 	if method == "codex/event" || strings.HasPrefix(method, "codex/event/") {
-		c.notificationProtocol = "legacy"
+		if c.notificationProtocol == "raw" {
+			c.notificationProtocol = "mixed"
+		} else if c.notificationProtocol == "" || c.notificationProtocol == "unknown" {
+			c.notificationProtocol = "legacy"
+		}
 		msgData, ok := params["msg"]
 		if !ok {
 			return
@@ -764,15 +771,50 @@ func (c *codexClient) handleNotification(raw map[string]json.RawMessage) {
 		return
 	}
 
-	if c.notificationProtocol != "legacy" {
-		if c.notificationProtocol == "unknown" &&
-			(method == "turn/started" || method == "turn/completed" ||
-				method == "thread/started" || strings.HasPrefix(method, "item/")) {
-			c.notificationProtocol = "raw"
+	// Current Codex app-server versions can emit legacy codex/event payloads for
+	// item activity and standard JSON-RPC notifications for lifecycle events in
+	// the same turn. Always route non-legacy notifications through the standard
+	// handler so turn/completed cannot be silently ignored after a legacy event.
+	if c.notificationProtocol == "legacy" {
+		c.notificationProtocol = "mixed"
+	} else if c.notificationProtocol == "" || c.notificationProtocol == "unknown" {
+		c.notificationProtocol = "raw"
+	}
+	c.handleRawNotification(method, params)
+}
+
+func (c *codexClient) prepareTurn(onDone turnDoneCallback) {
+	c.turnDoneMu.Lock()
+	defer c.turnDoneMu.Unlock()
+	if c.turnDone && c.turnID != "" {
+		if c.completedTurnIDs == nil {
+			c.completedTurnIDs = map[string]bool{}
 		}
-		if c.notificationProtocol == "raw" {
-			c.handleRawNotification(method, params)
+		c.completedTurnIDs[c.turnID] = true
+	}
+	c.onTurnDone = onDone
+	c.turnDone = false
+	c.turnStarted = false
+	c.turnID = ""
+}
+
+func (c *codexClient) signalTurnDone(aborted bool) {
+	c.turnDoneMu.Lock()
+	if c.turnDone {
+		c.turnDoneMu.Unlock()
+		return
+	}
+	c.turnDone = true
+	if c.turnID != "" {
+		if c.completedTurnIDs == nil {
+			c.completedTurnIDs = map[string]bool{}
 		}
+		c.completedTurnIDs[c.turnID] = true
+	}
+	onDone := c.onTurnDone
+	c.turnDoneMu.Unlock()
+	if onDone != nil {
+		onDone(aborted)
 	}
 }
 
@@ -826,13 +868,9 @@ func (c *codexClient) handleEvent(msg map[string]any) {
 		}
 	case "task_complete":
 		c.extractUsageFromMap(msg)
-		if c.onTurnDone != nil {
-			c.onTurnDone(false)
-		}
+		c.signalTurnDone(false)
 	case "turn_aborted":
-		if c.onTurnDone != nil {
-			c.onTurnDone(true)
-		}
+		c.signalTurnDone(true)
 	}
 }
 
@@ -880,9 +918,7 @@ func (c *codexClient) handleRawNotification(method string, params map[string]any
 
 		aborted := status == "cancelled" || status == "canceled" ||
 			status == "aborted" || status == "interrupted"
-		if c.onTurnDone != nil {
-			c.onTurnDone(aborted)
-		}
+		c.signalTurnDone(aborted)
 
 	case "error":
 		willRetry, _ := params["willRetry"].(bool)
@@ -900,9 +936,7 @@ func (c *codexClient) handleRawNotification(method string, params map[string]any
 	case "thread/status/changed":
 		statusType := extractNestedString(params, "status", "type")
 		if statusType == "idle" && c.turnStarted {
-			if c.onTurnDone != nil {
-				c.onTurnDone(false)
-			}
+			c.signalTurnDone(false)
 		}
 
 	default:
@@ -963,9 +997,7 @@ func (c *codexClient) handleItemNotification(method string, params map[string]an
 		}
 		phase, _ := item["phase"].(string)
 		if phase == "final_answer" && c.turnStarted {
-			if c.onTurnDone != nil {
-				c.onTurnDone(false)
-			}
+			c.signalTurnDone(false)
 		}
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,7 +43,7 @@ type DaemonInfo struct {
 	Version          string       `json:"version"`
 	Capabilities     []string     `json:"capabilities"`
 	MaxConcurrent    int          `json:"max_concurrent"`
-	CurrentLoad      atomic.Int32 `json:"current_load"`
+	CurrentLoad      int32        `json:"current_load"`
 	AgentTypes       []string     `json:"agent_types"`
 	Status           DaemonStatus `json:"status"`
 	LastHeartbeat    time.Time    `json:"last_heartbeat"`
@@ -145,7 +144,7 @@ func (dm *DaemonManager) Heartbeat(daemonID string, load int32) bool {
 	info.LastHeartbeat = time.Now()
 	info.MissedHeartbeats = 0
 	info.Status = DaemonStatusOnline
-	info.CurrentLoad.Store(load)
+	info.CurrentLoad = load
 
 	return true
 }
@@ -245,7 +244,7 @@ func (dm *DaemonManager) SelectDaemon(capability string) *DaemonInfo {
 		if d.Status != DaemonStatusOnline {
 			continue
 		}
-		load := d.CurrentLoad.Load()
+		load := d.CurrentLoad
 		if load >= int32(d.MaxConcurrent) {
 			continue
 		}
@@ -635,13 +634,13 @@ type DaemonRegisterResponse struct {
 }
 
 type DaemonHeartbeatRequest struct {
-	DaemonID    string                        `json:"daemon_id"`
-	Load        int32                         `json:"load"`
-	MaxLoad     int                           `json:"max_load"`
-	UptimeSec   int64                         `json:"uptime_seconds"`
-	ActiveTasks []string                      `json:"active_tasks"`
-	AgentIDs    []string                      `json:"agent_ids,omitempty"`
-	SystemInfo  DaemonSystemInfo              `json:"system_info"`
+	DaemonID    string           `json:"daemon_id"`
+	Load        int32            `json:"load"`
+	MaxLoad     int              `json:"max_load"`
+	UptimeSec   int64            `json:"uptime_seconds"`
+	ActiveTasks []string         `json:"active_tasks"`
+	AgentIDs    []string         `json:"agent_ids,omitempty"`
+	SystemInfo  DaemonSystemInfo `json:"system_info"`
 }
 
 type DaemonHeartbeatResponse struct {
