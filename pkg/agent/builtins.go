@@ -79,15 +79,6 @@ func init() {
 		Protocols:      []string{"jsonl"},
 	}, copilotFactory)
 
-	// ── openclaw — OpenClaw Agent CLI via ACP ───────────────────────
-	r.Register(AdapterMeta{
-		Type:           "openclaw",
-		DisplayName:    "OpenClaw Agent",
-		RequiresBinary: "openclaw",
-		DetectCommand:  "--version",
-		Protocols:      []string{"acp"},
-	}, openclawFactory)
-
 	// ── hermes — Hermes CLI via ACP ─────────────────────────────────
 	r.Register(AdapterMeta{
 		Type:           "hermes",
@@ -183,11 +174,6 @@ func kiroFactory(cfg BackendConfig) (Backend, error) {
 func copilotFactory(cfg BackendConfig) (Backend, error) {
 	execPath := execPathOrDefault(cfg.ExecPath, "COPILOT_BIN")
 	return NewCopilotBackend(execPath, logOrDefault(cfg.Logger)), nil
-}
-
-func openclawFactory(cfg BackendConfig) (Backend, error) {
-	execPath := execPathOrDefault(cfg.ExecPath, "OPENCLAW_BIN")
-	return NewOpenClawBackend(execPath, logOrDefault(cfg.Logger)), nil
 }
 
 func hermesFactory(cfg BackendConfig) (Backend, error) {

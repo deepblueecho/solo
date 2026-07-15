@@ -23,7 +23,7 @@ function isWorkspace(kind: string) {
 const KIND_LABELS: Record<string, string> = {
   claude: 'Claude', codex: 'Codex', opencode: 'OpenCode',
   copilot: 'Copilot', cursor: 'Cursor', kiro: 'Kiro',
-  openclaw: 'OpenClaw', hermes: 'Hermes', pi: 'Pi',
+  hermes: 'Hermes', pi: 'Pi',
 };
 
 function kindLabel(kind: string): string {

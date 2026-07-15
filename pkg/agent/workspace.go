@@ -203,8 +203,6 @@ func skillTargetRoots(workDir, provider string) []string {
 		return []string{filepath.Join(workDir, ".codex", "skills"), agentsSkills}
 	case "opencode":
 		return []string{filepath.Join(workDir, ".opencode", "skills"), filepath.Join(workDir, ".claude", "skills"), agentsSkills}
-	case "openclaw":
-		return []string{filepath.Join(workDir, "skills"), agentsSkills}
 	default:
 		return []string{agentsSkills}
 	}

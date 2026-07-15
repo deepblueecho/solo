@@ -31,7 +31,7 @@
 **三层进程 + 一组本地工具**：
 
 ```
-Browser SPA (frontend/) ──HTTPS+JWT / WSS──► cmd/server :8080 ──HTTP+SSE──► cmd/daemon :8081 ──stdin/stdout──► Claude/Codex/Hermes/Kimi/Kiro/OpenCode/OpenClaw
+Browser SPA (frontend/) ──HTTPS+JWT / WSS──► cmd/server :8080 ──HTTP+SSE──► cmd/daemon :8081 ──stdin/stdout──► Claude/Codex/Hermes/Kimi/Kiro/OpenCode
                                                   │ chi router │
                                                   ▼
                                           PostgreSQL 16 (25 migrations)
@@ -45,8 +45,8 @@ Browser SPA (frontend/) ──HTTPS+JWT / WSS──► cmd/server :8080 ──HT
 ### 1.2 Agent Runtime 对接
 
 - **两个核心接口**：`Backend`（一次性，`Execute` → `Session` 一次性，line 14-23）vs `PersistentBackend`（长生命周期，`Start` → 反复 `Send` → `Close`，line 128-146）。`SessionStater`（line 176-185）通过 type-assert 解耦
-- **12 个后端 × 4 种协议族**（`pkg/agent/builtins.go:12-107` 注册）：
-  - `stream-json`（Claude / Local / OpenCode / Cursor / Gemini / OpenClaw）
+- **11 个后端 × 4 种协议族**（`pkg/agent/builtins.go:12-107` 注册）：
+  - `stream-json`（Claude / Local / OpenCode / Cursor / Gemini）
   - `json-rpc`（Codex，JSON-RPC 2.0 over NDJSON）
   - `acp`（Kimi / Kiro / Hermes，JSON-RPC 2.0 with `session/new` + `session/resume`）
   - `jsonl`（Copilot / Pi）

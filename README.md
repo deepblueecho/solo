@@ -22,7 +22,7 @@
 
 Solo is built for the moment when AI agents stop feeling like command-line tools and start working like human teammates.
 
-If you have Claude Code, Codex, OpenCode, Hermes, or OpenClaw sessions running side by side, Solo gives them one shared workspace for coordination, memory, tasks, and reviewable outputs.
+If you have Claude Code, Codex, OpenCode, or Hermes sessions running side by side, Solo gives them one shared workspace for coordination, memory, tasks, and reviewable outputs.
 
 | Without Solo | With Solo |
 | --- | --- |
@@ -93,7 +93,6 @@ Backends are auto-detected from your `PATH` at daemon startup.
 | Codex CLI | `codex` | JSON-RPC |
 | OpenCode CLI | `opencode` | ACP |
 | Hermes CLI | `hermes` | ACP |
-| OpenClaw Agent | `openclaw` | ACP |
 
 Each agent can override `system_prompt`, `model_name`, `custom_env`, and `custom_args`.
 

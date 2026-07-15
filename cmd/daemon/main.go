@@ -36,16 +36,16 @@ type healthResponse struct {
 }
 
 var (
-	startTime        = time.Now()
-	daemonID         string
-	serverURL        string
-	internalToken    string
-	llmProvider      llm.Provider
-	dbPool           *pgxpool.Pool
-	machineLock      *agent.MachineLock
-	taskMgr          *taskManager
-		daemonH          *daemonHandler
-	workspaceMgr     *agent.WorkspaceManager
+	startTime     = time.Now()
+	daemonID      string
+	serverURL     string
+	internalToken string
+	llmProvider   llm.Provider
+	dbPool        *pgxpool.Pool
+	machineLock   *agent.MachineLock
+	taskMgr       *taskManager
+	daemonH       *daemonHandler
+	workspaceMgr  *agent.WorkspaceManager
 )
 
 func main() {
@@ -142,11 +142,11 @@ func main() {
 
 	// Internal daemon endpoints (called by server)
 	r.Route("/internal/daemon/tasks/{taskID}", func(r chi.Router) {
-		r.Get("/events", h.TaskEvents)   // SSE event stream
-		r.Post("/cancel", h.CancelTask)   // Cancel running task
+		r.Get("/events", h.TaskEvents)  // SSE event stream
+		r.Post("/cancel", h.CancelTask) // Cancel running task
 	})
 	r.Route("/internal/daemon", func(r chi.Router) {
-		r.Post("/run", h.Run)           // Server dispatches agent tasks here
+		r.Post("/run", h.Run)            // Server dispatches agent tasks here
 		r.Post("/proxy", h.ProxyRequest) // Agent-to-server proxy
 		r.Route("/workspace", func(r chi.Router) {
 			r.Get("/list", h.HandleWorkspaceList)
@@ -176,7 +176,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-
 
 	// Register with server on startup
 	if err := registerWithServer(ctx); err != nil {
@@ -414,13 +413,13 @@ type daemonRegisterResponse struct {
 }
 
 type daemonHeartbeatPayload struct {
-	DaemonID    string                                  `json:"daemon_id"`
-	Load        int32                                   `json:"load"`
-	MaxLoad     int                                     `json:"max_load"`
-	UptimeSec   int64                                   `json:"uptime_seconds"`
-	ActiveTasks []string                                `json:"active_tasks"`
-	AgentIDs    []string                                `json:"agent_ids"`
-	SystemInfo  SystemInfo                              `json:"system_info"`
+	DaemonID    string     `json:"daemon_id"`
+	Load        int32      `json:"load"`
+	MaxLoad     int        `json:"max_load"`
+	UptimeSec   int64      `json:"uptime_seconds"`
+	ActiveTasks []string   `json:"active_tasks"`
+	AgentIDs    []string   `json:"agent_ids"`
+	SystemInfo  SystemInfo `json:"system_info"`
 	// Skills are served on-demand via /internal/daemon/skills, not in heartbeat.
 }
 
@@ -454,11 +453,6 @@ func agentGlobalRoots(provider, home string) []skillloader.SkillRoot {
 		return []skillloader.SkillRoot{
 			{Path: filepath.Join(home, ".config", "opencode", "skills"), Kind: "opencode", Priority: 35},
 			{Path: filepath.Join(home, ".claude", "skills"), Kind: "claude", Priority: 30},
-			{Path: filepath.Join(home, ".agents", "skills"), Kind: "agents", Priority: 25},
-		}
-	case "openclaw":
-		return []skillloader.SkillRoot{
-			{Path: filepath.Join(home, ".openclaw", "skills"), Kind: "openclaw", Priority: 35},
 			{Path: filepath.Join(home, ".agents", "skills"), Kind: "agents", Priority: 25},
 		}
 	case "copilot":
@@ -520,11 +514,6 @@ func agentWorkspaceRoots(provider, wsDir string) []skillloader.SkillRoot {
 		return []skillloader.SkillRoot{
 			{Path: filepath.Join(wsDir, ".kiro", "skills"), Kind: "ws-kiro", Priority: 100},
 		}
-	case "openclaw":
-		return []skillloader.SkillRoot{
-			{Path: filepath.Join(wsDir, "skills"), Kind: "ws-openclaw", Priority: 100},
-			{Path: filepath.Join(wsDir, ".agents", "skills"), Kind: "ws-openclaw", Priority: 80},
-		}
 	case "hermes":
 		return []skillloader.SkillRoot{
 			{Path: filepath.Join(wsDir, ".hermes", "skills"), Kind: "ws-hermes", Priority: 100},
@@ -537,7 +526,6 @@ func agentWorkspaceRoots(provider, wsDir string) []skillloader.SkillRoot {
 		return nil
 	}
 }
-
 
 // writeJSON writes a JSON response.
 func writeJSON(w http.ResponseWriter, status int, v any) {

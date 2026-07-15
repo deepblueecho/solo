@@ -10,7 +10,7 @@ import (
 func TestBuiltins_AllTypesCreatable(t *testing.T) {
 	types := []string{
 		"claude", "codex", "opencode", "cursor",
-		"gemini", "kimi", "kiro", "copilot", "openclaw", "hermes", "pi",
+		"gemini", "kimi", "kiro", "copilot", "hermes", "pi",
 	}
 
 	reg := GlobalRegistry()
@@ -30,17 +30,17 @@ func TestBuiltins_AllTypesCreatable(t *testing.T) {
 	}
 }
 
-// ── ListMeta returns at least 11 entries ──────────────────────────────
+// ── ListMeta returns at least 10 entries ──────────────────────────────
 
 func TestBuiltins_ListMeta(t *testing.T) {
 	expected := []string{
 		"claude", "codex", "opencode", "cursor",
-		"gemini", "kimi", "kiro", "copilot", "openclaw", "hermes", "pi",
+		"gemini", "kimi", "kiro", "copilot", "hermes", "pi",
 	}
 
 	metas := GlobalRegistry().ListMeta()
-	if len(metas) < 11 {
-		t.Errorf("ListMeta: expected >= 11 entries, got %d", len(metas))
+	if len(metas) < 10 {
+		t.Errorf("ListMeta: expected >= 10 entries, got %d", len(metas))
 	}
 
 	typeSet := make(map[string]bool, len(metas))
@@ -95,9 +95,9 @@ func TestBuiltins_UnknownTypeError(t *testing.T) {
 func TestBuiltins_PersistentBackend(t *testing.T) {
 	reg := GlobalRegistry()
 
-	// claude/local, codex, opencode, hermes, kimi, kiro, and openclaw
+	// claude/local, codex, opencode, hermes, kimi, and kiro
 	// implement PersistentBackend.
-	for _, typ := range []string{"claude", "local", "codex", "opencode", "hermes", "kimi", "kiro", "openclaw"} {
+	for _, typ := range []string{"claude", "local", "codex", "opencode", "hermes", "kimi", "kiro"} {
 		b, err := reg.Create(typ, BackendConfig{ProviderType: typ})
 		if err != nil {
 			t.Fatalf("Create(%q): %v", typ, err)
@@ -123,7 +123,7 @@ func TestBuiltins_PersistentBackend(t *testing.T) {
 
 func TestBuiltins_NewPersistentBackend(t *testing.T) {
 	// Persistent types should succeed.
-	for _, typ := range []string{"claude", "local", "codex", "opencode", "hermes", "kimi", "kiro", "openclaw"} {
+	for _, typ := range []string{"claude", "local", "codex", "opencode", "hermes", "kimi", "kiro"} {
 		pb, err := NewPersistentBackend(typ)
 		if err != nil {
 			t.Fatalf("NewPersistentBackend(%q): unexpected error: %v", typ, err)
