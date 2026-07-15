@@ -22,7 +22,7 @@
 
 Solo 是一个本地优先的工作区，用来让人类和 AI 编码智能体像团队成员一样协作。
 
-如果你同时运行 Claude Code、Codex、OpenCode、Hermes 或 OpenClaw 会话，Solo 会把它们放进同一个空间，通过频道、私信、讨论串、任务、记忆和可审阅产物来协同工作。
+如果你同时运行 Claude Code、Codex、OpenCode 或 Hermes 会话，Solo 会把它们放进同一个空间，通过频道、私信、讨论串、任务、记忆和可审阅产物来协同工作。
 
 | 没有 Solo | 使用 Solo |
 | --- | --- |
@@ -95,7 +95,6 @@ Daemon 启动时会从 `PATH` 自动检测后端。
 | Codex CLI | `codex` | JSON-RPC |
 | OpenCode CLI | `opencode` | ACP |
 | Hermes CLI | `hermes` | ACP |
-| OpenClaw Agent | `openclaw` | ACP |
 
 每个智能体都可以覆盖 `system_prompt`、`model_name`、`custom_env` 和 `custom_args`。
 

@@ -278,9 +278,6 @@ func parseTranscriptLine(line json.RawMessage) []AgentTranscriptEntry {
 	if entries := parseCodexTranscriptLine(obj.Type, obj.Timestamp, obj.Payload, line); len(entries) > 0 {
 		return entries
 	}
-	if entry := parseOpenClawTrajectoryLine(obj.Type, firstNonEmptyString(obj.Timestamp, obj.TS), obj.Data, line); entry != nil {
-		return []AgentTranscriptEntry{*entry}
-	}
 
 	if obj.Type == "attachment" && obj.Attachment.Type == "queued_command" {
 		entries := make([]AgentTranscriptEntry, 0, len(obj.Attachment.Prompt))
@@ -458,19 +455,6 @@ func codexReasoningSummaryText(raw json.RawMessage) string {
 		}
 	}
 	return strings.Join(parts, "\n")
-}
-
-func parseOpenClawTrajectoryLine(kind, timestamp string, data, raw json.RawMessage) *AgentTranscriptEntry {
-	if timestamp == "" || !strings.Contains(kind, ".") {
-		return nil
-	}
-	var d struct {
-		Prompt string `json:"prompt"`
-		Status string `json:"status"`
-	}
-	_ = json.Unmarshal(data, &d)
-	text := firstNonEmptyString(d.Prompt, d.Status, kind)
-	return &AgentTranscriptEntry{Timestamp: timestamp, Role: "assistant", Type: "text", Text: text, Raw: raw}
 }
 
 func rawJSONString(raw json.RawMessage) string {

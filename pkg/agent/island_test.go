@@ -346,7 +346,6 @@ func TestBackendFamily(t *testing.T) {
 		{"opencode", familyStreamJSON},
 		{"cursor", familyStreamJSON},
 		{"gemini", familyStreamJSON},
-		{"openclaw", familyStreamJSON},
 		{"copilot", familyJSONL},
 		{"pi", familyJSONL},
 		{"kimi", familyACP},
@@ -378,7 +377,6 @@ func TestNormalizeToolName(t *testing.T) {
 		{"empty stays empty", "kimi", "", ""},
 
 		// Stream-json family (Claude / OpenCode / Cursor / Gemini /
-		// OpenClaw) — strip the "default_api:" namespace some backends
 		// wrap tool calls with. Title-case is a no-op for already-
 		// capitalised names.
 		{"stream-json already canonical", "claude", "Bash", "Bash"},
@@ -416,10 +414,10 @@ func TestNormalizeToolName(t *testing.T) {
 // ---- InferActivityTextForBackend ----
 
 func TestInferActivityTextForBackend_StreamJSON(t *testing.T) {
-	// Stream-json family (Claude, OpenCode, Cursor, Gemini, OpenClaw).
+	// Stream-json family (Claude, OpenCode, Cursor, Gemini).
 	// Behaviour mirrors InferActivityText for these backends since
 	// they already emit canonical OutputChunk.
-	for _, provider := range []string{"claude", "local", "opencode", "cursor", "gemini", "openclaw"} {
+	for _, provider := range []string{"claude", "local", "opencode", "cursor", "gemini"} {
 		t.Run(provider+"/tool_use normalises tool name", func(t *testing.T) {
 			chunk := OutputChunk{
 				Type: string(MessageToolUse),

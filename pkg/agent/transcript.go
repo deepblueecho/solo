@@ -19,8 +19,6 @@ func TranscriptPath(provider, workspaceDir, sessionID string) string {
 		return CodexTranscriptPath(sessionID)
 	case "opencode":
 		return OpenCodeTranscriptPath(sessionID)
-	case "openclaw":
-		return OpenClawTranscriptPath(workspaceDir, sessionID)
 	default:
 		return ""
 	}
@@ -107,66 +105,6 @@ func OpenCodeTranscriptPath(sessionID string) string {
 		return ""
 	}
 	return outPath
-}
-
-func OpenClawTranscriptPath(workspaceDir, sessionID string) string {
-	if sessionID == "" {
-		return ""
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	dir := filepath.Join(home, ".openclaw", "agents", "main", "sessions")
-	if path := filepath.Join(dir, sessionID+".jsonl"); fileExists(path) {
-		return path
-	}
-	if path := openClawPointerRuntimeFile(filepath.Join(dir, sessionID+".trajectory-path.json")); path != "" {
-		return path
-	}
-	if path := filepath.Join(dir, sessionID+".trajectory.jsonl"); fileExists(path) {
-		return path
-	}
-	if path := firstExistingGlob(filepath.Join(dir, sessionID+"*.jsonl")); path != "" {
-		return path
-	}
-	if path := firstExistingGlob(filepath.Join(dir, sessionID+"*.json")); path != "" {
-		return path
-	}
-	return newestOpenClawTranscriptForWorkspace(dir, workspaceDir)
-}
-
-func newestOpenClawTranscriptForWorkspace(dir, workspaceDir string) string {
-	if path := newestOpenClawTranscriptForWorkspaceKind(dir, workspaceDir, false); path != "" {
-		return path
-	}
-	return newestOpenClawTranscriptForWorkspaceKind(dir, workspaceDir, true)
-}
-
-func newestOpenClawTranscriptForWorkspaceKind(dir, workspaceDir string, includeTrajectory bool) string {
-	if workspaceDir == "" {
-		return ""
-	}
-	matches, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
-	var newest string
-	var newestTime time.Time
-	for _, path := range matches {
-		isTrajectory := strings.Contains(filepath.Base(path), ".trajectory.")
-		if isTrajectory != includeTrajectory {
-			continue
-		}
-		info, err := os.Stat(path)
-		if err != nil || info.ModTime().Before(newestTime) {
-			continue
-		}
-		data, err := os.ReadFile(path)
-		if err != nil || !strings.Contains(string(data), workspaceDir) {
-			continue
-		}
-		newest = path
-		newestTime = info.ModTime()
-	}
-	return newest
 }
 
 type openCodePartRow struct {
@@ -263,32 +201,7 @@ func sqliteQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
-func openClawPointerRuntimeFile(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	var pointer struct {
-		RuntimeFile string `json:"runtimeFile"`
-	}
-	if err := json.Unmarshal(data, &pointer); err != nil || pointer.RuntimeFile == "" {
-		return ""
-	}
-	if fileExists(pointer.RuntimeFile) {
-		return pointer.RuntimeFile
-	}
-	return ""
-}
-
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
-}
-
-func firstExistingGlob(pattern string) string {
-	matches, err := filepath.Glob(pattern)
-	if err != nil || len(matches) == 0 {
-		return ""
-	}
-	return matches[0]
 }

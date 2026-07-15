@@ -360,9 +360,9 @@ func TestListActiveRunsForUserFiltersVisibility(t *testing.T) {
 	}
 }
 
-func TestParseOpenClawMessageTranscriptLine(t *testing.T) {
-	entries := parseTranscriptLine(json.RawMessage(`{"type":"message","timestamp":"2026-06-28T08:56:32Z","message":{"role":"user","content":"hello from openclaw"}}`))
-	if len(entries) != 1 || entries[0].Role != "user" || entries[0].Text != "hello from openclaw" {
+func TestParseMessageTranscriptLine(t *testing.T) {
+	entries := parseTranscriptLine(json.RawMessage(`{"type":"message","timestamp":"2026-06-28T08:56:32Z","message":{"role":"user","content":"hello from transcript"}}`))
+	if len(entries) != 1 || entries[0].Role != "user" || entries[0].Text != "hello from transcript" {
 		t.Fatalf("entries = %+v", entries)
 	}
 }
@@ -384,13 +384,6 @@ func TestParseCodexPayloadSkipsDeveloperMessages(t *testing.T) {
 func TestParseCodexToolPayload(t *testing.T) {
 	entries := parseTranscriptLine(json.RawMessage(`{"timestamp":"2026-06-28T08:55:55Z","type":"response_item","payload":{"type":"function_call","name":"shell","call_id":"call-1","arguments":"{\"cmd\":\"go test\"}"}}`))
 	if len(entries) != 1 || entries[0].Type != "tool_use" || entries[0].ToolName != "shell" || entries[0].ToolID != "call-1" || entries[0].Text == "" {
-		t.Fatalf("entries = %+v", entries)
-	}
-}
-
-func TestParseOpenClawTrajectoryTranscriptLine(t *testing.T) {
-	entries := parseTranscriptLine(json.RawMessage(`{"type":"prompt.submitted","ts":"2026-06-28T08:56:32Z","data":{"prompt":"hello from trajectory"}}`))
-	if len(entries) != 1 || entries[0].Text != "hello from trajectory" {
 		t.Fatalf("entries = %+v", entries)
 	}
 }

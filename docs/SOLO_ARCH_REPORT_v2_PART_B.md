@@ -247,7 +247,7 @@ v1.6 commit aaf3487 切换到 daemon FS 扫描。`pkg/skillloader/skill_loader.g
 - `ScanDir(root, sourceKind, priority)`（`skill_loader.go:99-155`）—— 扫一个目录，返回 `[]DiscoveredSkill`。每个 subdir 包含 `SKILL.md` 才算一个 skill。**符号链接解析**在 line 118-122：`e.Type() & os.ModeSymlink != 0` 时用 `os.Stat` 跟到真目录
 - `ScanRoots(dataDir, []SkillRoot)`（`skill_loader.go:165-191`）—— 多 root 合并 + 优先级。先按 (priority DESC, path ASC) 排序（line 170-175），再 `for ... if _, exists := out[ds.Name]; exists { continue }` 取首次出现——**等价于"高优先级优先，同优先级按路径字典序"**
 
-`DiscoveredSkill`（`skill_loader.go:25-33`）8 字段：`Name` / `Description` / `SourcePath`（绝对路径）/ `SourceKind`（claude/codex/opencode/copilot/cursor/kiro/openclaw/hermes/pi 等）/ `Body` / `BodyHash`（sha256 hex）/ `Priority`（数字）。`isIgnoredDir`（`skill_loader.go:200-202`）过滤所有 `.` 前缀的隐藏目录。
+`DiscoveredSkill`（`skill_loader.go:25-33`）8 字段：`Name` / `Description` / `SourcePath`（绝对路径）/ `SourceKind`（claude/codex/opencode/copilot/cursor/kiro/hermes/pi 等）/ `Body` / `BodyHash`（sha256 hex）/ `Priority`（数字）。`isIgnoredDir`（`skill_loader.go:200-202`）过滤所有 `.` 前缀的隐藏目录。
 
 ### 5.3 API + 前端
 
@@ -264,7 +264,7 @@ v1.6 commit aaf3487 切换到 daemon FS 扫描。`pkg/skillloader/skill_loader.g
 
 ---
 
-## 6. 灵动岛 — 6 态状态机 + 12 后端协议适配 + 双通道架构
+## 6. 灵动岛 — 6 态状态机 + 11 后端协议适配 + 双通道架构
 
 ### 6.1 IslandStatus 枚举
 
@@ -281,13 +281,13 @@ IslandStatusError           = "error"
 
 `InferIslandStatusFromChunk`（`island.go:45-62`）把 `OutputChunk` 映射成状态——纯函数，可被 daemon 和 server 共用（line 12-15 注释）。
 
-### 6.2 12 后端 / 3 协议族
+### 6.2 11 后端 / 3 协议族
 
-`island.go:121-138` 把 12 个 CLI 后端分 4 类：
+`island.go:121-138` 把 11 个 CLI 后端分 4 类：
 
 | family | provider |
 |---|---|
-| stream-json | claude, local, opencode, cursor, gemini, openclaw |
+| stream-json | claude, local, opencode, cursor, gemini |
 | jsonl | copilot, pi |
 | acp | kimi, kiro, hermes |
 | other | codex, unknown |

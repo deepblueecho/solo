@@ -33,7 +33,7 @@ type ExecuteOptions struct {
 	SystemPrompt              string            `json:"system_prompt,omitempty"`
 	WorkspaceDir              string            `json:"workspace_dir,omitempty"`
 	Model                     string            `json:"model,omitempty"`
-	Effort                    string            `json:"effort,omitempty"`            // thinking effort level (Claude Code --effort, OpenClaw --thinking)
+	Effort                    string            `json:"effort,omitempty"`            // thinking effort level (Claude Code --effort)
 	MaxTurns                  int               `json:"max_turns,omitempty"`         // max agentic turns (Claude Code --max-turns)
 	ResumeSessionID           string            `json:"resume_session_id,omitempty"` // ACP session/resume ID for protocol-level resume
 	Env                       map[string]string `json:"env,omitempty"`

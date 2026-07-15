@@ -12,7 +12,7 @@ import (
 )
 
 // persistentRunner manages the shared subprocess lifecycle for persistent
-// agent backends (hermes, openclaw, opencode, codex). Each backend wraps this
+// agent backends (hermes, opencode, codex). Each backend wraps this
 // with protocol-specific message formatting and output parsing.
 //
 // This is the shared infrastructure that Claude will migrate onto — it

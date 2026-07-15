@@ -198,22 +198,6 @@ func TestNewBackend_OpenCode(t *testing.T) {
 	}
 }
 
-func TestNewBackend_OpenClaw(t *testing.T) {
-	b, err := NewBackend("openclaw", "")
-	if err != nil {
-		t.Fatalf("NewBackend(\"openclaw\") failed: %v", err)
-	}
-	if b == nil {
-		t.Fatal("expected non-nil backend")
-	}
-	if b.Name() != "openclaw" {
-		t.Errorf("expected name 'openclaw', got %q", b.Name())
-	}
-	if _, ok := b.(*OpenClawBackend); !ok {
-		t.Error("expected *OpenClawBackend type")
-	}
-}
-
 func TestNewBackend_Hermes(t *testing.T) {
 	b, err := NewBackend("hermes", "")
 	if err != nil {
@@ -370,16 +354,6 @@ func TestNewOpenCodeBackend_Defaults(t *testing.T) {
 	}
 	if b.Name() != "opencode" {
 		t.Errorf("expected name 'opencode', got %q", b.Name())
-	}
-}
-
-func TestNewOpenClawBackend_Defaults(t *testing.T) {
-	b := NewOpenClawBackend("", nil)
-	if b.executablePath != "openclaw" {
-		t.Errorf("expected executablePath 'openclaw', got %q", b.executablePath)
-	}
-	if b.Name() != "openclaw" {
-		t.Errorf("expected name 'openclaw', got %q", b.Name())
 	}
 }
 
