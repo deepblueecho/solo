@@ -42,6 +42,16 @@ func TestBuildSystemPrompt_CRITICALRULES(t *testing.T) {
 	assertHas(t, p, "If you are coordinating others")
 }
 
+func TestBuildSystemPrompt_DoesNotEmbedLucyOnboardingPolicy(t *testing.T) {
+	p := BuildSystemPrompt(
+		AgentConfig{Name: "Lucy"},
+		ChannelContext{ChannelID: "channel-1", ChannelName: "welcome-owner", TriggerType: TriggerChat},
+		"", nil,
+	)
+	assertNotHas(t, p, "## Automatic Team Formation")
+	assertNotHas(t, p, `"relationship_template":"dev-team"`)
+}
+
 func TestBuildSystemPrompt_StartupSequence(t *testing.T) {
 	p := BuildSystemPrompt(AgentConfig{Name: "Bot"}, ChannelContext{TriggerType: TriggerChat}, "", nil)
 	assertHas(t, p, "Startup sequence")

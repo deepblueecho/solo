@@ -57,7 +57,7 @@ func main() {
 
 	daemonID = cfg.DaemonID
 	serverURL = cfg.ServerURL
-	internalToken = cfg.JWTSecret // Use JWT secret as internal token for dev
+	internalToken = resolveInternalToken(os.Getenv("INTERNAL_TOKEN_SECRET"), cfg.JWTSecret)
 
 	port := os.Getenv("DAEMON_PORT")
 	if port == "" {
@@ -209,6 +209,13 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("daemon server stopped")
+}
+
+func resolveInternalToken(configuredToken, jwtSecret string) string {
+	if configuredToken != "" {
+		return configuredToken
+	}
+	return jwtSecret
 }
 
 // registerWithServer sends a registration request to the server.
